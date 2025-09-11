@@ -1,0 +1,63 @@
+// 在 android {} 中调用, 为generate.(default|variantName).(string|int|boolean|float|double|long).(name) 格式的配置生成BuildConfig字段
+// 理论上说在 android {} 外调用也可以, 但是必须要保证 buildTypes 存在
+// 如果需要延迟执行:
+// afterEvaluate {
+//    generateBuildConfigFields()
+// }
+// 在非 android {} 中调用需要使用: def androidExt = project.extensions.findByName("android")
+ext.generateBuildConfigFields = {androidExt->
+//    def androidExt = project.extensions.findByName("android")
+    if (androidExt == null) {
+        throw new GradleException("Cannot find android extension")
+    }
+
+    def regex = /^generate\.([A-Za-z0-9_]+)\.(string|int|boolean|float|double|long)\.([A-Za-z0-9_]+)$/
+
+    project.properties.each { key, value ->
+        if (!key.startsWith("generate.")) {
+            return
+        }
+        def matcher = (key =~ regex)
+        if (matcher.matches()) {
+            def variantName = matcher[0][1]
+            def type = matcher[0][2]
+            def name = matcher[0][3]
+
+            def javaType = mapJavaType(type)
+            if (javaType != null) {
+                if (variantName == "default") {
+                    androidExt.defaultConfig.buildConfigField(mapJavaType(type), name, asLiteral(type, value))
+                } else {
+                    def buildType = androidExt.buildTypes.findByName(variantName)
+                    if (buildType != null) {
+                        buildType.buildConfigField(mapJavaType(type), name, asLiteral(type, value))
+                    } else {
+                        logger.error("generateBuildConfigFields: gradle.properties name [${key}] is match, but variant [${variantName}] is not found")
+                    }
+                }
+            } else {
+                throw new GradleException("generateBuildConfigFields: gradle.properties name [${key}] is match, type [${type}] is not supported; only string, int, boolean, float, double, long are supported. It's inner error, try fix your buildConfigFieldGenerator.gradle")
+            }
+        } else {
+            logger.error("generateBuildConfigFields: gradle.properties name [${key}] start with [generate.] but not match [generate.<<variant name> or default>.<type: string,int,boolean,float,double,long>.<name>]")
+        }
+    }
+}
+
+private static def mapJavaType(String type) {
+    switch (type.toLowerCase()) {
+        case "string": return "String"
+        case "int": return "int"
+        case "boolean": return "boolean"
+        case "float": return "float"
+        case "double": return "double"
+        case "long": return "long"
+        default: return null
+    }
+}
+
+private static def asLiteral(String type, Object raw) {
+    if (raw == null) return "null"
+    def s = raw.toString()
+    return type == "string" ? "\"${s.replaceAll('(["\\\\])', '\\\\$1')}\"" : s
+}

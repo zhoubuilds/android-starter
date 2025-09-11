@@ -1,22 +1,17 @@
 plugins {
-    alias(libs.plugins.android.application)
+    alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
 }
 
-apply from: "../buildConfigFieldGenerator.gradle"
-
 android {
-    namespace 'com.whisper.starter'
+    namespace 'com.whisper.user'
     compileSdkVersion 36
 
     defaultConfig {
-        applicationId "com.whisper.starter"
         minSdk 21
-        targetSdk 36
-        versionCode 1
-        versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
     }
 
     buildTypes {
@@ -32,11 +27,6 @@ android {
     kotlinOptions {
         jvmTarget = '11'
     }
-    buildFeatures {
-        viewBinding true
-        buildConfig true
-    }
-    generateBuildConfigFields(android)
 }
 
 dependencies {
@@ -44,12 +34,10 @@ dependencies {
     implementation libs.androidx.core.ktx
     implementation libs.androidx.appcompat
     implementation libs.material
-    implementation libs.androidx.activity
-    implementation libs.androidx.constraintlayout
-    implementation project(':common')
-    implementation project(':kit')
+    
     implementation project(':core')
-    implementation project(':user')
+    implementation project(':common')
+    implementation libs.retrofit
 
     testImplementation libs.junit
     androidTestImplementation libs.androidx.junit
