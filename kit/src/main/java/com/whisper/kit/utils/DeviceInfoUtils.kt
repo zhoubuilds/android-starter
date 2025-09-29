@@ -15,21 +15,15 @@ import java.util.Locale
  */
 object DeviceInfoUtils {
 
-    const val platform: String = "android"
+    const val PLATFORM: String = "android"
 
     val os: String = "Android ${Build.VERSION.RELEASE}"
 
     val deviceName: String = "${Build.MANUFACTURER} ${Build.MODEL}"
 
-    fun getAppVersionName(context: Context): String? = try {
-        val packInfo: PackageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-        packInfo.versionName
-    } catch (_: Exception) {
-        null
-    }
-
-    @SuppressLint("HardwareIds")
     fun getDeviceId(context: Context): String = DeviceIdUtils.getDeviceId(context)
+
+    fun getPackageName(context: Context): String = context.packageName
 
     fun getAppLocal(context: Context): Locale {
         val config: Configuration = context.resources.configuration
@@ -39,6 +33,17 @@ object DeviceInfoUtils {
             @Suppress("DEPRECATION")
             config.locale
         }
+    }
+
+    fun getAppVersionName(context: Context): String? = try {
+        val packInfo: PackageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        packInfo.versionName
+    } catch (_: Exception) {
+        null
+    }
+
+    fun getUserAgent(context: Context): String {
+        return "${getPackageName(context)}/${getAppVersionName(context)} (${os}; ${deviceName})"
     }
 
 }

@@ -1,28 +1,20 @@
 plugins {
-    alias(libs.plugins.android.application)
+    alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
 }
 
-apply from: "../buildConfigFieldGenerator.gradle"
-
 android {
-    namespace 'com.whisper.starter'
-    compileSdkVersion 36
+    namespace 'com.whisper.architecture'
+    compileSdk 36
 
     defaultConfig {
-        applicationId "com.whisper.starter"
         minSdk 21
-        targetSdk 36
-        versionCode 1
-        versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
     }
 
     buildTypes {
-        debug {
-            debuggable true
-        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -37,9 +29,7 @@ android {
     }
     buildFeatures {
         viewBinding true
-        buildConfig true
     }
-    generateBuildConfigFields(android)
 }
 
 dependencies {
@@ -47,17 +37,13 @@ dependencies {
     implementation libs.androidx.core.ktx
     implementation libs.androidx.appcompat
     implementation libs.material
-    implementation libs.androidx.activity
-    implementation libs.androidx.constraintlayout
-    implementation(libs.lifecycle.runtime.ktx)
-    implementation(libs.lifecycle.viewmodel.ktx)
+    implementation libs.lifecycle.runtime.ktx
 
-    implementation project(':common')
-    implementation project(':kit')
-    implementation project(':architecture')
-
+    implementation libs.okhttp
+    implementation libs.retrofit
     implementation libs.retrofit.converter.gson
     implementation libs.gson
+    implementation project(':kit')
 
     testImplementation libs.junit
     androidTestImplementation libs.androidx.junit

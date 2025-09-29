@@ -44,7 +44,7 @@ dependencies {
 
     implementation libs.okhttp
     implementation project(':kit')
-    implementation project(':core')
+    implementation project(':architecture')
 
     testImplementation libs.junit
     androidTestImplementation libs.androidx.junit
