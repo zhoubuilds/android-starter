@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * @author whisper
  * @since 2025/9/26
  */
-class DefaultUiStateProvider : MutableArchUiStateProvider {
+class DefaultUiStatePack : MutableArchUiStatePack {
 
     private val _workingCount = AtomicInteger(0)
     private val _workingCountFlow: MutableStateFlow<Int> = MutableStateFlow(_workingCount.get())

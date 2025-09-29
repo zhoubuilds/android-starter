@@ -2,7 +2,7 @@ package com.whisper.architecture.extension
 
 import com.whisper.architecture.bean.business.Business
 import com.whisper.architecture.uimode.message.UiMessage
-import com.whisper.architecture.uistate.MutableArchUiStateProvider
+import com.whisper.architecture.uistate.MutableArchUiStatePack
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.onCompletion
@@ -37,7 +37,7 @@ fun <T> Flow<Business<T>>.onlySuccess(
     .onCompletion { onCompleted() }
 
 fun <T> Flow<Business<T>>.onlySuccess(
-    uiStateProvider: MutableArchUiStateProvider,
+    uiStateProvider: MutableArchUiStatePack,
     transformer: (Throwable) -> UiMessage?
 ): Flow<T> =
     onlySuccess(

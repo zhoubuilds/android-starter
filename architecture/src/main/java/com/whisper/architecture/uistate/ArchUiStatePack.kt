@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.Flow
  * @author whisper
  * @since 2025/9/2
  */
-interface ArchUiStateProvider {
+interface ArchUiStatePack {
 
     val workingCountFlow: Flow<Int>
 
