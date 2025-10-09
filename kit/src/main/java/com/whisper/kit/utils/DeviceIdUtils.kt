@@ -30,9 +30,7 @@ object DeviceIdUtils {
 
     @SuppressLint("HardwareIds")
     fun getDeviceId(context: Context): String {
-        _lock.read {
-            _deviceId?.takeIf { it.isNotBlank() }?.let { return@read it }
-        }
+        _lock.read { _deviceId?.takeIf { it.isNotBlank() } }?.let { return it }
         return _lock.write {
             _deviceId?.takeIf { it.isNotBlank() }?.let { return@write it }
 

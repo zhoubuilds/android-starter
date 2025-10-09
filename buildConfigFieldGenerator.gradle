@@ -32,11 +32,11 @@ ext.generateBuildConfigFields = {androidExt->
                     if (buildType != null) {
                         buildType.buildConfigField(mapJavaType(type), name, asLiteral(type, value))
                     } else {
-                        logger.error("generateBuildConfigFields: gradle.properties name [${key}] is match, but variant [${variantName}] is not found")
+                        logger.error("generateBuildConfigFields: gradle.properties name [${key}] is matched, but variant [${variantName}] is not found")
                     }
                 }
             } else {
-                throw new GradleException("generateBuildConfigFields: gradle.properties name [${key}] is match, type [${type}] is not supported; only string, int, boolean, float, double, long are supported. It's inner error, try fix your buildConfigFieldGenerator.gradle")
+                throw new GradleException("generateBuildConfigFields: gradle.properties name [${key}] is matched, type [${type}] is not supported; only string, int, boolean, float, double, long are supported. It's inner error, try fix your buildConfigFieldGenerator.gradle")
             }
         } else {
             logger.error("generateBuildConfigFields: gradle.properties name [${key}] start with [generate.] but not match [generate.<<variant name> or default>.<type: string,int,boolean,float,double,long>.<name>]")

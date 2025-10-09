@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
  * @author whisper
  * @since 2025/9/2
  */
-abstract class ArchUiStateHandler(private val context: Context) {
+abstract class ArchUiStateHandler(protected val context: Context) {
 
     abstract fun onBackgroundCountChanged(count: Int)
 

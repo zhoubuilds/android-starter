@@ -9,7 +9,7 @@ import com.whisper.starter.data.bean.GettingResp
 import com.whisper.starter.data.repo.GettingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
@@ -23,21 +23,16 @@ class GettingViewModel : ArchViewModel() {
 
     private val _gettingMinimumSate: MutableStateFlow<GettingResp?> = MutableStateFlow(null)
 
-    private val _gettingFullState: MutableStateFlow<Business<GettingResp?>?> =
-        MutableStateFlow(null)
+    val gettingMinimumSate: StateFlow<GettingResp?> = _gettingMinimumSate
 
 
     fun getting(id: Long) {
-        viewModelScope.launch {
-
-        }
-
         viewModelScope.launch {
             GettingRepository().getting(id)
                 .flowOn(Dispatchers.IO)
                 .onlySuccess(archUiStatePack, ApiUtils::transformErrorToUiMessage)
                 .collect {
-                    it
+                    _gettingMinimumSate.value = it
                 }
         }
 
