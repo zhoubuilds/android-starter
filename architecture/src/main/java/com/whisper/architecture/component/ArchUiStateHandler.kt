@@ -7,6 +7,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.whisper.architecture.uimode.message.UiMessage
 import com.whisper.architecture.uistate.ArchUiStatePack
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 
 
@@ -29,13 +31,14 @@ abstract class ArchUiStateHandler(protected val context: Context) {
         lifecycleOwner.lifecycleScope.launch {
             lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
-                    provider.workingCountFlow.collect {
+                    provider.workingCountFlow.collectLatest {
                         onBackgroundCountChanged(it)
                     }
                 }
                 launch {
-                    provider.uiMessageFlow.collect { message ->
-                        message?.let { m -> handleUiMessage(m) }
+                    provider.uiMessageFlow.filterNotNull().collectLatest { message ->
+                        handleUiMessage(message)
+                        provider.consumeMessage(message)
                     }
                 }
             }

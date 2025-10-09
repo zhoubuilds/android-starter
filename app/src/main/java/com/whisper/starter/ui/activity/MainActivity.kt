@@ -1,28 +1,20 @@
 package com.whisper.starter.ui.activity
 
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat.enableEdgeToEdge
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.whisper.architecture.activity.ArchActivity
-import com.whisper.architecture.bean.transmit.ApiResponse
 import com.whisper.architecture.component.ArchUiStateHandler
 import com.whisper.architecture.extension.viewBinding
 import com.whisper.architecture.logger.Logger
-import com.whisper.architecture.net.ApiFactory
 import com.whisper.architecture.uimode.message.UiMessage
 import com.whisper.starter.BuildConfig
 import com.whisper.starter.R
-import com.whisper.starter.data.bean.GettingResp
-import com.whisper.starter.data.ds.Api
 import com.whisper.starter.databinding.ActivityMainBinding
 import com.whisper.starter.viewmodel.GettingViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -45,6 +37,7 @@ class MainActivity : ArchActivity<GettingViewModel>() {
                 "${message.level}-${message.tone}: ${message.message}",
                 Toast.LENGTH_SHORT
             ).show()
+
         }
     }
 
