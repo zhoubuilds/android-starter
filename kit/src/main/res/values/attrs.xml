@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="kitLineViewStyle" format="reference" />
+    <attr name="kitRangeBarStyle" format="reference" />
+
+    <declare-styleable name="KitLineView">
+        <attr name="kitDotWidth" format="dimension" />
+        <attr name="kitDashWidth" format="dimension" />
+        <attr name="kitGapWidth" format="dimension" />
+        <attr name="android:color" />
+        <attr name="android:orientation" />
+    </declare-styleable>
+
+    <declare-styleable name="KitRangeBar">
+
+        <attr name="android:enabled" />
+
+        <!-- 条的宽度 -->
+        <attr name="kitBarSize" format="dimension" />
+
+        <!-- 条背景, 未选中部分 -->
+        <attr name="kitBarForeground" format="reference|color" />
+
+        <!-- 条前景, 选中部分 -->
+        <attr name="kitBarBackground" format="reference|color" />
+
+        <!-- 拖动按钮图标 -->
+        <!-- 支持state_drag_hovered和state_enabled状态 -->
+        <attr name="kitThumb" format="reference" />
+
+        <!-- 拖动按钮宽度 -->
+        <attr name="kitThumbWidth" format="dimension">
+            <!-- 使用drawable内置宽度 -->
+            <enum name="inner" value="-1" />
+        </attr>
+
+        <!-- 拖动按钮高度-->
+        <attr name="kitThumbHeight" format="dimension">
+            <!-- 使用drawable内置高度-->
+            <enum name="inner" value="-1" />
+        </attr>
+
+        <!-- 开始位置拖动按钮是否可用 -->
+        <attr name="kitStartThumbEnable" format="boolean" />
+
+        <!-- 结束位置拖动按钮是否可用 -->
+        <attr name="kitEndThumbEnable" format="boolean" />
+
+        <!-- 绘制重力方向 -->
+        <attr name="android:gravity" />
+
+        <!-- 分度 -->
+        <attr name="kitStep" format="integer" />
+
+        <!-- 总长度 -->
+        <attr name="kitTotal" format="integer" />
+
+        <!-- 开始位置最大范围限制 -->
+        <attr name="kitStartMax" format="integer">
+            <enum name="unlimited" value="-1" />
+        </attr>
+
+        <!-- 结束位置最小范围限制 -->
+        <attr name="kitEndMin" format="integer">
+            <enum name="unlimited" value="-1" />
+        </attr>
+
+        <!-- 最小选择范围限制 -->
+        <attr name="kitMinSpan" format="integer" />
+
+        <!-- 开始位置按钮 -->
+        <attr name="kitStart" format="integer" />
+
+        <!-- 结束位置按钮 -->
+        <attr name="kitEnd" format="integer" />
+    </declare-styleable>
+
+</resources>

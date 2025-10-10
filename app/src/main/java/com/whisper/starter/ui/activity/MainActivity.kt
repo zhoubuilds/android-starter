@@ -51,6 +51,10 @@ class MainActivity : ArchActivity<GettingViewModel>() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+        _viewBinding.range.setOnRangeChangedListener { _, s, e ->
+            Logger.i("range") { "start: $s, end: $e" }
+        }
+        _viewBinding.range.start = 30
 
         _viewBinding.tv.text = BuildConfig.DEBUG.toString()
 
