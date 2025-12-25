@@ -1,10 +1,10 @@
 package com.whisper.starter.viewmodel
 
 import androidx.lifecycle.viewModelScope
-import com.whisper.architecture.bean.business.Business
-import com.whisper.architecture.extension.onlySuccess
-import com.whisper.architecture.viewmodel.ArchViewModel
-import com.whisper.common.utils.ApiUtils
+import com.whisper.architecture.function.onlySuccess
+import com.whisper.architecture.processor.BusinessErrorProcessor
+import com.whisper.architecture.processor.BusinessProgressProcessor
+import com.whisper.common.architecture.viewmodel.CommonViewModel
 import com.whisper.starter.data.bean.GettingResp
 import com.whisper.starter.data.repo.GettingRepository
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +19,8 @@ import kotlinx.coroutines.launch
  * @author whisper
  * @since 2025/9/22
  */
-class GettingViewModel : ArchViewModel() {
+class GettingViewModel : CommonViewModel(), BusinessProgressProcessor,
+    BusinessErrorProcessor {
 
     private val _gettingMinimumSate: MutableStateFlow<GettingResp?> = MutableStateFlow(null)
 
@@ -30,12 +31,15 @@ class GettingViewModel : ArchViewModel() {
         viewModelScope.launch {
             GettingRepository().getting(id)
                 .flowOn(Dispatchers.IO)
-                .onlySuccess(archUiStatePack, ApiUtils::transformErrorToUiMessage)
+                .withBusinessProgress()
+                .withBusinessError()
+                .onlySuccess()
                 .collect {
                     _gettingMinimumSate.value = it
                 }
         }
 
     }
+
 
 }

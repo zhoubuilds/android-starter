@@ -5,6 +5,14 @@
 //    generateBuildConfigFields()
 // }
 // 在非 android {} 中调用需要使用: def androidExt = project.extensions.findByName("android")
+
+/**
+ * 通过gradle.properties生成BuildConfig字段
+ *
+ * gradle.properties中定义的格式: generate.(default|variantName).(string|int|boolean|float|double|long).(name)=value
+ *
+ * 对于字符串函数会自动添加转义
+ */
 ext.generateBuildConfigFields = {androidExt->
 //    def androidExt = project.extensions.findByName("android")
     if (androidExt == null) {

@@ -3,7 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
-apply from: "../buildConfigFieldGenerator.gradle"
+apply from: "../configFieldGenerator.gradle"
 
 android {
     namespace 'com.whisper.starter'

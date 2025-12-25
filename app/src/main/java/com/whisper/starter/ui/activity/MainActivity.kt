@@ -6,10 +6,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
-import com.whisper.architecture.activity.ArchActivity
-import com.whisper.architecture.component.ArchUiStateHandler
+import com.whisper.architecture.component.ArchitectureUiStateHandler
 import com.whisper.architecture.extension.viewBinding
 import com.whisper.architecture.logger.Logger
+import com.whisper.architecture.ui.activity.ArchitectureActivity
 import com.whisper.architecture.uimode.message.UiMessage
 import com.whisper.starter.BuildConfig
 import com.whisper.starter.R
@@ -18,7 +18,7 @@ import com.whisper.starter.viewmodel.GettingViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-class MainActivity : ArchActivity<GettingViewModel>() {
+class MainActivity : ArchitectureActivity<GettingViewModel>() {
 
     companion object {
         const val TAG: String = "whisper"
@@ -26,20 +26,20 @@ class MainActivity : ArchActivity<GettingViewModel>() {
 
     private val _viewBinding by viewBinding(ActivityMainBinding::inflate)
     override val viewModel = GettingViewModel()
-    override val archUiStateHandler: ArchUiStateHandler = object : ArchUiStateHandler(this) {
-        override fun onBackgroundCountChanged(count: Int) {
-            Logger.i("loading") { "count: $count" }
-        }
+    override val architectureUiStateHandler: ArchitectureUiStateHandler =
+        object : ArchitectureUiStateHandler(this) {
+            override fun onWorkingCountChanged(count: Int) {
+            }
 
-        override fun handleUiMessage(message: UiMessage) {
-            Toast.makeText(
-                context,
-                "${message.level}-${message.tone}: ${message.message}",
-                Toast.LENGTH_SHORT
-            ).show()
+            override fun handleUiMessage(message: UiMessage) {
+                Toast.makeText(
+                    context,
+                    "${message.level}-${message.tone}: ${message.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
 
+            }
         }
-    }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {

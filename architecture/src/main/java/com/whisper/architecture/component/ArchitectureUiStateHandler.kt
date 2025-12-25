@@ -6,9 +6,11 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.whisper.architecture.uimode.message.UiMessage
-import com.whisper.architecture.uistate.ArchUiStatePack
+import com.whisper.architecture.uistate.ArchitectureUiStatePack
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 
@@ -21,24 +23,31 @@ import kotlinx.coroutines.launch
  * @author whisper
  * @since 2025/9/2
  */
-abstract class ArchUiStateHandler(protected val context: Context) {
+abstract class ArchitectureUiStateHandler(protected val context: Context) {
 
-    abstract fun onBackgroundCountChanged(count: Int)
+    abstract fun onWorkingCountChanged(count: Int)
 
     abstract fun handleUiMessage(message: UiMessage)
 
-    open fun bind(provider: ArchUiStatePack, lifecycleOwner: LifecycleOwner) {
+    open fun bind(packs: Iterable<ArchitectureUiStatePack>, lifecycleOwner: LifecycleOwner) {
         lifecycleOwner.lifecycleScope.launch {
             lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    provider.workingCountFlow.collectLatest {
-                        onBackgroundCountChanged(it)
-                    }
+                val totalWorkingCountFlow = if (packs.iterator().hasNext()) {
+                    combine(packs.map { it.workingCountFlow }) { it.sum() }
+                } else {
+                    flowOf(0)
                 }
                 launch {
-                    provider.uiMessageFlow.filterNotNull().collectLatest { message ->
+                    totalWorkingCountFlow.collectLatest {
+                        onWorkingCountChanged(it)
+                    }
+                }
+
+                val mergedUiMessageFlow =
+                    merge(*packs.map { it.uiMessageFlow }.toTypedArray())
+                launch {
+                    mergedUiMessageFlow.collectLatest { message ->
                         handleUiMessage(message)
-                        provider.consumeMessage(message)
                     }
                 }
             }

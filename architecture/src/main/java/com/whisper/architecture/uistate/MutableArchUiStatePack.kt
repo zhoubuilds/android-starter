@@ -2,7 +2,7 @@ package com.whisper.architecture.uistate
 
 import com.whisper.architecture.uimode.message.UiMessage
 
-interface MutableArchUiStatePack : ArchUiStatePack {
+interface MutableArchUiStatePack : ArchitectureUiStatePack {
 
     fun onWorkStarted()
 
