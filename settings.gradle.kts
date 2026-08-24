@@ -1,4 +1,6 @@
 pluginManagement {
+    // Optional: remove with the app plugin declaration when property-driven BuildConfig fields are not needed.
+    includeBuild("build-logic")
     repositories {
         google {
             content {
@@ -11,6 +13,7 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
@@ -20,7 +23,8 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "android-starter"
-include ':app'
-include ':kit'
-include ':common'
-include ':architecture'
+include(":app")
+include(":kit")
+include(":common")
+include(":architecture")
+include(":router-api")
