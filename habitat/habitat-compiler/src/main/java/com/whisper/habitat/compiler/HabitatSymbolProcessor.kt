@@ -1,0 +1,725 @@
+package com.whisper.habitat.compiler
+
+import com.google.devtools.ksp.processing.CodeGenerator
+import com.google.devtools.ksp.processing.Dependencies
+import com.google.devtools.ksp.processing.KSPLogger
+import com.google.devtools.ksp.processing.SymbolProcessor
+import com.google.devtools.ksp.processing.Resolver
+import com.google.devtools.ksp.symbol.KSAnnotated
+import com.google.devtools.ksp.symbol.KSAnnotation
+import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSDeclaration
+import com.google.devtools.ksp.symbol.KSFile
+import com.google.devtools.ksp.symbol.KSFunctionDeclaration
+import com.google.devtools.ksp.symbol.KSPropertyDeclaration
+import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.KSValueArgument
+import com.google.devtools.ksp.symbol.Modifier
+import com.google.devtools.ksp.symbol.Nullability
+import com.google.devtools.ksp.validate
+import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.CodeBlock
+import com.squareup.kotlinpoet.FileSpec
+import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.LambdaTypeName
+import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.ParameterizedTypeName
+import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.STAR
+import com.squareup.kotlinpoet.TypeSpec
+import java.io.OutputStream
+import java.io.OutputStreamWriter
+import java.nio.charset.StandardCharsets
+
+/**
+ * Habitat 注解处理器.
+ *
+ * 扫描 app 模块中参与 Habitat 的 RoomDatabase, 并生成 Dao Provider 与总 Registry.
+ *
+ * @aegis 保护注解校验, 生成 Provider/Registry ABI, 命名和增量依赖语义.
+ * @author whisper
+ * @since 2026/07/27
+ */
+class HabitatSymbolProcessor(
+    private val codeGenerator: CodeGenerator,
+    private val logger: KSPLogger,
+    options: Map<String, String>,
+) : SymbolProcessor {
+
+    /**
+     * 生成 Registry 使用的 Kotlin 包名.
+     */
+    private val registryPackage: String? = options[REGISTRY_PACKAGE_OPTION]
+        ?.trim()
+        ?.takeIf(String::isNotBlank)
+
+    private var registryPackageChecked: Boolean = false
+
+    private var resolvedGeneratedPackage: String? = null
+
+    private var generated: Boolean = false
+
+    private var hasError: Boolean = false
+
+    private var deferredDatabaseSymbols: List<KSClassDeclaration> = emptyList()
+
+    private val databaseModels: MutableMap<String, HabitatDatabaseModel> = linkedMapOf()
+
+    override fun process(resolver: Resolver): List<KSAnnotated> {
+        val generatedPackage: String = resolveGeneratedPackage() ?: return emptyList()
+        val databaseSymbols: List<KSClassDeclaration> = resolver
+            .getSymbolsWithAnnotation(HABITAT_DATABASE)
+            .filterIsInstance<KSClassDeclaration>()
+            .toList()
+        val validDatabaseSymbols: MutableList<KSClassDeclaration> = mutableListOf()
+        val deferredSymbols: MutableList<KSClassDeclaration> = mutableListOf()
+        databaseSymbols.forEach { declaration: KSClassDeclaration ->
+            if (declaration.validate()) {
+                validDatabaseSymbols += declaration
+            } else {
+                deferredSymbols += declaration
+            }
+        }
+        deferredDatabaseSymbols = deferredSymbols.distinct()
+
+        validDatabaseSymbols.forEach { declaration: KSClassDeclaration ->
+            val databaseQualifiedName: String? = declaration.qualifiedName?.asString()
+            if (databaseQualifiedName != null && databaseModels.containsKey(databaseQualifiedName)) {
+                return@forEach
+            }
+            val databaseModel: HabitatDatabaseModel = parseDatabase(
+                declaration = declaration,
+                generatedPackage = generatedPackage,
+            ) ?: return@forEach
+            databaseModels[databaseModel.databaseQualifiedName] = databaseModel
+        }
+
+        return deferredSymbols
+    }
+
+    override fun finish() {
+        if (generated) {
+            return
+        }
+        generated = true
+        val generatedPackage: String = resolveGeneratedPackage() ?: return
+        if (hasError) {
+            return
+        }
+        if (deferredDatabaseSymbols.isNotEmpty()) {
+            reportDeferredDatabaseErrors()
+            return
+        }
+
+        val models: List<HabitatDatabaseModel> = databaseModels.values.toList()
+        if (models.isEmpty()) {
+            logger.warn("No Habitat database was found. Generated empty Habitat registry.")
+            writeRegistry(
+                generatedPackage = generatedPackage,
+                models = emptyList(),
+                dependencies = Dependencies.ALL_FILES,
+            )
+            return
+        }
+
+        if (!validateDatabases(models)) {
+            return
+        }
+        models.forEach { model: HabitatDatabaseModel ->
+            writeProvider(model)
+        }
+        val registryDependencies: Dependencies = Dependencies(
+            aggregating = true,
+            sources = collectSourceFiles(models).toTypedArray(),
+        )
+        writeRegistry(
+            generatedPackage = generatedPackage,
+            models = models,
+            dependencies = registryDependencies,
+        )
+    }
+
+    private fun resolveGeneratedPackage(): String? {
+        if (registryPackageChecked) {
+            return resolvedGeneratedPackage
+        }
+        registryPackageChecked = true
+        val generatedPackage: String? = registryPackage
+        if (generatedPackage == null) {
+            reportError("Missing KSP option '$REGISTRY_PACKAGE_OPTION'. Apply com.whisper.habitat to the app module.")
+            return null
+        }
+        if (!PACKAGE_NAME_PATTERN.matches(generatedPackage)) {
+            reportError("Invalid KSP option '$REGISTRY_PACKAGE_OPTION': $generatedPackage.")
+            return null
+        }
+        resolvedGeneratedPackage = generatedPackage
+        return generatedPackage
+    }
+
+    private fun parseDatabase(
+        declaration: KSClassDeclaration,
+        generatedPackage: String,
+    ): HabitatDatabaseModel? {
+        val databaseQualifiedName: String = declaration.qualifiedName?.asString()
+            ?: return logError(declaration, "Habitat database must have a qualified name.")
+        if (!declaration.hasAnnotation(ROOM_DATABASE)) {
+            return logError(declaration, "Habitat database $databaseQualifiedName must be annotated with @Database.")
+        }
+        if (!declaration.extendsClass(ROOM_DATABASE_CLASS)) {
+            return logError(
+                declaration,
+                "Habitat database $databaseQualifiedName must extend androidx.room.RoomDatabase.",
+            )
+        }
+
+        val instanceAccessor: HabitatDatabaseInstanceAccessor = findInstanceAccessor(declaration)
+            ?: return logError(
+                declaration,
+                "Habitat database $databaseQualifiedName must declare a companion object property or function " +
+                    "annotated with @HabitatDatabaseInstance.",
+            )
+
+        val daoMethods: List<HabitatDaoMethod> = declaration.declarations
+            .filterIsInstance<KSFunctionDeclaration>()
+            .filter { function: KSFunctionDeclaration -> function.isDaoAccessor() }
+            .mapNotNull { function: KSFunctionDeclaration -> parseDaoMethod(function) }
+            .toList()
+        val entities: List<HabitatEntity> = readRoomEntities(declaration)
+
+        return HabitatDatabaseModel(
+            databaseQualifiedName = databaseQualifiedName,
+            databaseClassName = ClassName.bestGuess(databaseQualifiedName),
+            providerClassName = createProviderClassName(
+                generatedPackage = generatedPackage,
+                databaseQualifiedName = databaseQualifiedName,
+            ),
+            instanceAccessor = instanceAccessor,
+            daoMethods = daoMethods,
+            entities = entities,
+            sourceFile = declaration.containingFile,
+        )
+    }
+
+    private fun findInstanceAccessor(declaration: KSClassDeclaration): HabitatDatabaseInstanceAccessor? {
+        val companionObject: KSClassDeclaration = declaration.declarations
+            .filterIsInstance<KSClassDeclaration>()
+            .firstOrNull(KSClassDeclaration::isCompanionObject)
+            ?: return null
+        val instanceProperties: List<KSPropertyDeclaration> = companionObject.declarations
+            .filterIsInstance<KSPropertyDeclaration>()
+            .filter { property: KSPropertyDeclaration ->
+                property.hasAnnotation(HABITAT_DATABASE_INSTANCE)
+            }
+            .toList()
+        val instanceFunctions: List<KSFunctionDeclaration> = companionObject.declarations
+            .filterIsInstance<KSFunctionDeclaration>()
+            .filter { function: KSFunctionDeclaration ->
+                function.hasAnnotation(HABITAT_DATABASE_INSTANCE)
+            }
+            .toList()
+        val instanceEntryCount: Int = instanceProperties.size + instanceFunctions.size
+        if (instanceEntryCount > 1) {
+            reportError(
+                declaration,
+                "Only one @HabitatDatabaseInstance property or function is allowed in " +
+                    "${declaration.qualifiedName?.asString()}.",
+            )
+            return null
+        }
+        val property: KSPropertyDeclaration? = instanceProperties.firstOrNull()
+        if (property != null) {
+            return parseInstanceProperty(property, declaration)
+        }
+        val function: KSFunctionDeclaration = instanceFunctions.firstOrNull() ?: return null
+        return parseInstanceFunction(function, declaration)
+    }
+
+    private fun parseInstanceProperty(
+        property: KSPropertyDeclaration,
+        declaration: KSClassDeclaration,
+    ): HabitatDatabaseInstanceAccessor? {
+        val propertyType: KSType = property.type.resolve()
+        val propertyTypeName: String? = propertyType.declaration.qualifiedName?.asString()
+        val databaseTypeName: String? = declaration.qualifiedName?.asString()
+        if (propertyType.nullability == Nullability.NULLABLE) {
+            reportError(
+                property,
+                "@HabitatDatabaseInstance property must return a non-null $databaseTypeName.",
+            )
+            return null
+        }
+        if (propertyTypeName != databaseTypeName) {
+            reportError(
+                property,
+                "@HabitatDatabaseInstance property must return $databaseTypeName.",
+            )
+            return null
+        }
+        if (Modifier.PRIVATE in property.modifiers || Modifier.PROTECTED in property.modifiers) {
+            reportError(property, "@HabitatDatabaseInstance property must be public.")
+            return null
+        }
+        return HabitatDatabaseInstanceAccessor(
+            memberName = property.simpleName.asString(),
+            kind = HabitatDatabaseInstanceAccessorKind.PROPERTY,
+        )
+    }
+
+    private fun parseInstanceFunction(
+        function: KSFunctionDeclaration,
+        declaration: KSClassDeclaration,
+    ): HabitatDatabaseInstanceAccessor? {
+        val databaseTypeName: String? = declaration.qualifiedName?.asString()
+        if (function.parameters.isNotEmpty()) {
+            reportError(function, "@HabitatDatabaseInstance function must not declare parameters.")
+            return null
+        }
+        val returnType: KSType = function.returnType?.resolve()
+            ?: return logError(function, "@HabitatDatabaseInstance function must return $databaseTypeName.")
+        val returnTypeName: String? = returnType.declaration.qualifiedName?.asString()
+        if (returnType.nullability == Nullability.NULLABLE) {
+            reportError(
+                function,
+                "@HabitatDatabaseInstance function must return a non-null $databaseTypeName.",
+            )
+            return null
+        }
+        if (returnTypeName != databaseTypeName) {
+            reportError(function, "@HabitatDatabaseInstance function must return $databaseTypeName.")
+            return null
+        }
+        if (Modifier.PRIVATE in function.modifiers || Modifier.PROTECTED in function.modifiers) {
+            reportError(function, "@HabitatDatabaseInstance function must be public.")
+            return null
+        }
+        return HabitatDatabaseInstanceAccessor(
+            memberName = function.simpleName.asString(),
+            kind = HabitatDatabaseInstanceAccessorKind.FUNCTION,
+        )
+    }
+
+    private fun KSFunctionDeclaration.isDaoAccessor(): Boolean {
+        val returnType: KSType = this.returnType?.resolve() ?: return false
+        val returnDeclaration: KSDeclaration = returnType.declaration
+        return Modifier.ABSTRACT in modifiers &&
+            parameters.isEmpty() &&
+            returnDeclaration.hasAnnotation(ROOM_DAO)
+    }
+
+    private fun parseDaoMethod(function: KSFunctionDeclaration): HabitatDaoMethod? {
+        val returnType: KSType = function.returnType?.resolve()
+            ?: return logError(function, "Habitat Dao accessor must declare a return type.")
+        val daoQualifiedName: String = returnType.declaration.qualifiedName?.asString()
+            ?: return logError(function, "Habitat Dao return type must have a qualified name.")
+        return HabitatDaoMethod(
+            methodName = function.simpleName.asString(),
+            daoClassName = ClassName.bestGuess(daoQualifiedName),
+            sourceFile = returnType.declaration.containingFile,
+        )
+    }
+
+    private fun validateDatabases(models: List<HabitatDatabaseModel>): Boolean {
+        val duplicateProviderNames: Set<String> = models
+            .map { model: HabitatDatabaseModel -> model.providerClassName.canonicalName }
+            .groupingBy { providerName: String -> providerName }
+            .eachCount()
+            .filterValues { count: Int -> count > 1 }
+            .keys
+        duplicateProviderNames.forEach { providerName: String ->
+            reportError("Habitat provider $providerName is generated by multiple databases.")
+        }
+
+        val duplicateDaoNames: Set<String> = models
+            .flatMap { model: HabitatDatabaseModel ->
+                model.daoMethods.map { method: HabitatDaoMethod -> method.daoClassName.canonicalName }
+            }
+            .groupingBy { daoName: String -> daoName }
+            .eachCount()
+            .filterValues { count: Int -> count > 1 }
+            .keys
+        duplicateDaoNames.forEach { daoName: String ->
+            reportError("Dao $daoName is registered in multiple Habitat databases.")
+        }
+
+        val duplicateEntityNames: Set<String> = models
+            .flatMap(HabitatDatabaseModel::entities)
+            .groupingBy { entity: HabitatEntity -> entity.qualifiedName }
+            .eachCount()
+            .filterValues { count: Int -> count > 1 }
+            .keys
+        duplicateEntityNames.forEach { entityName: String ->
+            reportError("Entity $entityName is declared in multiple Habitat databases.")
+        }
+        return duplicateProviderNames.isEmpty() && duplicateDaoNames.isEmpty() && duplicateEntityNames.isEmpty()
+    }
+
+    private fun createProviderClassName(
+        generatedPackage: String,
+        databaseQualifiedName: String,
+    ): ClassName {
+        val databaseClassName: ClassName = ClassName.bestGuess(databaseQualifiedName)
+        val providerPackage: String = listOf(
+            generatedPackage,
+            PROVIDER_PACKAGE_SEGMENT,
+            databaseClassName.packageName,
+        )
+            .filter(String::isNotBlank)
+            .joinToString(separator = ".")
+        val providerSimpleName: String = databaseClassName.simpleNames
+            .joinToString(separator = "_", postfix = PROVIDER_CLASS_SUFFIX)
+        return ClassName(providerPackage, providerSimpleName)
+    }
+
+    private fun writeProvider(model: HabitatDatabaseModel) {
+        val factoryType: LambdaTypeName = LambdaTypeName.get(returnType = ANY_CLASS_NAME)
+        val factoryMapType: ParameterizedTypeName = MAP_CLASS_NAME.parameterizedBy(
+            KCLASS_CLASS_NAME.parameterizedBy(STAR),
+            factoryType,
+        )
+        val providerType: TypeSpec = TypeSpec.classBuilder(model.providerClassName)
+            .addSuperinterface(HABITAT_DAO_PROVIDER_CLASS_NAME)
+            .addProperty(
+                PropertySpec.builder("daoFactories", factoryMapType)
+                    .addModifiers(KModifier.OVERRIDE)
+                    .initializer(createDaoFactoriesInitializer(model))
+                    .build()
+            )
+            .build()
+
+        val fileSpec: FileSpec = FileSpec.builder(model.providerClassName.packageName, model.providerClassName.simpleName)
+            .addType(providerType)
+            .build()
+        val dependencies: Dependencies = Dependencies(
+            aggregating = false,
+            sources = model.providerSourceFiles().toTypedArray(),
+        )
+        writeFile(fileSpec, dependencies)
+    }
+
+    private fun createDaoFactoriesInitializer(model: HabitatDatabaseModel): CodeBlock {
+        val builder: CodeBlock.Builder = CodeBlock.builder()
+            .add("mapOf(\n")
+            .indent()
+        model.daoMethods.forEach { method: HabitatDaoMethod ->
+            // 使用 lambda 延迟读取数据库实例, 避免 Provider 初始化时抢先触发数据库单例读取.
+            when (model.instanceAccessor.kind) {
+                HabitatDatabaseInstanceAccessorKind.PROPERTY -> {
+                    builder.addStatement(
+                        "%T::class to { %T.%N.%N() },",
+                        method.daoClassName,
+                        model.databaseClassName,
+                        model.instanceAccessor.memberName,
+                        method.methodName,
+                    )
+                }
+                HabitatDatabaseInstanceAccessorKind.FUNCTION -> {
+                    builder.addStatement(
+                        "%T::class to { %T.%N().%N() },",
+                        method.daoClassName,
+                        model.databaseClassName,
+                        model.instanceAccessor.memberName,
+                        method.methodName,
+                    )
+                }
+            }
+        }
+        return builder
+            .unindent()
+            .add(")")
+            .build()
+    }
+
+    private fun writeRegistry(
+        generatedPackage: String,
+        models: List<HabitatDatabaseModel>,
+        dependencies: Dependencies,
+    ) {
+        val providerListType: ParameterizedTypeName =
+            LIST_CLASS_NAME.parameterizedBy(HABITAT_DAO_PROVIDER_CLASS_NAME)
+        val registryType: TypeSpec = TypeSpec.classBuilder(GENERATED_REGISTRY_SIMPLE_NAME)
+            .addSuperinterface(HABITAT_REGISTRY_CLASS_NAME)
+            .addFunction(
+                FunSpec.builder("providers")
+                    .addModifiers(KModifier.OVERRIDE)
+                    .returns(providerListType)
+                    .apply {
+                        addCode("return listOf(\n")
+                        models.forEach { model: HabitatDatabaseModel ->
+                            addCode("    %T(),\n", model.providerClassName)
+                        }
+                        addCode(")\n")
+                    }
+                    .build()
+            )
+            .build()
+        val fileSpec: FileSpec = FileSpec.builder(generatedPackage, GENERATED_REGISTRY_SIMPLE_NAME)
+            .addType(registryType)
+            .build()
+        writeFile(fileSpec, dependencies)
+    }
+
+    private fun readRoomEntities(declaration: KSClassDeclaration): List<HabitatEntity> {
+        val roomAnnotation: KSAnnotation = declaration.findAnnotation(ROOM_DATABASE) ?: return emptyList()
+        val entitiesArgument: KSValueArgument = roomAnnotation.arguments
+            .firstOrNull { argument: KSValueArgument -> argument.name?.asString() == "entities" }
+            ?: return emptyList()
+        val value: Any = entitiesArgument.value ?: return emptyList()
+        val entityValues: List<*> = value as? List<*> ?: listOf(value)
+        return entityValues.mapNotNull { entityValue: Any? ->
+            val entityType: KSType = entityValue as? KSType ?: return@mapNotNull null
+            val entityDeclaration: KSDeclaration = entityType.declaration
+            val entityQualifiedName: String = entityDeclaration.qualifiedName?.asString()
+                ?: return@mapNotNull null
+            HabitatEntity(
+                qualifiedName = entityQualifiedName,
+                sourceFile = entityDeclaration.containingFile,
+            )
+        }
+    }
+
+    private fun collectSourceFiles(models: List<HabitatDatabaseModel>): List<KSFile> {
+        return models
+            .flatMap(HabitatDatabaseModel::allSourceFiles)
+            .distinctBy(KSFile::filePath)
+    }
+
+    private fun KSDeclaration.hasAnnotation(qualifiedName: String): Boolean {
+        return findAnnotation(qualifiedName) != null
+    }
+
+    private fun KSDeclaration.findAnnotation(qualifiedName: String): KSAnnotation? {
+        return annotations.firstOrNull { annotation: KSAnnotation ->
+            annotation.annotationType.resolve().declaration.qualifiedName?.asString() == qualifiedName
+        }
+    }
+
+    private fun KSClassDeclaration.extendsClass(qualifiedName: String): Boolean {
+        val visited: MutableSet<String> = mutableSetOf()
+        return extendsClass(qualifiedName, visited)
+    }
+
+    private fun KSClassDeclaration.extendsClass(
+        qualifiedName: String,
+        visited: MutableSet<String>,
+    ): Boolean {
+        val currentName: String = this.qualifiedName?.asString() ?: return false
+        if (!visited.add(currentName)) {
+            return false
+        }
+        return superTypes
+            .mapNotNull { typeReference -> typeReference.resolve().declaration as? KSClassDeclaration }
+            .any { superClass: KSClassDeclaration ->
+                superClass.qualifiedName?.asString() == qualifiedName || superClass.extendsClass(
+                    qualifiedName,
+                    visited,
+                )
+            }
+    }
+
+    private fun writeFile(fileSpec: FileSpec, dependencies: Dependencies) {
+        val file: OutputStream = codeGenerator.createNewFile(
+            dependencies = dependencies,
+            packageName = fileSpec.packageName,
+            fileName = fileSpec.name,
+        )
+        OutputStreamWriter(file, StandardCharsets.UTF_8).use(fileSpec::writeTo)
+    }
+
+    private fun <T> logError(symbol: KSAnnotated, message: String): T? {
+        reportError(symbol, message)
+        return null
+    }
+
+    private fun reportError(message: String) {
+        hasError = true
+        logger.error(message)
+    }
+
+    private fun reportDeferredDatabaseErrors() {
+        deferredDatabaseSymbols.forEach { declaration: KSClassDeclaration ->
+            val qualifiedName: String = declaration.qualifiedName?.asString()
+                ?: declaration.simpleName.asString()
+            reportError(
+                declaration,
+                "Habitat cannot process '$qualifiedName' because referenced symbols remain " +
+                    "unresolved after all KSP rounds. Ensure its generated dependencies are " +
+                    "available in the same compilation."
+            )
+        }
+    }
+
+    private fun reportError(symbol: KSAnnotated, message: String) {
+        hasError = true
+        logger.error(message, symbol)
+    }
+
+    /**
+     * Habitat 数据库生成模型.
+     */
+    private data class HabitatDatabaseModel(
+        val databaseQualifiedName: String,
+        val databaseClassName: ClassName,
+        val providerClassName: ClassName,
+        val instanceAccessor: HabitatDatabaseInstanceAccessor,
+        val daoMethods: List<HabitatDaoMethod>,
+        val entities: List<HabitatEntity>,
+        val sourceFile: KSFile?,
+    ) {
+
+        /**
+         * Provider 生成依赖的源码文件.
+         */
+        fun providerSourceFiles(): List<KSFile> {
+            return listOfNotNull(sourceFile)
+                .plus(daoMethods.mapNotNull(HabitatDaoMethod::sourceFile))
+                .distinctBy(KSFile::filePath)
+        }
+
+        /**
+         * Registry 与校验依赖的源码文件.
+         */
+        fun allSourceFiles(): List<KSFile> {
+            return providerSourceFiles()
+                .plus(entities.mapNotNull(HabitatEntity::sourceFile))
+                .distinctBy(KSFile::filePath)
+        }
+    }
+
+    /**
+     * Habitat Dao 方法生成模型.
+     */
+    private data class HabitatDaoMethod(
+        val methodName: String,
+        val daoClassName: ClassName,
+        val sourceFile: KSFile?,
+    )
+
+    /**
+     * Habitat 数据库实例入口生成模型.
+     */
+    private data class HabitatDatabaseInstanceAccessor(
+        val memberName: String,
+        val kind: HabitatDatabaseInstanceAccessorKind,
+    )
+
+    /**
+     * Habitat 数据库实例入口类型.
+     */
+    private enum class HabitatDatabaseInstanceAccessorKind {
+        PROPERTY,
+        FUNCTION,
+    }
+
+    /**
+     * Habitat Entity 生成模型.
+     */
+    private data class HabitatEntity(
+        val qualifiedName: String,
+        val sourceFile: KSFile?,
+    )
+
+    /**
+     * Habitat 处理器常量.
+     */
+    private companion object {
+
+        // ---------------------------------------------------------------------
+        // Compiler 内部实现常量.
+        // ---------------------------------------------------------------------
+
+        // 以下值只用于当前处理器的校验和源码生成, 不属于跨模块协议.
+
+        /**
+         * 生成 Provider 包名使用的固定路径段.
+         */
+        private const val PROVIDER_PACKAGE_SEGMENT: String = "providers"
+
+        /**
+         * 生成 Provider 类名使用的固定后缀.
+         */
+        private const val PROVIDER_CLASS_SUFFIX: String = "HabitatDaoProvider"
+
+        /**
+         * Kotlin Any 类型.
+         */
+        private val ANY_CLASS_NAME: ClassName = ClassName("kotlin", "Any")
+
+        /**
+         * Kotlin KClass 类型.
+         */
+        private val KCLASS_CLASS_NAME: ClassName = ClassName("kotlin.reflect", "KClass")
+
+        /**
+         * Kotlin Map 类型.
+         */
+        private val MAP_CLASS_NAME: ClassName = ClassName("kotlin.collections", "Map")
+
+        /**
+         * Kotlin List 类型.
+         */
+        private val LIST_CLASS_NAME: ClassName = ClassName("kotlin.collections", "List")
+
+        /**
+         * 生成 Registry 包名的 Kotlin 包名格式.
+         */
+        private val PACKAGE_NAME_PATTERN: Regex =
+            Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*")
+
+        // ---------------------------------------------------------------------
+        // Habitat 外部协议常量.
+        // ---------------------------------------------------------------------
+
+        // 以下值需要与 annotation、Gradle 插件、Runtime 或 Room API 中的对应协议保持一致.
+
+        /**
+         * HabitatDatabase 注解的全限定类名.
+         */
+        private const val HABITAT_DATABASE: String =
+            "com.whisper.habitat.runtime.annotation.HabitatDatabase"
+
+        /**
+         * HabitatDatabaseInstance 注解的全限定类名.
+         */
+        private const val HABITAT_DATABASE_INSTANCE: String =
+            "com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance"
+
+        /**
+         * Room Database 注解的全限定类名.
+         */
+        private const val ROOM_DATABASE: String = "androidx.room.Database"
+
+        /**
+         * RoomDatabase 基类的全限定类名.
+         */
+        private const val ROOM_DATABASE_CLASS: String = "androidx.room.RoomDatabase"
+
+        /**
+         * Room Dao 注解的全限定类名.
+         */
+        private const val ROOM_DAO: String = "androidx.room.Dao"
+
+        /**
+         * Gradle 插件传递 Registry 包名使用的 KSP 参数名.
+         */
+        private const val REGISTRY_PACKAGE_OPTION: String = "habitat.registryPackage"
+
+        /**
+         * 每个模块生成的 Registry 类名.
+         */
+        private const val GENERATED_REGISTRY_SIMPLE_NAME: String = "GeneratedHabitatRegistry"
+
+        /**
+         * Dao Provider 接口的 KotlinPoet 类型.
+         */
+        private val HABITAT_DAO_PROVIDER_CLASS_NAME: ClassName =
+            ClassName("com.whisper.habitat.runtime.registry", "HabitatDaoProvider")
+
+        /**
+         * Registry 接口的 KotlinPoet 类型.
+         */
+        private val HABITAT_REGISTRY_CLASS_NAME: ClassName =
+            ClassName("com.whisper.habitat.runtime.registry", "HabitatRegistry")
+    }
+}

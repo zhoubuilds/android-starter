@@ -1,0 +1,4 @@
+-keep,allowoptimization class * implements com.whisper.habitat.runtime.registry.HabitatRegistry {
+    public <init>();
+    public java.util.List providers();
+}
