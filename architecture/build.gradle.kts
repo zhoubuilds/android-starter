@@ -40,7 +40,7 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
     implementation(libs.gson)
-    implementation(project.dependencies.project(":kit"))
+    implementation(project(":kit"))
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
