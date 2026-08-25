@@ -31,12 +31,12 @@
 `kit` 是业务无关、应用语义无关的 Android 通用工具层。工具进入 `kit` 前必须同时满足:
 
 1. 不依赖具体业务模块。
-2. 不依赖 `common` 或应用公共状态模型。
+2. 不依赖 `foundation` 或应用公共状态模型。
 3. 不引用应用资源、文案、主题约定、业务错误码或真实域名。
 4. 不需要理解任意应用的当前业务语义也能正确使用。
 5. 具备跨项目复用价值。
 
-如果工具需要应用统一状态、图片加载约定、UI 消息、业务状态 typealias、资源或文案, 应留在 `common` 或对应业务模块。
+如果工具需要应用统一状态、图片加载约定、UI 消息、业务状态 typealias、资源或文案, 应留在 `foundation` 或对应业务模块。
 
 ## 2. 模块结构
 
@@ -122,7 +122,7 @@ kit/
 维护要求:
 
 1. `KitContentFeedCardUi` 只表达卡片 UI 状态, 不新增首页、生活、课程、商品等业务语义字段。
-2. 图片加载必须通过 `KitContentFeedImageLoader` 回调接入, `kit` 不依赖 `common.loadMedia`、Glide 约定或应用图片占位规则。
+2. 图片加载必须通过 `KitContentFeedImageLoader` 回调接入, `kit` 不依赖 `foundation.loadMedia`、Glide 约定或应用图片占位规则。
 3. 动态封面高度统一使用 `KitContentFeedCoverHeight`, 固定高度由调用方转换业务类型后写入 `fixedCoverHeightDp`。
 4. 点击回调返回 `KitContentFeedCardUi`, 调用方可通过 `payload` 持有自己的原始业务 item; `kit` 不解析该对象。
 5. 卡片颜色、圆角、间距和图标资源保持业务无关命名, 资源名遵守 `kit` 前缀。
@@ -135,7 +135,7 @@ kit/
 维护要求:
 
 1. `ShareAction` 的 `id`、`title`、`iconRes` 和 `payload` 均为调用方数据, `kit` 不内置微信、朋友圈、复制链接、系统分享等渠道语义。
-2. 面板不依赖 `common`、微信 OpenSDK、图片加载库或应用主题资源; 只能使用 `kit_` 前缀的基础色、背景和布局资源。
+2. 面板不依赖 `foundation`、微信 OpenSDK、图片加载库或应用主题资源; 只能使用 `kit_` 前缀的基础色、背景和布局资源。
 3. 面板点击后默认关闭, 需要等待业务操作结果时由调用方通过 `setDismissOnActionClick(false)` 接管关闭时机。
 4. 导航栏、状态栏和 edge-to-edge 仍由宿主 Activity 负责; 分享面板只设置底部窗口展示和默认 dim 遮罩。
 
@@ -181,7 +181,7 @@ kit/
 
 `kit` 禁止依赖:
 
-1. `common`。
+1. `foundation`。
 2. `architecture`。
 3. `feature/*`。
 4. `app`。

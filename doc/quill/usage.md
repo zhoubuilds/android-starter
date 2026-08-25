@@ -16,16 +16,16 @@ Quill 不提供文件日志、日志上传、crash 上报或自动业务上下�
 
 ## 2. 配置依赖
 
-starter 通过 `common` 统一暴露 Quill API：
+starter 通过 `foundation` 统一暴露 Quill API：
 
 ```kotlin
-// common/build.gradle.kts
+// foundation/build.gradle.kts
 dependencies {
     api(project(":quill"))
 }
 ```
 
-业务模块依赖 `common` 后即可使用 Quill。若不希望统一暴露，也可以由实际项目按模块直接依赖 `:quill`。
+业务模块依赖 `foundation` 后即可使用 Quill。若不希望统一暴露，也可以由实际项目按模块直接依赖 `:quill`。
 
 ## 3. 注册 Writer
 

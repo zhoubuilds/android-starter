@@ -27,7 +27,7 @@ dependencyResolutionManagement {
 rootProject.name = "android-starter"
 include(":app")
 include(":kit")
-include(":common")
+include(":foundation")
 include(":architecture")
 include(":quill")
 include(":aster:aster-runtime")

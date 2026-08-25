@@ -3,9 +3,9 @@ package com.whisper.starter.network
 import com.whisper.architecture.network.component.NetworkComponentManager
 import com.whisper.architecture.network.component.OkHttpCustomizer
 import com.whisper.architecture.network.component.RetrofitCustomizer
-import com.whisper.common.network.BusinessFlowCallAdapterFactory
-import com.whisper.common.network.interceptor.RequestHeadersInterceptor
-import com.whisper.common.network.interceptor.RequestHeadersProvider
+import com.whisper.foundation.network.BusinessFlowCallAdapterFactory
+import com.whisper.foundation.network.interceptor.RequestHeadersInterceptor
+import com.whisper.foundation.network.interceptor.RequestHeadersProvider
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor

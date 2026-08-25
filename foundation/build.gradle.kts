@@ -1,32 +1,18 @@
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.ksp)
-    id("com.whisper.aster")
-    id("com.whisper.prism")
-}
-
-aster {
-    segment = "app"
+    alias(libs.plugins.android.library)
 }
 
 android {
-    namespace = "com.whisper.starter"
+    namespace = "com.whisper.foundation"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = prismAppConfig.get<String>("applicationId")
         minSdk = 24
-        targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles("consumer-rules.pro")
     }
 
     buildTypes {
-        debug {
-            isDebuggable = true
-        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -40,7 +26,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
-        viewBinding = true
         buildConfig = true
     }
 }
@@ -49,22 +34,15 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
-    implementation(libs.androidx.activity)
-    implementation(libs.androidx.constraintlayout)
-    implementation(libs.lifecycle.runtime.ktx)
-    implementation(libs.lifecycle.viewmodel.ktx)
 
-    implementation(project(":foundation"))
-    implementation(project(":kit"))
-    implementation(project(":architecture"))
-    implementation(project(":aster:aster-runtime"))
-
-    implementation(libs.retrofit.converter.gson)
     implementation(libs.gson)
-
-    ksp(project(":aster:aster-compiler"))
+    implementation(libs.okhttp)
+    api(project(":kit"))
+    api(project(":architecture"))
+    api(project(":quill"))
 
     testImplementation(libs.junit)
+    testImplementation(libs.retrofit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

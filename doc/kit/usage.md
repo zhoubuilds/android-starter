@@ -28,15 +28,15 @@
 
 `kit` 只提供业务无关、应用语义无关的 Android 通用工具。调用方不应要求 `kit` 理解业务状态、应用资源、统一消息、图片加载约定或领域模型。
 
-业务模块通常通过 `common` 间接获得 `kit` 的公开工具:
+业务模块通常通过 `foundation` 间接获得 `kit` 的公开工具:
 
 ```kotlin
 dependencies {
-    implementation(project(":common"))
+    implementation(project(":foundation"))
 }
 ```
 
-仅在不需要 `common` 的模块中, 才直接依赖:
+仅在不需要 `foundation` 的模块中, 才直接依赖:
 
 ```kotlin
 dependencies {

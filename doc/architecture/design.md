@@ -19,18 +19,18 @@
 * Architecture UI 状态容器和 Activity / Fragment 基类。
 * Retrofit / OkHttp API 创建骨架。
 
-它不承载具体业务含义, 也不依赖 `app`、`common` 或 `feature:*` 模块。
+它不承载具体业务含义, 也不依赖 `app`、`foundation` 或 `feature:*` 模块。
 
 推荐依赖方向:
 
 ```text
 app
-|- common
+|- foundation
 |- feature:auth-impl -> feature:auth-api
 |- feature:user-impl -> feature:user-api
 `- architecture
 
-common / feature:* -> architecture
+foundation / feature:* -> architecture
 architecture -> 三方基础库
 ```
 
@@ -124,8 +124,8 @@ viewmodel
   表示业务状态处理协议, 避免和 Android `Handler` 混淆。
 * `ArchitectureBusiness` 表示架构层业务状态载体, 不绑定应用级公共响应字段。
 * `BusinessException` 表示服务端业务错误包装, 架构层只承载错误信息摘要。
-* Architecture UI 统一使用 `ArchitectureUi` 和 `pendingTask` 术语, 不混用 `foundation`、`common` 或
-  `work`。
+* Architecture UI 统一使用 `ArchitectureUi` 和 `pendingTask` 术语, 不混用 `workingCount`、
+  `workCount` 或 `loadingCount`。
 * `ArchitectureViewModel` 和 `ArchitectureUiStateOwner` 保持在 `architecture.viewmodel`, 表达它们是架构组件,
   不归入具体 Activity 或 Fragment 包。
 
@@ -133,7 +133,7 @@ viewmodel
 
 新增能力前先判断它是否属于稳定架构抽象:
 
-* 如果能力依赖具体业务数据, 优先放入业务模块或 `common`。
+* 如果能力依赖具体业务数据, 优先放入业务模块或 `foundation`。
 * 如果能力需要对象图、作用域或构造注入, 优先接入 DI, 不扩展架构基类。
 * 如果能力只服务单个页面或 feature, 不上升到 `architecture`。
 * 如果能力会影响既有 API 契约、可观察行为或明确实现约束, 需要先检查源码中是否存在 `@aegis`。

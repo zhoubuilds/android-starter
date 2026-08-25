@@ -80,7 +80,7 @@ repository.profile()
 
 ## 5. 公共请求头
 
-Common 只定义：
+Foundation 只定义：
 
 ```kotlin
 fun interface RequestHeadersProvider {
@@ -99,7 +99,7 @@ val provider = RequestHeadersProvider {
 }
 ```
 
-需要登录态时，Provider 应依赖稳定的 auth 契约，不应让 Common 或 Architecture 依赖具体登录实现。
+需要登录态时，Provider 应依赖稳定的 auth 契约，不应让 Foundation 或 Architecture 依赖具体登录实现。
 
 ## 6. API 级定制
 
@@ -115,4 +115,4 @@ interface UploadApi
 
 ## 7. 多域名扩展
 
-不要为了预想中的多域名需求把 flavor 常量下沉到 Common。出现明确需求后，在 app 层增加路由拦截器或 Retrofit customizer，并让业务 API 只依赖稳定 marker。域名选择、租户状态和环境配置仍由 app 组合根持有。
+不要为了预想中的多域名需求把 flavor 常量下沉到 Foundation。出现明确需求后，在 app 层增加路由拦截器或 Retrofit customizer，并让业务 API 只依赖稳定 marker。域名选择、租户状态和环境配置仍由 app 组合根持有。

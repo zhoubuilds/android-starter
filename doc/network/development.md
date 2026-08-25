@@ -24,7 +24,7 @@ architecture/.../architecture/network/
    |- OkHttpCustomizer.kt
    `- RetrofitCustomizer.kt
 
-common/.../common/network/
+foundation/.../foundation/network/
 |- BusinessFlowCallAdapterFactory.kt
 `- interceptor/
    |- RequestHeadersInterceptor.kt
@@ -95,7 +95,7 @@ override fun resolveInterceptor(
 
 ```bash
 ./gradlew :architecture:testDebugUnitTest \
-  :common:testDebugUnitTest \
+  :foundation:testDebugUnitTest \
   :app:testDebugUnitTest \
   :app:compileDebugKotlin \
   --configuration-cache
@@ -112,7 +112,7 @@ override fun resolveInterceptor(
 ## 7. 维护检查项
 
 * Architecture 不得读取 app BuildConfig 或写入真实域名。
-* Common 不得解释环境 flavor，也不得内置业务鉴权。
+* Foundation 不得解释环境 flavor，也不得内置业务鉴权。
 * app 的 `API_HOST` 必须是合法 HTTP(S) URL；Manager 会补齐 path 末尾的 `/`。
 * 示例为本地 HTTP 回退保留 cleartext；生产项目使用 HTTPS 后应在 app 安全配置中关闭。
 * 不得加入信任所有证书、主机名或占位签名实现。

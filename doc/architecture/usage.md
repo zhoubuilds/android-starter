@@ -88,6 +88,6 @@ val api: UserApi = ApiFactory.create(UserApi::class)
 
 * 登录态、Token、刷新和三方凭证放入 `feature:auth-api` / `feature:auth-impl`。
 * 用户资料、登录注册页面等垂直业务放入 `feature:user-*`。
-* 跨业务但仍带业务语义的工具放入 `common`。
+* 跨业务但仍带业务语义的工具放入 `foundation`。
 * 业务和应用语义无关的 Android 通用工具放入 `kit`。
 * 稳定、业务无关、可被多个模块复用的技术能力才放入 `architecture`。

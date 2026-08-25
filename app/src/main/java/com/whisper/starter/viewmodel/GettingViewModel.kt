@@ -2,7 +2,7 @@ package com.whisper.starter.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import com.whisper.architecture.business.function.consumeSuccessMeta
-import com.whisper.common.viewmodel.CommonViewModel
+import com.whisper.foundation.viewmodel.BusinessViewModel
 import com.whisper.starter.data.bean.GettingResp
 import com.whisper.starter.data.repo.GettingRepository
 import kotlinx.coroutines.Dispatchers
@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
  * @author whisper
  * @since 2025/9/22
  */
-class GettingViewModel : CommonViewModel() {
+class GettingViewModel : BusinessViewModel() {
 
     private val _gettingMinimumSate: MutableStateFlow<GettingResp?> = MutableStateFlow(null)
 

@@ -27,9 +27,9 @@ app
 由此得到以下边界：
 
 * `architecture` 固定 API 创建流程、注解语义和组件解析契约。
-* `common` 提供公共响应转换、业务 Flow CallAdapter 和无环境依赖的请求头拦截器。
+* `foundation` 提供公共响应转换、业务 Flow CallAdapter 和无环境依赖的请求头拦截器。
 * `app` 决定域名、Converter、超时、请求头内容、安全策略和组件实例来源。
-* feature、repository 和 common 不读取 flavor 或 `BuildConfig.API_HOST`。
+* feature、repository 和 foundation 不读取 flavor 或 `BuildConfig.API_HOST`。
 
 ## 2. 核心流程
 
