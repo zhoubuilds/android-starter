@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("aster-gradle-plugin")
     // Optional: remove with the Prism plugin declaration when TOML app configuration is not needed.
     includeBuild("build-logic")
     repositories {
@@ -27,4 +28,5 @@ include(":app")
 include(":kit")
 include(":common")
 include(":architecture")
-include(":router-api")
+include(":aster:aster-runtime")
+include(":aster:aster-compiler")

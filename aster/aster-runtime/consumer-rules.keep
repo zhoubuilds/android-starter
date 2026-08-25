@@ -1,0 +1,8 @@
+-keep,allowoptimization class * implements com.whisper.aster.runtime.registry.AsterRegistryInstaller {
+    public <init>();
+    public void install(com.whisper.aster.runtime.registry.AsterRegistrar);
+}
+
+-keep,allowoptimization,allowobfuscation @com.whisper.aster.runtime.annotation.Capable class * {
+    public <init>();
+}

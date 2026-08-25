@@ -11,6 +11,7 @@ import com.whisper.architecture.extension.viewBinding
 import com.whisper.architecture.logger.Logger
 import com.whisper.architecture.ui.activity.ArchitectureActivity
 import com.whisper.architecture.uimode.message.UiMessage
+import com.whisper.aster.runtime.annotation.Route
 import com.whisper.starter.BuildConfig
 import com.whisper.starter.R
 import com.whisper.starter.databinding.ActivityMainBinding
@@ -18,6 +19,7 @@ import com.whisper.starter.viewmodel.GettingViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+@Route("/app/main")
 class MainActivity : ArchitectureActivity<GettingViewModel>() {
 
     companion object {

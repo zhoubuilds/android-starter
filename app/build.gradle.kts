@@ -1,6 +1,12 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.ksp)
+    id("com.whisper.aster")
     id("com.whisper.prism")
+}
+
+aster {
+    segment = "app"
 }
 
 android {
@@ -49,12 +55,15 @@ dependencies {
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.viewmodel.ktx)
 
-    implementation(project.dependencies.project(":common"))
-    implementation(project.dependencies.project(":kit"))
-    implementation(project.dependencies.project(":architecture"))
+    implementation(project(":common"))
+    implementation(project(":kit"))
+    implementation(project(":architecture"))
+    implementation(project(":aster:aster-runtime"))
 
     implementation(libs.retrofit.converter.gson)
     implementation(libs.gson)
+
+    ksp(project(":aster:aster-compiler"))
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
