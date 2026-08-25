@@ -1,5 +1,5 @@
 pluginManagement {
-    // Optional: remove with the app plugin declaration when property-driven BuildConfig fields are not needed.
+    // Optional: remove with the Prism plugin declaration when TOML app configuration is not needed.
     includeBuild("build-logic")
     repositories {
         google {

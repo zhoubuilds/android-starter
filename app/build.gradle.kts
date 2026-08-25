@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
-    // Optional: maps generate.* Gradle properties to BuildConfig fields.
-    id("com.whisper.starter.build-config-fields")
+    id("com.whisper.prism")
 }
 
 android {
@@ -9,7 +8,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.whisper.starter"
+        applicationId = prismAppConfig.get<String>("applicationId")
         minSdk = 24
         targetSdk = 37
         versionCode = 1
@@ -24,6 +23,7 @@ android {
         }
         release {
             isMinifyEnabled = false
+            buildConfigField("String", "SCHEME", "\"https://\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
