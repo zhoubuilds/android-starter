@@ -8,10 +8,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.whisper.architecture.component.ArchitectureUiStateHandler
 import com.whisper.architecture.extension.viewBinding
 import com.whisper.architecture.ui.activity.ArchitectureActivity
-import com.whisper.architecture.uimode.message.UiMessage
+import com.whisper.architecture.ui.component.ArchitectureUiComponent
+import com.whisper.architecture.ui.message.UiMessage
 import com.whisper.aster.runtime.annotation.Route
 import com.whisper.kit.recyclerview.listener.addOnItemChildClickListener
 import com.whisper.quill.Quill
@@ -31,15 +31,15 @@ class MainActivity : ArchitectureActivity<GettingViewModel>() {
 
     private val _viewBinding by viewBinding(ActivityMainBinding::inflate)
     override val viewModel = GettingViewModel()
-    override val architectureUiStateHandler: ArchitectureUiStateHandler =
-        object : ArchitectureUiStateHandler(this) {
-            override fun onWorkingCountChanged(count: Int) {
+    override val architectureUiComponent: ArchitectureUiComponent =
+        object : ArchitectureUiComponent(this) {
+            override fun onPendingTaskCountChanged(count: Int) {
             }
 
             override fun handleUiMessage(message: UiMessage) {
                 Toast.makeText(
                     context,
-                    "${message.level}-${message.tone}: ${message.message}",
+                    "${message.importance}-${message.tone}: ${message.message}",
                     Toast.LENGTH_SHORT
                 ).show()
 

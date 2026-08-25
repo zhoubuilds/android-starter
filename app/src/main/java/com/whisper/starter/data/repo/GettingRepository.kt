@@ -1,8 +1,8 @@
 package com.whisper.starter.data.repo
 
-import com.whisper.architecture.bean.business.Business
-import com.whisper.architecture.function.callAsBusinessFlow
 import com.whisper.architecture.net.ApiFactory
+import com.whisper.common.function.callAsBusinessFlow
+import com.whisper.common.model.business.Business
 import com.whisper.starter.data.bean.GettingResp
 import com.whisper.starter.data.ds.Api
 import kotlinx.coroutines.flow.Flow

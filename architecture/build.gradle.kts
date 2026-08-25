@@ -9,7 +9,7 @@ android {
     defaultConfig {
         minSdk = 24
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        consumerProguardFiles("consumer-rules.pro")
+        consumerProguardFiles("consumer-rules.keep")
     }
 
     buildTypes {
@@ -31,8 +31,11 @@ android {
 }
 
 dependencies {
+    api(libs.androidx.appcompat)
+    api(libs.lifecycle.viewmodel.ktx)
+    api(libs.kotlinx.coroutines.core)
+
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.lifecycle.runtime.ktx)
 
@@ -40,8 +43,6 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
     implementation(libs.gson)
-    implementation(project(":kit"))
-
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

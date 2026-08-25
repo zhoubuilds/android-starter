@@ -35,12 +35,14 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
 
+    implementation(libs.gson)
     implementation(libs.okhttp)
     api(project(":kit"))
-    implementation(project(":architecture"))
+    api(project(":architecture"))
     api(project(":quill"))
 
     testImplementation(libs.junit)
+    testImplementation(libs.retrofit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

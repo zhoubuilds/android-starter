@@ -4,6 +4,7 @@ kotlin = "2.4.10"
 autoService = "1.1.1"
 ksp = "2.3.10"
 kotlinpoet = "2.3.0"
+coroutines = "1.10.2"
 coreKtx = "1.19.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
@@ -41,6 +42,7 @@ kotlinpoet = { group = "com.squareup", name = "kotlinpoet", version.ref = "kotli
 auto-service-annotations = { group = "com.google.auto.service", name = "auto-service-annotations", version.ref = "autoService" }
 auto-service = { group = "com.google.auto.service", name = "auto-service", version.ref = "autoService" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

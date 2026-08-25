@@ -1,8 +1,8 @@
 package com.whisper.starter.viewmodel
 
 import androidx.lifecycle.viewModelScope
-import com.whisper.architecture.function.onlySuccess
-import com.whisper.common.architecture.viewmodel.CommonViewModel
+import com.whisper.architecture.business.function.consumeSuccessMeta
+import com.whisper.common.viewmodel.CommonViewModel
 import com.whisper.starter.data.bean.GettingResp
 import com.whisper.starter.data.repo.GettingRepository
 import kotlinx.coroutines.Dispatchers
@@ -28,9 +28,9 @@ class GettingViewModel : CommonViewModel() {
         viewModelScope.launch {
             GettingRepository().getting(id)
                 .flowOn(Dispatchers.IO)
-                .withBusinessProgress()
-                .withBusinessError()
-                .onlySuccess()
+                .consumeLoading()
+                .consumeError()
+                .consumeSuccessMeta()
                 .collect {
                     _gettingMinimumSate.value = it
                 }
