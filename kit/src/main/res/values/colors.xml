@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="kit_content_feed_surface">#FFFFFFFF</color>
+    <color name="kit_content_feed_image_placeholder">#F3F5F7</color>
+    <color name="kit_content_feed_text_primary">#0D0723</color>
+    <color name="kit_content_feed_text_secondary">#8D90A0</color>
+    <color name="kit_content_feed_tag_text">#DD3315</color>
+    <color name="kit_content_feed_tag_background">#FFF1F0</color>
+    <color name="kit_content_feed_duration_background">#59000000</color>
+    <color name="kit_content_feed_play_overlay">#80000000</color>
+    <color name="kit_content_feed_play_icon">#FFFFFFFF</color>
+    <color name="kit_content_feed_cover_badge_gradient_start">#FFFFECDA</color>
+    <color name="kit_content_feed_cover_badge_gradient_end">#FFFFE1CA</color>
+    <color name="kit_content_feed_cover_badge_text">#741706</color>
+    <color name="kit_share_sheet_surface">#FFFFFFFF</color>
+    <color name="kit_share_sheet_divider">#FFF5F5F5</color>
+    <color name="kit_share_sheet_icon_background">#FFF6F7F9</color>
+    <color name="kit_share_sheet_text_primary">#FF222222</color>
+    <color name="kit_share_sheet_cancel_text">#FF333333</color>
+</resources>

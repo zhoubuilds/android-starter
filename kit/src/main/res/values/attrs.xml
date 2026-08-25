@@ -2,6 +2,8 @@
 <resources>
     <attr name="kitLineViewStyle" format="reference" />
     <attr name="kitRangeBarStyle" format="reference" />
+    <attr name="kitRefreshLoadLayoutStyle" format="reference" />
+    <attr name="kitCodeInputEditTextStyle" format="reference" />
 
     <declare-styleable name="KitLineView">
         <attr name="kitDotWidth" format="dimension" />
@@ -73,6 +75,33 @@
 
         <!-- 结束位置按钮 -->
         <attr name="kitEnd" format="integer" />
+    </declare-styleable>
+
+    <declare-styleable name="KitRefreshLoadLayout">
+        <attr name="kitRefreshLoadHeaderLayout" format="reference" />
+        <attr name="kitRefreshLoadFooterLayout" format="reference" />
+        <attr name="kitRefreshLoadRefreshEnabled" format="boolean" />
+        <attr name="kitRefreshLoadLoadMoreEnabled" format="boolean" />
+        <attr name="kitRefreshLoadAutoLoadMoreEnabled" format="boolean" />
+        <attr name="kitRefreshLoadRefreshTriggerDistance" format="dimension" />
+        <attr name="kitRefreshLoadLoadMoreTriggerDistance" format="dimension" />
+        <attr name="kitRefreshLoadDragResistance" format="float" />
+        <attr name="kitRefreshLoadAnimationDuration" format="integer" />
+    </declare-styleable>
+
+    <declare-styleable name="KitRefreshLoadLayout_Layout">
+        <attr name="kitLayoutRefreshLoadRole" format="enum">
+            <enum name="header" value="1" />
+            <enum name="footer" value="2" />
+        </attr>
+    </declare-styleable>
+
+    <declare-styleable name="KitCodeInputEditText">
+        <attr name="kitCodeItemBackground" format="reference" />
+        <attr name="kitCodeItemWidth" format="dimension" />
+        <attr name="kitCodeItemHeight" format="dimension" />
+        <attr name="kitCodeItemSpacing" format="dimension" />
+        <attr name="kitCodeHintFontFamily" format="reference|string" />
     </declare-styleable>
 
 </resources>

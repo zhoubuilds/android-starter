@@ -4,32 +4,32 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
 
-
 /**
+ * RecyclerView 单击手势命中分发器.
  *
+ * 该类先命中被点击的 itemView, 再在 itemView 内查找最深层的可点击目标 View.
+ * 它只负责分发旁路点击通知, 不消费事件, 不改变 View 原本的触摸和点击行为.
  *
- * Created by whisper on 2024/11/20
+ * @author whisper
+ * @since 2026/07/30
  */
-class OnDispatchClickGestureListener(
-    private val _recyclerView: RecyclerView,
+internal class OnDispatchClickGestureListener(
+    private val recyclerView: RecyclerView,
     filter: ItemViewFilter?,
-    private val _listener: OnItemClickListener?
+    private val listener: OnItemClickListener?,
 ) : OnDispatchGestureListener(filter) {
 
     override fun onSingleTapUp(e: MotionEvent): Boolean {
-        val view: View = findChildViewOnPoint(_recyclerView, e.x, e.y) ?: return false
-        val position: Int = _recyclerView.getChildAdapterPosition(view)
+        val view: View = findChildViewOnPoint(recyclerView, e.x, e.y) ?: return false
+        val position: Int = recyclerView.getChildAdapterPosition(view)
         if (position == RecyclerView.NO_POSITION) return false
-        // 将 RecyclerView 坐标转换到 item view 的本地坐标系.
-        // 这里和 Android ViewGroup 分发触摸事件一样, 会应用 item 自身 matrix 的逆变换.
-        val point = transformPointToChildLocal(_recyclerView, view, e.x, e.y)
-        val localX = point[0]
-        val localY = point[1]
-        val target = findViewOnPoint(view, localX, localY) ?: return false
-        _listener?.onItemClick(_recyclerView, target, position)
-        // 这是一个旁路点击通知工具, 不消费事件, 不改变 View 原本的触摸/点击行为.
-        // 同一批 View 如果还设置了原生 OnClickListener, 调用方会同时收到两套点击通知.
+
+        // 将 RecyclerView 坐标转换到 itemView 的本地坐标系, 保留 item 自身 matrix 影响.
+        val point: FloatArray = transformPointToChildLocal(recyclerView, view, e.x, e.y)
+        val localX: Float = point[0]
+        val localY: Float = point[1]
+        val target: View = findViewOnPoint(view, localX, localY) ?: return false
+        listener?.onItemClick(recyclerView, target, position)
         return false
     }
-
 }

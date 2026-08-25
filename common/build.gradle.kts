@@ -36,7 +36,7 @@ dependencies {
     implementation(libs.material)
 
     implementation(libs.okhttp)
-    implementation(project(":kit"))
+    api(project(":kit"))
     implementation(project(":architecture"))
     api(project(":quill"))
 

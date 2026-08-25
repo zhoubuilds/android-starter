@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="5dp"
+    android:layout_marginTop="6dp"
+    android:layout_marginEnd="5dp"
+    android:layout_marginBottom="6dp"
+    android:background="@drawable/kit_bg_content_feed_card"
+    android:orientation="vertical"
+    android:paddingBottom="10dp">
+
+    <FrameLayout
+        android:id="@+id/kit_content_feed_media_container"
+        android:layout_width="match_parent"
+        android:layout_height="170dp">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/kit_content_feed_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/kit_bg_content_feed_image"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            app:shapeAppearanceOverlay="@style/KitContentFeedImageShape" />
+
+        <ImageView
+            android:id="@+id/kit_content_feed_play"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:src="@drawable/kit_ic_content_feed_play"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+        <TextView
+            android:id="@+id/kit_content_feed_duration"
+            android:layout_width="wrap_content"
+            android:layout_height="21dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="6dp"
+            android:background="@drawable/kit_bg_content_feed_duration"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:minWidth="34dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:visibility="gone"
+            tools:text="3:34"
+            tools:visibility="visible" />
+
+        <TextView
+            android:id="@+id/kit_content_feed_cover_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="22dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="7dp"
+            android:background="@drawable/kit_bg_content_feed_cover_badge"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:minWidth="34dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:textColor="@color/kit_content_feed_cover_badge_text"
+            android:textSize="12sp"
+            android:visibility="gone"
+            tools:text="文章"
+            tools:visibility="visible" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/kit_content_feed_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="10dp"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:includeFontPadding="false"
+        android:lineSpacingExtra="2dp"
+        android:maxLines="2"
+        android:textColor="@color/kit_content_feed_text_primary"
+        android:textSize="14sp"
+        tools:text="不同旅游的场景 最佳衣服穿搭" />
+
+    <TextView
+        android:id="@+id/kit_content_feed_tag"
+        android:layout_width="wrap_content"
+        android:layout_height="18dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/kit_bg_content_feed_tag"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:textColor="@color/kit_content_feed_tag_text"
+        android:textSize="11sp"
+        android:visibility="gone"
+        tools:text="精品文章"
+        tools:visibility="visible" />
+
+    <TextView
+        android:id="@+id/kit_content_feed_stats"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="10dp"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textColor="@color/kit_content_feed_text_secondary"
+        android:textSize="12sp"
+        tools:text="3.67万次观看" />
+</LinearLayout>

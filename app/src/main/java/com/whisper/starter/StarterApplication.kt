@@ -4,6 +4,7 @@ import android.app.Application
 import com.whisper.architecture.AppGlobal
 import com.whisper.aster.runtime.Aster
 import com.whisper.kit.KitApplicationHolder
+import com.whisper.kit.activity.ActivityLifecycleTracker
 import com.whisper.quill.LogcatQuillWriter
 import com.whisper.quill.Quill
 import com.whisper.quill.QuillLevel
@@ -20,6 +21,7 @@ class StarterApplication : Application() {
         super.onCreate()
         Aster.initialize(this)
         KitApplicationHolder.initialize(this)
+        ActivityLifecycleTracker.install(this)
         AppGlobal.initialize(this)
         Quill.addWriter(
             LogcatQuillWriter(

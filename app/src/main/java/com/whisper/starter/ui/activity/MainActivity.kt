@@ -13,7 +13,7 @@ import com.whisper.architecture.extension.viewBinding
 import com.whisper.architecture.ui.activity.ArchitectureActivity
 import com.whisper.architecture.uimode.message.UiMessage
 import com.whisper.aster.runtime.annotation.Route
-import com.whisper.kit.recyclerview.listener.OnItemTouchDispatchClickListener
+import com.whisper.kit.recyclerview.listener.addOnItemChildClickListener
 import com.whisper.quill.Quill
 import com.whisper.starter.BuildConfig
 import com.whisper.starter.R
@@ -76,22 +76,20 @@ class MainActivity : ArchitectureActivity<GettingViewModel>() {
         // -- Transform hit test --
         _viewBinding.rvTransformTest.layoutManager = LinearLayoutManager(this)
         _viewBinding.rvTransformTest.adapter = TransformTestAdapter()
-        _viewBinding.rvTransformTest.addOnItemTouchListener(
-            OnItemTouchDispatchClickListener(_viewBinding.rvTransformTest) { _, view, position ->
-                val id = view.id
-                val name = try {
-                    resources.getResourceEntryName(id)
-                } catch (_: Exception) {
-                    "itemView"
-                }
-                val text = (view as? TextView)?.text?.toString()
-                val target = text?.takeIf { it.isNotBlank() } ?: name
-                Quill.i(TAG) {
-                    "click: position=$position, view=$target (${view.javaClass.simpleName})"
-                }
-                Toast.makeText(this, target, Toast.LENGTH_SHORT).show()
+        _viewBinding.rvTransformTest.addOnItemChildClickListener { _, view, position ->
+            val id = view.id
+            val name = try {
+                resources.getResourceEntryName(id)
+            } catch (_: Exception) {
+                "itemView"
             }
-        )
+            val text = (view as? TextView)?.text?.toString()
+            val target = text?.takeIf { it.isNotBlank() } ?: name
+            Quill.i(TAG) {
+                "click: position=$position, view=$target (${view.javaClass.simpleName})"
+            }
+            Toast.makeText(this, target, Toast.LENGTH_SHORT).show()
+        }
 
     }
 }
