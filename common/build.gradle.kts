@@ -36,8 +36,9 @@ dependencies {
     implementation(libs.material)
 
     implementation(libs.okhttp)
-    implementation(project.dependencies.project(":kit"))
-    implementation(project.dependencies.project(":architecture"))
+    implementation(project(":kit"))
+    implementation(project(":architecture"))
+    api(project(":quill"))
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

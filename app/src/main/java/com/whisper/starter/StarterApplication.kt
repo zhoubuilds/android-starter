@@ -2,11 +2,11 @@ package com.whisper.starter
 
 import android.app.Application
 import com.whisper.architecture.AppGlobal
-import com.whisper.architecture.logger.LogLevel
-import com.whisper.architecture.logger.LogcatTree
-import com.whisper.architecture.logger.Logger
 import com.whisper.aster.runtime.Aster
 import com.whisper.kit.KitApplicationHolder
+import com.whisper.quill.LogcatQuillWriter
+import com.whisper.quill.Quill
+import com.whisper.quill.QuillLevel
 
 
 /**
@@ -21,7 +21,16 @@ class StarterApplication : Application() {
         Aster.initialize(this)
         KitApplicationHolder.initialize(this)
         AppGlobal.initialize(this)
-        Logger.plant(LogcatTree(true, LogLevel.VERBOSE))
+        Quill.addWriter(
+            LogcatQuillWriter(
+                minimumLevel = if (BuildConfig.DEBUG) {
+                    QuillLevel.DEBUG
+                } else {
+                    QuillLevel.WARN
+                },
+                defaultTag = "AndroidStarter",
+            )
+        )
     }
 
 }

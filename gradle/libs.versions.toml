@@ -16,6 +16,7 @@ lifecycle = "2.11.0"
 okhttp = "5.4.0"
 retrofit = "3.0.0"
 gson = "2.14.0"
+robolectric = "4.16.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -36,6 +37,7 @@ ksp-symbol-processing-api = { group = "com.google.devtools.ksp", name = "symbol-
 kotlinpoet = { group = "com.squareup", name = "kotlinpoet", version.ref = "kotlinpoet" }
 auto-service-annotations = { group = "com.google.auto.service", name = "auto-service-annotations", version.ref = "autoService" }
 auto-service = { group = "com.google.auto.service", name = "auto-service", version.ref = "autoService" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

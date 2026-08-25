@@ -8,10 +8,10 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.whisper.architecture.component.ArchitectureUiStateHandler
 import com.whisper.architecture.extension.viewBinding
-import com.whisper.architecture.logger.Logger
 import com.whisper.architecture.ui.activity.ArchitectureActivity
 import com.whisper.architecture.uimode.message.UiMessage
 import com.whisper.aster.runtime.annotation.Route
+import com.whisper.quill.Quill
 import com.whisper.starter.BuildConfig
 import com.whisper.starter.R
 import com.whisper.starter.databinding.ActivityMainBinding
@@ -54,7 +54,7 @@ class MainActivity : ArchitectureActivity<GettingViewModel>() {
             insets
         }
         _viewBinding.range.setOnRangeChangedListener { _, s, e ->
-            Logger.i("range") { "start: $s, end: $e" }
+            Quill.i("range") { "start: $s, end: $e" }
         }
         _viewBinding.range.start = 30
 
