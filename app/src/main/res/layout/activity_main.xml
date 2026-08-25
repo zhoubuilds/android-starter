@@ -49,4 +49,13 @@
         app:kitThumb="@drawable/thumb"
         app:kitTotal="100" />
 
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_transform_test"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:clipChildren="false"
+        android:clipToPadding="false" />
+
 </LinearLayout>

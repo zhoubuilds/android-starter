@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="520dp"
+    android:layout_marginVertical="8dp"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/tv_case_title"
+        android:layout_width="wrap_content"
+        android:layout_height="28dp"
+        android:gravity="center_vertical"
+        android:text="Transform hit test"
+        android:textSize="13sp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_plain"
+        android:layout_width="104dp"
+        android:layout_height="52dp"
+        android:layout_marginTop="36dp"
+        android:text="Plain"
+        android:textSize="12sp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_scale"
+        android:layout_width="104dp"
+        android:layout_height="52dp"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="36dp"
+        android:scaleX="1.35"
+        android:scaleY="0.72"
+        android:text="Scale"
+        android:textSize="12sp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_rotate"
+        android:layout_width="104dp"
+        android:layout_height="52dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="36dp"
+        android:rotation="35"
+        android:text="Rotate"
+        android:textSize="12sp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_rotation_x"
+        android:layout_width="116dp"
+        android:layout_height="56dp"
+        android:layout_marginTop="126dp"
+        android:rotationX="58"
+        android:text="RotX"
+        android:textSize="12sp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_rotation_y"
+        android:layout_width="116dp"
+        android:layout_height="56dp"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="126dp"
+        android:rotationY="60"
+        android:text="RotY"
+        android:textSize="12sp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_translate"
+        android:layout_width="116dp"
+        android:layout_height="56dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="126dp"
+        android:rotation="-18"
+        android:text="Translate"
+        android:textSize="12sp"
+        android:translationX="-16dp"
+        android:translationY="18dp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_pivot"
+        android:layout_width="116dp"
+        android:layout_height="56dp"
+        android:layout_marginTop="218dp"
+        android:rotation="42"
+        android:text="Pivot"
+        android:textSize="12sp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_combo_2d"
+        android:layout_width="116dp"
+        android:layout_height="56dp"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="218dp"
+        android:rotation="-28"
+        android:scaleX="1.22"
+        android:scaleY="0.78"
+        android:text="2D Combo"
+        android:textSize="12sp"
+        android:translationY="10dp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_combo_3d"
+        android:layout_width="116dp"
+        android:layout_height="56dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="218dp"
+        android:rotation="12"
+        android:rotationX="36"
+        android:rotationY="-44"
+        android:text="3D Combo"
+        android:textSize="12sp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_overlap_back"
+        android:layout_width="140dp"
+        android:layout_height="56dp"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="310dp"
+        android:rotation="-10"
+        android:text="Overlap Back"
+        android:textSize="12sp"
+        android:translationX="-32dp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_overlap_front"
+        android:layout_width="140dp"
+        android:layout_height="56dp"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="318dp"
+        android:rotation="10"
+        android:text="Overlap Front"
+        android:textSize="12sp"
+        android:translationX="32dp" />
+
+    <LinearLayout
+        android:id="@+id/group_nested"
+        android:layout_width="230dp"
+        android:layout_height="72dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:clickable="true"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:rotation="14"
+        android:scaleX="1.08"
+        android:translationY="-8dp">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btn_nested_child"
+            android:layout_width="156dp"
+            android:layout_height="52dp"
+            android:rotationY="-48"
+            android:text="Nested RotY"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
+</FrameLayout>
