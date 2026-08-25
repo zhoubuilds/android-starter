@@ -29,7 +29,6 @@ android {
         }
         release {
             isMinifyEnabled = false
-            buildConfigField("String", "SCHEME", "\"https://\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

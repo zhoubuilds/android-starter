@@ -34,15 +34,13 @@ dependencies {
     api(libs.androidx.appcompat)
     api(libs.lifecycle.viewmodel.ktx)
     api(libs.kotlinx.coroutines.core)
+    api(libs.okhttp)
+    api(libs.retrofit)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
     implementation(libs.lifecycle.runtime.ktx)
 
-    implementation(libs.okhttp)
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.converter.gson)
-    implementation(libs.gson)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

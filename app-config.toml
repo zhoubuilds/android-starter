@@ -8,5 +8,4 @@ applicationId = { reference = "values.applicationId" }
 
 [default]
 buildConfig.API_VERSION = "1.0.0"
-buildConfig.SCHEME = "https://"
-buildConfig.HOST = "placeholder.invalid"
+buildConfig.API_HOST = "https://placeholder.invalid/"

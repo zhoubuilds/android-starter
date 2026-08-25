@@ -1,0 +1,15 @@
+-keepattributes Signature,RuntimeVisibleAnnotations,AnnotationDefault
+
+-keep,allowoptimization,allowobfuscation @interface com.whisper.architecture.network.annotation.**
+
+-keepclassmembers,allowoptimization class * implements okhttp3.Interceptor {
+    <init>();
+}
+
+-keepclassmembers,allowoptimization class * implements com.whisper.architecture.network.component.OkHttpCustomizer {
+    <init>();
+}
+
+-keepclassmembers,allowoptimization class * implements com.whisper.architecture.network.component.RetrofitCustomizer {
+    <init>();
+}

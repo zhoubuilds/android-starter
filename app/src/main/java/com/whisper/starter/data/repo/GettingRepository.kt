@@ -1,7 +1,6 @@
 package com.whisper.starter.data.repo
 
-import com.whisper.architecture.net.ApiFactory
-import com.whisper.common.function.callAsBusinessFlow
+import com.whisper.architecture.network.ApiFactory
 import com.whisper.common.model.business.Business
 import com.whisper.starter.data.bean.GettingResp
 import com.whisper.starter.data.ds.Api
@@ -16,6 +15,6 @@ import kotlinx.coroutines.flow.Flow
 class GettingRepository {
 
     fun getting(id: Long?): Flow<Business<GettingResp?>> =
-        callAsBusinessFlow { ApiFactory.create(Api::class).getting(id) }
+        ApiFactory.create(Api::class).getting(id)
 
 }

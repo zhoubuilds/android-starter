@@ -1,13 +1,15 @@
 package com.whisper.starter
 
 import android.app.Application
-import com.whisper.architecture.AppGlobal
+import com.whisper.architecture.network.ApiFactory
 import com.whisper.aster.runtime.Aster
 import com.whisper.kit.KitApplicationHolder
 import com.whisper.kit.activity.ActivityLifecycleTracker
 import com.whisper.quill.LogcatQuillWriter
 import com.whisper.quill.Quill
 import com.whisper.quill.QuillLevel
+import com.whisper.starter.network.StarterNetworkComponentManager
+import com.whisper.starter.network.StarterRequestHeadersProvider
 
 
 /**
@@ -22,7 +24,12 @@ class StarterApplication : Application() {
         Aster.initialize(this)
         KitApplicationHolder.initialize(this)
         ActivityLifecycleTracker.install(this)
-        AppGlobal.initialize(this)
+        ApiFactory.install(
+            StarterNetworkComponentManager(
+                apiHost = BuildConfig.API_HOST,
+                requestHeadersProvider = StarterRequestHeadersProvider(this),
+            )
+        )
         Quill.addWriter(
             LogcatQuillWriter(
                 minimumLevel = if (BuildConfig.DEBUG) {
