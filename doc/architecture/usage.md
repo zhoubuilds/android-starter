@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                              |
 |-----------------|---------|---------------------------------------|
+| 2026-08-26      | whisper | 迁移到独立 UI 状态、Effect 与组合 Owner |
 | 2026-08-26      | whisper | 迁移到显式 Business Meta/数据类型      |
 | 2026-07-30      | whisper | 明确通用 UI 工具使用 Kit              |
 | 2026-07-27      | whisper | 重构业务状态元信息模型                |
@@ -62,16 +63,37 @@ val dataFlow: Flow<UserInfo> = successFlow.consumeSuccessMeta(metaProcessor)
 
 ## 3. Architecture UI
 
-页面需要统一处理进度和消息时, 可以复用 Architecture UI 状态:
+页面需要统一处理进度和通知时, 可以复用两个 Architecture UI 窄契约:
 
 ```text
-ArchitectureActivity / ArchitectureFragment
-    -> BusinessViewModel (foundation)
+BusinessViewModel (foundation)
     -> ArchitectureViewModel
-    -> ArchitectureUiState
+    -> ArchitectureUiOwner (可选组合)
+       |- ActiveOperationCountUiState -> StateFlow<Int>
+       `- NoticeUiEffect -> SharedFlow<NoticeUiModel>
+
+ArchitectureActivity / ArchitectureFragment
+    -> 分别绑定 ActiveOperationCountUiState 与 NoticeUiEffect
 ```
 
-页面侧只读取 `ArchitectureUiState`, 需要更新时通过可变状态接口增加或减少 pending task, 或发送页面通知。
+`ActiveOperationCountUiState` 提供可恢复的正在进行操作数量, `NoticeUiEffect` 通过不重放的共享流发送一次性通知。
+`ArchitectureUiOwner` 只组合两种窄能力, 不把通知重新归入 UiState, 也不引入只做接口聚合的 Store。
+
+`ArchitectureActivity` 和 `ArchitectureFragment` 默认把 ViewModel 分别作为两个窄契约绑定, 不要求来源名义上实现 `ArchitectureUiOwner`。
+大部分页面不需要手动装配；只消费一种能力的组件也应继续依赖对应窄契约。
+
+页面需要聚合不同来源时, 分别覆盖对应入口:
+
+```kotlin
+override fun boundActiveOperationCountUiStates(): Iterable<ActiveOperationCountUiState> =
+    listOf(viewModel, uploadViewModel, syncViewModel)
+
+override fun boundNoticeUiEffects(): Iterable<NoticeUiEffect> =
+    listOf(viewModel, paymentViewModel)
+```
+
+业务 ViewModel 通常通过 `foundation` 的 `BusinessViewModel` 使用 `DefaultArchitectureUiOwner`。业务开始和完成会更新
+`activeOperationCountFlow`, 错误通知会发送到 `noticeUiEffectFlow`; 页面只读取这些流, 不直接获取可变 Owner。
 
 ## 4. Network
 

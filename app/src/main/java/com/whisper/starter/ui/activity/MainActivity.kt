@@ -33,7 +33,7 @@ class MainActivity : ArchitectureActivity<GettingViewModel>() {
     override val viewModel = GettingViewModel()
     override val architectureUiComponent: ArchitectureUiComponent =
         object : ArchitectureUiComponent(this) {
-            override fun onPendingTaskCountChanged(count: Int) {
+            override fun onActiveOperationCountChanged(count: Int) {
             }
 
             override fun handleNotice(notice: NoticeUiModel) {

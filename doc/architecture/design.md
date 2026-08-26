@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-08-26      | whisper | 整理 Architecture UI Owner 包边界 |
+| 2026-08-26      | whisper | 拆分 Architecture UI 状态与 Effect |
 | 2026-08-26      | whisper | 使用 Business 领域状态重构数据管线 |
 | 2026-08-20      | whisper | 迁移 Aegis 修改保护标记            |
 | 2026-07-27      | whisper | 重构业务状态元信息模型            |
@@ -17,7 +19,7 @@
 `architecture` 是项目的技术架构基础模块, 负责提供跨业务复用的底层能力:
 
 * 业务状态模型和 Flow 辅助处理。
-* Architecture UI 状态容器和 Activity / Fragment 基类。
+* Architecture UI 状态、Effect、组合 Owner 和 Activity / Fragment 基类。
 * Retrofit / OkHttp API 创建骨架。
 
 它不承载具体业务含义, 也不依赖 `app`、`foundation` 或 `feature:*` 模块。
@@ -69,14 +71,19 @@ Business
 
 ### 3.2 Architecture UI
 
-Architecture UI 提供页面级通用状态:
+Architecture UI 将页面级持续状态和一次性行为拆分建模:
 
-* 待完成任务数量。
-* 页面通知。
-* Architecture UI 状态的只读暴露和可变更新。
+* `ActiveOperationCountUiState` 通过 `StateFlow<Int>` 提供正在进行的操作数量及后续更新。
+* `NoticeUiEffect` 通过不重放的 `SharedFlow<NoticeUiModel>` 提供一次性页面通知。
+* 两个接口可以作为窄契约独立使用, 不需要彼此感知。
+* `ArchitectureUiOwner` 组合两种能力, 为大部分同时需要进度和通知的页面提供便捷入口。
+* `MutableArchitectureUiOwner` 和 `DefaultArchitectureUiOwner` 提供更新协议与默认实现。
 
-`ArchitectureActivity` 与 `ArchitectureFragment` 负责把页面生命周期与状态绑定起来,
-`ArchitectureViewModel` 只负责提供 Architecture UI 状态所有者契约。业务进度和错误处理协议由 Architecture 定义,
+`ArchitectureUiState` 不再作为同时持有持续状态和一次性通知的容器。UiState 只表达可恢复的当前状态, UiEffect 负责不可恢复的一次性行为。
+Owner 可以组合两种能力, UI 绑定位置则继续依赖两个窄契约。
+
+`ArchitectureActivity` 与 `ArchitectureFragment` 分别聚合并绑定操作数量状态与通知 Effect, 不要求来源名义上实现 Owner。
+`ArchitectureViewModel` 实现只读 `ArchitectureUiOwner` 契约, 为常规 ViewModel 提供便捷组合。业务进度和错误处理协议由 Architecture 定义,
 具体实现由 `foundation` 的 `BusinessViewModel` 提供。成功 Meta 处理属于按需能力。
 
 ### 3.3 Network foundation
@@ -119,12 +126,14 @@ exception
 extension
 processor
 network
-ui
+ui.effect
+ui.owner
+ui.state
 viewmodel
 ```
 
-业务状态模型、UI 通知模型、管线操作与处理协议分别归入 `model.domain`、`model.ui.notice`、`extension` 和
-`processor`, 异常类型归入 `exception`。
+业务状态模型、UI 通知模型、UI 状态 / Effect 契约、管线操作与处理协议分别归入 `model.domain`、`model.ui.notice`、
+`ui.state` / `ui.effect`、`extension` 和 `processor`, 异常类型归入 `exception`。
 
 关键命名约定:
 
@@ -132,10 +141,12 @@ viewmodel
   表示业务状态处理协议；前两者保持 Meta 类型, Architecture 不将其擦除为 `Any?`。
 * `Business<M, D>` 表示领域业务数据状态, 不绑定网络或应用级公共响应字段。
 * `BusinessException` 表示服务端业务错误包装, 架构层只承载错误信息摘要。
-* Architecture UI 统一使用 `ArchitectureUi` 和 `pendingTask` 术语, 不混用 `workingCount`、
-  `workCount` 或 `loadingCount`。
-* `ArchitectureViewModel` 和 `ArchitectureUiStateOwner` 保持在 `architecture.viewmodel`, 表达它们是架构组件,
-  不归入具体 Activity 或 Fragment 包。
+* `ActiveOperationCountUiState` 只表示正在进行的操作数量状态, `NoticeUiEffect` 只表示一次性通知,
+  `ArchitectureUiOwner` 负责常用组合。
+* Architecture UI 统一使用 `ArchitectureUi` 和 `activeOperation` 术语, 不混用 `backendTask`、`pendingTask`、
+  `workingCount`、`workCount` 或 `loadingCount`; Flow 属性保留 `Flow` 后缀。
+* 三个 `ArchitectureUiOwner` 类型保持在 `architecture.ui.owner`, 表达状态与 Effect 的组合、更新和默认实现；
+  `architecture.viewmodel` 只保留真正继承 AndroidX `ViewModel` 的 `ArchitectureViewModel`。
 
 ## 6. 演进原则
 

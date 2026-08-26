@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                         |
 |-----------------|---------|----------------------------------|
+| 2026-08-26      | whisper | 明确私有成员与 backing property 命名 |
+| 2026-08-26      | whisper | 补充 UI 状态与 Effect 组合命名   |
 | 2026-08-26      | whisper | 建立 Starter 通用代码规范        |
 
 本文定义 Android Starter 的通用代码书写和命名规则. 模块职责, 公开契约和接入方式仍以各模块的 `design.md`, `development.md` 和
@@ -81,7 +83,11 @@ Starter 是面向不同应用的公共基座. 规范只约束可复用的工程�
 * 测试类以被测类型名开头并使用 `Test` 后缀.
 * 异常类型使用 `Exception` 后缀.
 * 只有角色稳定且能帮助理解时才使用 `Factory`, `Adapter`, `Provider`, `Repository`, `Processor` 等后缀.
-* 不强制 private 属性使用 `_` 前缀. 公开只读, 内部可变时优先使用 `mutableXxx` / `xxx` 组合.
+* 普通私有成员使用 `lowerCamelCase`, 不添加 `_` 前缀, 例如 `repository`、`bindingJob`、`bindingLifecycleOwner`.
+* 只有私有可变属性作为同语义公开只读属性的 backing property 时使用 `_` 前缀, 例如 `_uiState` / `uiState`、
+  `_noticeUiEffectFlow` / `noticeUiEffectFlow`.
+* `_` 表示 backing property, 不用于笼统标记 `private` 或可变属性.
+* 不使用 Java 时代的 `mName`、`sName` 等成员前缀.
 
 ### 4.2 模型角色后缀
 
@@ -95,7 +101,7 @@ Starter 是面向不同应用的公共基座. 规范只约束可复用的工程�
 | 网络请求模型         | `XxxReq`         | `LoginReq`            | 表示外部请求契约                               |
 | 网络响应模型         | `XxxResp`        | `ProfileResp`         | 表示外部响应契约                               |
 | UI 渲染模型          | `XxxUiModel`     | `NoticeUiModel`       | 表示已整理为界面消费形态的数据                 |
-| UI 持续状态          | `XxxUiState`     | `ArchitectureUiState` | 表示界面在当前时刻可重建, 可观察的持续状态     |
+| UI 持续状态          | `XxxUiState`     | `ActiveOperationCountUiState` | 表示界面在当前时刻可重建, 可观察的持续状态 |
 | UI 一次性行为        | `XxxUiEffect`    | `LoginUiEffect`       | 表示导航, 提示等不应通过持久状态重复消费的行为 |
 | AndroidX ViewModel   | `XxxViewModel`   | `GettingViewModel`    | 不使用 `VM` 代替公开类型后缀                   |
 | 异常                 | `XxxException`   | `BusinessException`   | 表示异常对象, 不使用错误码模型替代异常类型     |
@@ -105,6 +111,9 @@ Starter 是面向不同应用的公共基座. 规范只约束可复用的工程�
 * `UiState` 和 `UiEffect` 必须按行为语义区分, 不能仅按当前承载的字段区分.
 * `StateFlow<XxxUiState>` 表达持续状态, 不应命名为 Effect.
 * 一次性通知可以使用 `Flow<XxxUiModel>` 或建模为 `XxxUiEffect`; 是否引入 Effect 取决于它是否是完整的行为集合.
+* `XxxUiState` 只表达持续状态, 可以是状态数据, 也可以是只读 `StateFlow` 契约, 但不能同时承载 Effect Flow.
+* `XxxUiEffect` 表达一次性行为契约, 可以通过不重放的 `SharedFlow<XxxUiModel>` 提供渲染载荷.
+* 多个窄状态 / Effect 契约经常共同使用时, 使用 `Owner` 组合能力; 只做接口聚合时不额外引入 `Store`.
 * `NoticeUiModel` 中 `Notice` 表示语义, `UiModel` 表示角色, 即使它位于 `model.ui` 包中也不省略后缀.
 * 不使用 `VO` 作为统一 UI 后缀, 它容易与 Value Object, View Object 混淆.
 * 不使用 `UiMessageUiModel` 这类重复堆叠 UI 语义的名称. 通知语义优先使用 `NoticeUiModel`.

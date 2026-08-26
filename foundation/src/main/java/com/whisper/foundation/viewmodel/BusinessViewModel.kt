@@ -4,11 +4,13 @@ import com.whisper.architecture.model.domain.Business
 import com.whisper.architecture.model.ui.notice.NoticeUiModel
 import com.whisper.architecture.processor.BusinessErrorProcessor
 import com.whisper.architecture.processor.BusinessProgressProcessor
-import com.whisper.architecture.ui.state.ArchitectureUiState
-import com.whisper.architecture.ui.state.DefaultArchitectureUiState
+import com.whisper.architecture.ui.owner.DefaultArchitectureUiOwner
+import com.whisper.architecture.ui.owner.MutableArchitectureUiOwner
 import com.whisper.architecture.viewmodel.ArchitectureViewModel
 import com.whisper.foundation.function.toNoticeUiModel
 import com.whisper.foundation.model.business.BusinessMetadata
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 
 
 /**
@@ -21,18 +23,21 @@ open class BusinessViewModel :
     BusinessProgressProcessor,
     BusinessErrorProcessor<BusinessMetadata> {
 
-    private val mutableArchitectureUiState: DefaultArchitectureUiState =
-        DefaultArchitectureUiState()
+    private val mutableArchitectureUiOwner: MutableArchitectureUiOwner =
+        DefaultArchitectureUiOwner()
 
-    final override val architectureUiState: ArchitectureUiState
-        get() = mutableArchitectureUiState
+    final override val activeOperationCountFlow: StateFlow<Int>
+        get() = mutableArchitectureUiOwner.activeOperationCountFlow
+
+    final override val noticeUiEffectFlow: SharedFlow<NoticeUiModel>
+        get() = mutableArchitectureUiOwner.noticeUiEffectFlow
 
     override fun onBusinessStart() {
-        mutableArchitectureUiState.onPendingTaskStarted()
+        mutableArchitectureUiOwner.onOperationStarted()
     }
 
     override fun onBusinessCompletion() {
-        mutableArchitectureUiState.onPendingTaskCompleted()
+        mutableArchitectureUiOwner.onOperationCompleted()
     }
 
     override fun onBusinessError(error: Business.Failure<BusinessMetadata, *>) {
@@ -45,7 +50,7 @@ open class BusinessViewModel :
      * @param notice UI 通知.
      */
     protected fun showNotice(notice: NoticeUiModel) {
-        mutableArchitectureUiState.showNotice(notice)
+        mutableArchitectureUiOwner.notice(notice)
     }
 
 }

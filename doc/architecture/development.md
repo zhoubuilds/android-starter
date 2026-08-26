@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                         |
 |-----------------|---------|----------------------------------|
+| 2026-08-26      | whisper | 迁移 UI Owner 到独立能力包       |
+| 2026-08-26      | whisper | 拆分 UI 状态、Effect 与组合 Owner |
 | 2026-08-26      | whisper | 迁移 Business 领域状态模型        |
 | 2026-08-20      | whisper | 标记稳定基础契约的 Aegis 保护范围 |
 | 2026-08-20      | whisper | 迁移 Aegis 修改保护标记           |
@@ -28,6 +30,9 @@ architecture/
    |  |  |- processor/
    |  |  |- network/
    |  |  |- ui/
+   |  |  |  |- effect/
+   |  |  |  |- owner/
+   |  |  |  `- state/
    |  |  `- viewmodel/
    |  |- AndroidManifest.xml
    |  `- keepRules/rules.keep
@@ -39,16 +44,18 @@ architecture/
 
 | 包                            | 职责                                  |
 |-------------------------------|---------------------------------------|
-| `model.domain`                | `Business<M, D>` 领域状态模型         |
-| `model.ui.notice`             | 页面通知 UI 模型                      |
-| `exception`                   | 服务端业务错误异常包装                |
-| `extension`                   | Flow 与业务状态转换辅助函数           |
-| `processor`                   | 业务错误、元信息和进度处理协议        |
-| `network`                     | API 创建和网络组件声明                |
-| `ui.activity` / `ui.fragment` | Architecture UI 基类                  |
-| `ui.component`                | Architecture UI 状态绑定组件          |
-| `ui.state`                    | Architecture UI 状态容器              |
-| `viewmodel`                   | 提供 Architecture UI 状态的 ViewModel |
+| `model.domain`                | `Business<M, D>` 领域状态模型          |
+| `model.ui.notice`             | 页面通知 UI 模型                       |
+| `exception`                   | 服务端业务错误异常包装                 |
+| `extension`                   | Flow 与业务状态转换辅助函数            |
+| `processor`                   | 业务错误、元信息和进度处理协议         |
+| `network`                     | API 创建和网络组件声明                 |
+| `ui.activity` / `ui.fragment` | Architecture UI 基类                   |
+| `ui.component`                | UI 状态与 Effect 生命周期绑定组件      |
+| `ui.state`                    | UI 持续状态只读契约                    |
+| `ui.effect`                   | UI 一次性 Effect 只读契约              |
+| `ui.owner`                    | UI 状态与 Effect 的组合及默认实现      |
+| `viewmodel`                   | AndroidX ViewModel 基类                |
 
 ## 2. 构建基线
 
@@ -76,7 +83,7 @@ Java target: 17
 * 不在 `Business<M, D>` 中假设应用级公共响应字段或解释 Meta/数据内容。
 * 不在 `BusinessException` 中解释业务错误语义。
 * 不在网络层内置 token、登录态或真实域名。
-* 不在 Architecture UI 状态中绑定具体页面文案。
+* 不在 Architecture UI 状态、Effect 或 Owner 中绑定具体页面文案。
 * 不放仅表达 Android 控件行为的通用工具; 这类能力归属 `kit`。
 
 ### 3.2 Aegis 修改保护
@@ -97,7 +104,8 @@ Java target: 17
 * 网络基础契约: `ApiFactory`、`OkHttpClientFactory`、四个网络声明注解、`NetworkComponentManager`、
   `OkHttpCustomizer` 和 `RetrofitCustomizer`。
 * Architecture UI 契约: `ArchitectureActivity`、`ArchitectureFragment`、`ArchitectureUiComponent`、
-  三个 UI 通知类型、三个 UI 状态类型、`ArchitectureUiStateOwner` 和 `ArchitectureViewModel`。
+  三个 UI 通知类型、`ActiveOperationCountUiState`、`NoticeUiEffect`、三个 Architecture UI Owner 类型和
+  `ArchitectureViewModel`。
 
 这些标记只保护通用技术契约和已文档化行为, 不保护应用级业务数据、错误码解释、域名、证书、鉴权 Header、页面文案或具体业务状态。
 
@@ -123,20 +131,22 @@ Java target: 17
 
 * `BusinessFlowExtensionsTest`: 业务状态 Flow 转换。
 * `ApiFactoryTest`: 网络声明解析、执行顺序和重复声明拦截。
-* `ArchitectureUiStateTest`: Architecture UI 状态更新。
+* `ArchitectureUiOwnerTest`: Architecture UI 状态和 Effect 更新。
 
-修改网络组件声明、状态模型或 Architecture UI 状态并发语义时, 需要同步补充对应单元测试。
+修改网络组件声明、状态模型或 Architecture UI Owner 并发语义时, 需要同步补充对应单元测试。
 
 ## 5. 命名维护重点
 
 历史命名调整已经合并到当前包结构中, 后续维护继续遵守以下规则:
 
-* 业务领域对象放在 `model.domain`, UI 通知模型放在 `model.ui.notice`, 管线操作和处理协议分别放在
-  `extension` 与 `processor`。
+* 业务领域对象放在 `model.domain`, UI 通知模型放在 `model.ui.notice`, UI 状态和 Effect 契约分别放在
+  `ui.state` 与 `ui.effect`, 管线操作和处理协议分别放在 `extension` 与 `processor`。
 * 业务状态处理协议使用 `Processor`, 不使用容易和 Android 消息处理混淆的 `Handler`；处理 Meta 的协议必须保留 `M` 类型。
 * `Business` 保持 `<M, D>` 双泛型；成功和失败状态不得丢弃已建模的 Meta 或主要载荷。
 * `BusinessException` 只描述服务端业务错误信息摘要, 不把具体业务解释写入架构层。
-* Architecture UI 相关 API 保持 `ArchitectureUi` 和 `pendingTask` 术语一致。
+* 持续状态契约使用 `UiState`, 一次性行为契约使用 `UiEffect`; 两种窄契约经常共同使用时通过 `Owner` 组合,
+  不额外引入只做接口聚合的 `Store`。
+* Architecture UI 相关 API 使用 `activeOperation` 表达已经开始且尚未完成的通用操作, Flow 属性保留 `Flow` 后缀。
 
 ## 6. 当前关注点
 
