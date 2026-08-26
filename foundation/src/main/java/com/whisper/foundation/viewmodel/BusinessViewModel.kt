@@ -1,11 +1,14 @@
 package com.whisper.foundation.viewmodel
 
-import com.whisper.architecture.business.model.ArchitectureBusiness
-import com.whisper.architecture.ui.message.UiMessage
+import com.whisper.architecture.model.domain.Business
+import com.whisper.architecture.model.ui.notice.NoticeUi
+import com.whisper.architecture.processor.BusinessErrorProcessor
+import com.whisper.architecture.processor.BusinessProgressProcessor
 import com.whisper.architecture.ui.state.ArchitectureUiState
 import com.whisper.architecture.ui.state.DefaultArchitectureUiState
 import com.whisper.architecture.viewmodel.ArchitectureViewModel
-import com.whisper.foundation.function.toUiMessage
+import com.whisper.foundation.function.toNoticeUi
+import com.whisper.foundation.model.business.BusinessMetadata
 
 
 /**
@@ -13,7 +16,10 @@ import com.whisper.foundation.function.toUiMessage
  * @author whisper
  * @since 2026/7/25
  */
-open class BusinessViewModel : ArchitectureViewModel() {
+open class BusinessViewModel :
+    ArchitectureViewModel(),
+    BusinessProgressProcessor,
+    BusinessErrorProcessor<BusinessMetadata> {
 
     private val mutableArchitectureUiState: DefaultArchitectureUiState =
         DefaultArchitectureUiState()
@@ -29,17 +35,17 @@ open class BusinessViewModel : ArchitectureViewModel() {
         mutableArchitectureUiState.onPendingTaskCompleted()
     }
 
-    override fun onBusinessError(error: ArchitectureBusiness.Error<*, *>) {
-        showUiMessage(error.exception.toUiMessage())
+    override fun onBusinessError(error: Business.Failure<BusinessMetadata, *>) {
+        showNotice(error.exception.toNoticeUi())
     }
 
     /**
-     * 发送需要 UI 展示的消息.
+     * 发送需要 UI 展示的通知.
      *
-     * @param message UI 消息.
+     * @param notice UI 通知.
      */
-    protected fun showUiMessage(message: UiMessage) {
-        mutableArchitectureUiState.showUiMessage(message)
+    protected fun showNotice(notice: NoticeUi) {
+        mutableArchitectureUiState.showNotice(notice)
     }
 
 }

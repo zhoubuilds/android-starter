@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                         |
 |-----------------|---------|----------------------------------|
+| 2026-08-26      | whisper | 迁移 Business 领域状态模型        |
 | 2026-08-20      | whisper | 标记稳定基础契约的 Aegis 保护范围 |
 | 2026-08-20      | whisper | 迁移 Aegis 修改保护标记           |
 | 2026-07-30      | whisper | 明确通用 UI 工具迁往 Kit         |
@@ -20,28 +21,32 @@ architecture/
 `- src/
    |- main/
    |  |- java/com/whisper/architecture/
-   |  |  |- business/
+   |  |  |- model/domain/
+   |  |  |- model/ui/notice/
+   |  |  |- exception/
+   |  |  |- extension/
+   |  |  |- processor/
    |  |  |- network/
    |  |  |- ui/
    |  |  `- viewmodel/
    |  |- AndroidManifest.xml
    |  `- keepRules/rules.keep
    `- test/java/com/whisper/architecture/
-      |- business/
+      |- extension/
       |- network/
       `- ui/
 ```
 
 | 包                            | 职责                                  |
 |-------------------------------|---------------------------------------|
-| `business.exception`          | 服务端业务错误异常包装                |
-| `business.function`           | Flow 与业务状态转换辅助函数           |
-| `business.model`              | `ArchitectureBusiness` 状态模型       |
-| `business.processor`          | 业务错误、元信息和进度处理协议        |
+| `model.domain`                | `Business<M, D>` 领域状态模型         |
+| `model.ui.notice`             | 页面通知 UI 模型                      |
+| `exception`                   | 服务端业务错误异常包装                |
+| `extension`                   | Flow 与业务状态转换辅助函数           |
+| `processor`                   | 业务错误、元信息和进度处理协议        |
 | `network`                     | API 创建和网络组件声明                |
 | `ui.activity` / `ui.fragment` | Architecture UI 基类                  |
 | `ui.component`                | Architecture UI 状态绑定组件          |
-| `ui.message`                  | 页面消息模型                          |
 | `ui.state`                    | Architecture UI 状态容器              |
 | `viewmodel`                   | 提供 Architecture UI 状态的 ViewModel |
 
@@ -68,7 +73,7 @@ Java target: 17
 
 `architecture` 只能表达技术抽象, 不写入具体业务规则。例如:
 
-* 不在 `ArchitectureBusiness` 中假设应用级公共响应字段。
+* 不在 `Business<M, D>` 中假设应用级公共响应字段或解释 Meta/数据内容。
 * 不在 `BusinessException` 中解释业务错误语义。
 * 不在网络层内置 token、登录态或真实域名。
 * 不在 Architecture UI 状态中绑定具体页面文案。
@@ -87,12 +92,12 @@ Java target: 17
 
 当前受保护范围:
 
-* 业务状态基础契约: `BusinessException`、`ArchitectureBusiness`、三个 `Business*Processor` 和
+* 业务状态基础契约: `BusinessException`、`Business<M, D>`、三个 `Business*Processor` 和
   `BusinessFlowExtensions.kt` 中的公开 Flow 转换函数。
 * 网络基础契约: `ApiFactory`、`OkHttpClientFactory`、四个网络声明注解、`NetworkComponentManager`、
   `OkHttpCustomizer` 和 `RetrofitCustomizer`。
 * Architecture UI 契约: `ArchitectureActivity`、`ArchitectureFragment`、`ArchitectureUiComponent`、
-  三个 UI 消息类型、三个 UI 状态类型、`ArchitectureUiStateOwner` 和 `ArchitectureViewModel`。
+  三个 UI 通知类型、三个 UI 状态类型、`ArchitectureUiStateOwner` 和 `ArchitectureViewModel`。
 
 这些标记只保护通用技术契约和已文档化行为, 不保护应用级业务数据、错误码解释、域名、证书、鉴权 Header、页面文案或具体业务状态。
 
@@ -126,9 +131,10 @@ Java target: 17
 
 历史命名调整已经合并到当前包结构中, 后续维护继续遵守以下规则:
 
-* 业务状态链路按 `business.*` 领域聚合, 不回退到根级技术类型分包。
-* 业务状态处理协议使用 `Processor`, 不使用容易和 Android 消息处理混淆的 `Handler`。
-* `ArchitectureBusiness` 保持 `T` 和 `M` 双泛型, 应用级公共响应字段由业务公共层固定。
+* 业务领域对象放在 `model.domain`, UI 通知模型放在 `model.ui.notice`, 管线操作和处理协议分别放在
+  `extension` 与 `processor`。
+* 业务状态处理协议使用 `Processor`, 不使用容易和 Android 消息处理混淆的 `Handler`；处理 Meta 的协议必须保留 `M` 类型。
+* `Business` 保持 `<M, D>` 双泛型；成功和失败状态不得丢弃已建模的 Meta 或主要载荷。
 * `BusinessException` 只描述服务端业务错误信息摘要, 不把具体业务解释写入架构层。
 * Architecture UI 相关 API 保持 `ArchitectureUi` 和 `pendingTask` 术语一致。
 

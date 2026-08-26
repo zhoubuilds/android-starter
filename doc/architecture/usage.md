@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                              |
 |-----------------|---------|---------------------------------------|
+| 2026-08-26      | whisper | 迁移到显式 Business Meta/数据类型      |
 | 2026-07-30      | whisper | 明确通用 UI 工具使用 Kit              |
 | 2026-07-27      | whisper | 重构业务状态元信息模型                |
 | 2026-07-25      | whisper | 新增 architecture 模块使用说明        |
@@ -25,28 +26,31 @@ dependencies {
 
 ## 2. 业务状态
 
-业务请求可以用 `ArchitectureBusiness<T, M>` 表达加载、成功和失败状态。架构层只承载状态, 不解释具体业务错误,
-也不假设应用公共响应字段结构。
+业务数据可以用 `Business<M, D>` 表达加载、成功和失败状态。`M` 是主要载荷之外的完整 Meta, `D` 是主要业务载荷。
+架构层只承载并分流状态, 不解释两种数据的内容。
 
 推荐用法:
 
 ```kotlin
-val stateFlow: Flow<ArchitectureBusiness<UserInfo, BusinessMetadata>> = repository
+val stateFlow: Flow<Business<BusinessMetadata, UserInfo>> = repository
     .loadUser()
     .withLoading()
 ```
 
-应用公共层可以用 typealias 固定统一元信息类型, 例如
-`typealias Business<T> = ArchitectureBusiness<T, BusinessMetadata>`。业务模块使用 `Business<T>` 即可,
-不需要重复声明 `M`。
+`Business.Loading` 是单例。成功和失败状态显式携带 Meta 与数据:
 
-创建状态时优先使用 companion 工厂函数, 例如 `Business.success(data)`、`Business.error(exception)` 和
-`Business.loading()`。
+```kotlin
+Business.Success(meta = meta, data = user)
+Business.Failure(exception = exception, meta = meta, data = partialUser)
+Business.Loading
+```
+
+失败状态的 `data` 不是占位字段。服务端在失败响应中返回的主要载荷仍应完整保留, 是否使用由下游业务决定。
 
 成功状态脱壳为业务数据时, 可以按需传入 `BusinessMetaProcessor` 显式消费成功元信息:
 
 ```kotlin
-val successFlow: Flow<ArchitectureBusiness.Success<UserInfo, BusinessMetadata>> =
+val successFlow: Flow<Business.Success<BusinessMetadata, UserInfo>> =
     outcomeFlow.consumeError(errorProcessor)
 val dataFlow: Flow<UserInfo> = successFlow.consumeSuccessMeta(metaProcessor)
 ```
@@ -54,7 +58,7 @@ val dataFlow: Flow<UserInfo> = successFlow.consumeSuccessMeta(metaProcessor)
 不需要处理成功元信息时, 可以直接调用 `successFlow.consumeSuccessMeta()`。
 
 当服务端返回业务错误时, 使用 `BusinessException` 保存错误信息摘要。错误码、提示信息、追踪字段或恢复动作所需的其它元信息应放在业务公共层定义的
-`M` 中。
+`M` 中。公开 API 应直接写出 `Business<BusinessMetadata, UserInfo>` 等真实类型, 不使用 typealias 隐藏 Meta 绑定。
 
 ## 3. Architecture UI
 
@@ -62,11 +66,12 @@ val dataFlow: Flow<UserInfo> = successFlow.consumeSuccessMeta(metaProcessor)
 
 ```text
 ArchitectureActivity / ArchitectureFragment
+    -> BusinessViewModel (foundation)
     -> ArchitectureViewModel
     -> ArchitectureUiState
 ```
 
-页面侧只读取 `ArchitectureUiState`, 需要更新时通过可变状态接口增加或减少 pending task, 或发送页面消息。
+页面侧只读取 `ArchitectureUiState`, 需要更新时通过可变状态接口增加或减少 pending task, 或发送页面通知。
 
 ## 4. Network
 

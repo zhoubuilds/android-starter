@@ -1,8 +1,8 @@
 package com.whisper.architecture.ui.state
 
-import com.whisper.architecture.ui.message.UiMessage
-import com.whisper.architecture.ui.message.UiMessageImportance
-import com.whisper.architecture.ui.message.UiMessageTone
+import com.whisper.architecture.model.ui.notice.NoticeImportance
+import com.whisper.architecture.model.ui.notice.NoticeTone
+import com.whisper.architecture.model.ui.notice.NoticeUi
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -46,23 +46,23 @@ class ArchitectureUiStateTest {
     }
 
     /**
-     * 验证 UI 消息可以发送给已订阅的收集者.
+     * 验证 UI 通知可以发送给已订阅的收集者.
      */
     @Test
-    fun showUiMessage_emitsToActiveCollector() = runBlocking {
+    fun showNotice_emitsToActiveCollector() = runBlocking {
         val state: MutableArchitectureUiState = DefaultArchitectureUiState()
-        val message: UiMessage = UiMessage(
-            message = "done",
-            importance = UiMessageImportance.LOW,
-            tone = UiMessageTone.SUCCESS,
+        val notice: NoticeUi = NoticeUi(
+            content = "done",
+            importance = NoticeImportance.LOW,
+            tone = NoticeTone.SUCCESS,
         )
-        val deferredMessage: Deferred<UiMessage> = async {
-            state.uiMessageFlow.first()
+        val deferredNotice: Deferred<NoticeUi> = async {
+            state.noticeFlow.first()
         }
 
         yield()
-        state.showUiMessage(message)
+        state.showNotice(notice)
 
-        assertEquals(message, withTimeout(1_000) { deferredMessage.await() })
+        assertEquals(notice, withTimeout(1_000) { deferredNotice.await() })
     }
 }

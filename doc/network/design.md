@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-08-26 | whisper | 网络响应迁移到显式 Business Meta/数据类型 |
 | 2026-08-25 | whisper | 迁入通用网络骨架并明确 app 组合根边界 |
 
 本文说明 Starter 网络层的职责划分、创建流程和主要取舍。
@@ -50,7 +51,7 @@ ApiFactory.create(UserApi::class)
 默认 Retrofit 配置由 `StarterNetworkComponentManager` 提供：
 
 * `BuildConfig.API_HOST` 作为 base URL。
-* `BusinessFlowCallAdapterFactory` 支持 `Flow<Business<T>>`。
+* `BusinessFlowCallAdapterFactory` 支持 `Flow<Business<BusinessMetadata, T>>`。
 * Gson 负责 `ApiResponse<T>` 转换。
 * 每个 API 使用从 baseline client 派生的 OkHttp Builder。
 
@@ -61,7 +62,7 @@ ApiFactory.create(UserApi::class)
 ```kotlin
 interface UserApi {
     @GET("user/profile")
-    fun profile(): Flow<Business<UserProfile?>>
+    fun profile(): Flow<Business<BusinessMetadata, UserProfile?>>
 }
 ```
 

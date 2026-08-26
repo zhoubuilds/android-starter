@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-08-26 | whisper | API 使用显式 Business Meta/数据类型 |
 | 2026-08-25 | whisper | 增加单域名 app 组合根接入示例 |
 
 ## 1. 配置域名
@@ -36,13 +37,13 @@ ApiFactory.install(
 
 ## 3. 声明 API
 
-使用业务 Flow CallAdapter 时直接返回 `Flow<Business<T>>`：
+使用业务 Flow CallAdapter 时直接返回 `Flow<Business<BusinessMetadata, T>>`：
 
 ```kotlin
 interface UserApi {
 
     @GET("user/profile")
-    fun profile(): Flow<Business<UserProfile?>>
+    fun profile(): Flow<Business<BusinessMetadata, UserProfile?>>
 }
 ```
 
@@ -60,7 +61,7 @@ suspend fun version(): ApiResponse<VersionResp>
 ## 4. 创建与收集
 
 ```kotlin
-fun profile(): Flow<Business<UserProfile?>> =
+fun profile(): Flow<Business<BusinessMetadata, UserProfile?>> =
     ApiFactory.create(UserApi::class).profile()
 ```
 

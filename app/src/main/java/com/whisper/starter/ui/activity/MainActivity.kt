@@ -9,9 +9,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.whisper.architecture.extension.viewBinding
+import com.whisper.architecture.model.ui.notice.NoticeUi
 import com.whisper.architecture.ui.activity.ArchitectureActivity
 import com.whisper.architecture.ui.component.ArchitectureUiComponent
-import com.whisper.architecture.ui.message.UiMessage
 import com.whisper.aster.runtime.annotation.Route
 import com.whisper.kit.recyclerview.listener.addOnItemChildClickListener
 import com.whisper.quill.Quill
@@ -36,10 +36,10 @@ class MainActivity : ArchitectureActivity<GettingViewModel>() {
             override fun onPendingTaskCountChanged(count: Int) {
             }
 
-            override fun handleUiMessage(message: UiMessage) {
+            override fun handleNotice(notice: NoticeUi) {
                 Toast.makeText(
                     context,
-                    "${message.importance}-${message.tone}: ${message.message}",
+                    "${notice.importance}-${notice.tone}: ${notice.content}",
                     Toast.LENGTH_SHORT
                 ).show()
 

@@ -1,9 +1,8 @@
 package com.whisper.foundation.model.transmit
 
-import com.whisper.architecture.business.exception.BusinessException
-import com.whisper.foundation.model.business.Business
+import com.whisper.architecture.model.domain.Business
+import com.whisper.architecture.exception.BusinessException
 import com.whisper.foundation.model.business.BusinessMetadata
-import com.whisper.foundation.model.business.BusinessOutcome
 import com.google.gson.annotations.SerializedName
 
 /**
@@ -41,24 +40,24 @@ data class ApiResponse<T>(
      * 将 API 响应转换为业务结果.
      *
      * @param transformer 响应数据转换函数.
-     * @return 只包含成功或错误的业务结果.
+     * @return 只包含成功或失败的业务结果.
      */
-    fun <R> toBusiness(transformer: (T?) -> R): BusinessOutcome<R> {
+    fun <R> toBusiness(transformer: (T?) -> R): Business.Outcome<BusinessMetadata, R> {
         val metadata: BusinessMetadata = BusinessMetadata(
             code = code,
             message = message,
         )
         val resultData: R = transformer(data)
         return if (code == CODE_SUCCESS) {
-            Business.success(
+            Business.Success(
+                meta = metadata,
                 data = resultData,
-                metadata = metadata,
             )
         } else {
-            Business.error(
+            Business.Failure(
                 exception = BusinessException(message),
+                meta = metadata,
                 data = resultData,
-                metadata = metadata,
             )
         }
     }
@@ -66,8 +65,8 @@ data class ApiResponse<T>(
     /**
      * 将 API 响应转换为原始数据类型的业务结果.
      *
-     * @return 只包含成功或错误的业务结果.
+     * @return 只包含成功或失败的业务结果.
      */
-    fun toBusiness(): BusinessOutcome<T?> = toBusiness { data: T? -> data }
+    fun toBusiness(): Business.Outcome<BusinessMetadata, T?> = toBusiness { data: T? -> data }
 
 }

@@ -5,7 +5,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.whisper.architecture.ui.message.UiMessage
+import com.whisper.architecture.model.ui.notice.NoticeUi
 import com.whisper.architecture.ui.state.ArchitectureUiState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 /**
  * 将 Architecture UI 状态绑定到 UI 生命周期.
  *
- * 在 UI 进入 STARTED 状态时收集待处理任务计数和消息, 离开 STARTED 状态时停止收集.
+ * 在 UI 进入 STARTED 状态时收集待处理任务计数和通知, 离开 STARTED 状态时停止收集.
  *
  * @aegis 保护组件 API, STARTED 收集边界, 多状态合并和重复绑定语义.
  * @author whisper
@@ -49,11 +49,11 @@ abstract class ArchitectureUiComponent(
     abstract fun onPendingTaskCountChanged(count: Int)
 
     /**
-     * 展示 UI 消息.
+     * 展示 UI 通知.
      *
-     * @param message UI 消息.
+     * @param notice UI 通知.
      */
-    abstract fun handleUiMessage(message: UiMessage)
+    abstract fun handleNotice(notice: NoticeUi)
 
     /**
      * 将 Architecture UI 状态绑定到指定生命周期.
@@ -89,14 +89,14 @@ abstract class ArchitectureUiComponent(
                     }
                 }
 
-                val mergedUiMessageFlow: Flow<UiMessage> = if (stateList.isNotEmpty()) {
-                    merge(*stateList.map { state: ArchitectureUiState -> state.uiMessageFlow }.toTypedArray())
+                val mergedNoticeFlow: Flow<NoticeUi> = if (stateList.isNotEmpty()) {
+                    merge(*stateList.map { state: ArchitectureUiState -> state.noticeFlow }.toTypedArray())
                 } else {
                     emptyFlow()
                 }
                 launch {
-                    mergedUiMessageFlow.collect { message: UiMessage ->
-                        handleUiMessage(message)
+                    mergedNoticeFlow.collect { notice: NoticeUi ->
+                        handleNotice(notice)
                     }
                 }
             }

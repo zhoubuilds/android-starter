@@ -1,7 +1,7 @@
-package com.whisper.architecture.ui.message
+package com.whisper.architecture.model.ui.notice
 
 /**
- * 表示 UI 消息的重要程度.
+ * 表示 UI 通知的重要程度.
  *
  * 重要程度可用于区分 Toast, Snackbar 或 Dialog 等展示方式.
  *
@@ -9,7 +9,7 @@ package com.whisper.architecture.ui.message
  * @author whisper
  * @since 2026/07/24
  */
-enum class UiMessageImportance {
+enum class NoticeImportance {
     LOW,
     MEDIUM,
     HIGH,

@@ -14,4 +14,14 @@ package com.whisper.foundation.model.business
 data class BusinessMetadata(
     val code: Int?,
     val message: String?,
-)
+) {
+
+    companion object {
+
+        /** 表示请求未产生可解析的业务响应元信息. */
+        val EMPTY: BusinessMetadata = BusinessMetadata(
+            code = null,
+            message = null,
+        )
+    }
+}

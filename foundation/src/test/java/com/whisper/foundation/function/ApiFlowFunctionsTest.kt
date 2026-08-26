@@ -1,8 +1,7 @@
 package com.whisper.foundation.function
 
-import com.whisper.foundation.model.business.BusinessError
-import com.whisper.foundation.model.business.BusinessOutcome
-import com.whisper.foundation.model.business.BusinessSuccess
+import com.whisper.architecture.model.domain.Business
+import com.whisper.foundation.model.business.BusinessMetadata
 import com.whisper.foundation.model.transmit.ApiResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.toList
@@ -17,19 +16,12 @@ import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
 
-/**
- * 验证 API Flow 手动转换的异常边界.
- *
- * 手动转换应把网络层异常转换为业务错误, 并继续向上传播协程取消.
- *
- * @author whisper
- * @since 2026/07/27
- */
+/** 验证 API Flow 手动转换的响应保留和异常边界. */
 class ApiFlowFunctionsTest {
 
     @Test
-    fun callAsBusinessOutcomeFlow_successResponse_emitsSuccess() = runBlocking {
-        val values: List<BusinessOutcome<Int?>> = callAsBusinessOutcomeFlow {
+    fun callAsBusinessOutcomeFlow_successResponseEmitsSuccess() = runBlocking {
+        val values: List<Business.Outcome<BusinessMetadata, Int?>> = callAsBusinessOutcomeFlow {
             ApiResponse(
                 code = ApiResponse.CODE_SUCCESS,
                 message = "ok",
@@ -38,40 +30,44 @@ class ApiFlowFunctionsTest {
         }.toList()
 
         assertEquals(1, values.size)
-        assertTrue(values[0] is BusinessSuccess<Int?>)
-        assertEquals(1, (values[0] as BusinessSuccess<Int?>).data)
+        assertTrue(values[0] is Business.Success)
+        val success = values[0] as Business.Success<BusinessMetadata, Int?>
+        assertEquals(1, success.data)
+        assertEquals(BusinessMetadata(ApiResponse.CODE_SUCCESS, "ok"), success.meta)
     }
 
     @Test
-    fun callAsBusinessOutcomeFlow_networkException_emitsError() = runBlocking {
+    fun callAsBusinessOutcomeFlow_networkExceptionEmitsEmptyFailurePayload() = runBlocking {
         val networkException: IOException = IOException("Network failed.")
 
-        val values: List<BusinessOutcome<Int?>> = callAsBusinessOutcomeFlow<Int> {
+        val values: List<Business.Outcome<BusinessMetadata, Int?>> = callAsBusinessOutcomeFlow<Int> {
             throw networkException
         }.toList()
 
-        assertEquals(1, values.size)
-        assertTrue(values[0] is BusinessError<Int?>)
-        assertSame(networkException, (values[0] as BusinessError<Int?>).exception)
+        val failure = values.single() as Business.Failure<BusinessMetadata, Int?>
+        assertSame(networkException, failure.exception)
+        assertEquals(BusinessMetadata.EMPTY, failure.meta)
+        assertEquals(null, failure.data)
     }
 
     @Test
-    fun callAsBusinessOutcomeFlow_httpException_emitsError() = runBlocking {
+    fun callAsBusinessOutcomeFlow_httpExceptionEmitsEmptyFailurePayload() = runBlocking {
         val httpException: HttpException = HttpException(
             Response.error<Int>(500, "server error".toResponseBody())
         )
 
-        val values: List<BusinessOutcome<Int?>> = callAsBusinessOutcomeFlow<Int> {
+        val values: List<Business.Outcome<BusinessMetadata, Int?>> = callAsBusinessOutcomeFlow<Int> {
             throw httpException
         }.toList()
 
-        assertEquals(1, values.size)
-        assertTrue(values[0] is BusinessError<Int?>)
-        assertSame(httpException, (values[0] as BusinessError<Int?>).exception)
+        val failure = values.single() as Business.Failure<BusinessMetadata, Int?>
+        assertSame(httpException, failure.exception)
+        assertEquals(BusinessMetadata.EMPTY, failure.meta)
+        assertEquals(null, failure.data)
     }
 
     @Test
-    fun callAsBusinessOutcomeFlow_cancellationException_rethrows() = runBlocking {
+    fun callAsBusinessOutcomeFlow_cancellationExceptionRethrows() = runBlocking {
         val cancellationException: CancellationException = CancellationException("cancelled")
 
         try {

@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-08-26      | whisper | 使用 Business 领域状态重构数据管线 |
 | 2026-08-20      | whisper | 迁移 Aegis 修改保护标记            |
 | 2026-07-27      | whisper | 重构业务状态元信息模型            |
 | 2026-07-25      | whisper | 新增 architecture 模块设计说明    |
@@ -49,29 +50,34 @@ architecture -> 三方基础库
 
 ### 3.1 业务状态链路
 
-业务请求状态用 `ArchitectureBusiness<T, M>` 表达:
+业务数据状态用 `Business<M, D>` 表达:
 
 ```text
-Loading / Success / Error
+Business
+|- Loading
+`- Outcome
+   |- Success(meta, data)
+   `- Failure(exception, meta, data)
 ```
 
-架构层只提供状态载体、异常包装和 Flow 扩展。`T` 表示随业务变化的数据类型, `M` 表示业务统一的响应元信息类型。架构层只透传
-`M`, 不假设元信息中是否存在 `code`、`message` 或其它字段。
+`M` 表示主要载荷之外的完整元信息类型, `D` 表示主要业务载荷类型。Architecture 只根据状态分流并原样透传 `M` 和 `D`,
+不假设其中是否存在 `code`、`message` 或其它字段。成功和失败状态都保留 Meta 与主要载荷, 避免响应数据在进入 ViewModel 前丢失。
 
-服务端错误通过 `BusinessException` 保存错误信息摘要, 具体错误语义和完整响应元信息交给业务层解释。应用公共层可以通过
-typealias 固定 `M`, 对业务模块继续暴露只随接口变化的 `Business<T>`。
+`Loading` 是无载荷单例, 可直接交给 UI 观察, 也可以由 `consumeLoading` 消费并交给抽象进度处理器。`Outcome` 只表示已经完成的
+`Success` 或 `Failure`, 便于 Flow 操作符逐步收窄类型。服务端错误可通过 `BusinessException` 保存错误摘要, 具体协议解释和
+`Business<M, D>` 的构造由 `foundation` 负责；不使用 typealias 隐藏 Meta 类型。
 
 ### 3.2 Architecture UI
 
 Architecture UI 提供页面级通用状态:
 
 * 待完成任务数量。
-* 页面消息。
+* 页面通知。
 * Architecture UI 状态的只读暴露和可变更新。
 
 `ArchitectureActivity` 与 `ArchitectureFragment` 负责把页面生命周期与状态绑定起来,
-`ArchitectureViewModel` 负责承接常规业务进度和业务错误处理协议, `ArchitectureUiStateOwner`
-负责暴露页面级通用状态。成功元信息处理属于按需能力, 不作为 `ArchitectureViewModel` 默认职责。
+`ArchitectureViewModel` 只负责提供 Architecture UI 状态所有者契约。业务进度和错误处理协议由 Architecture 定义,
+具体实现由 `foundation` 的 `BusinessViewModel` 提供。成功 Meta 处理属于按需能力。
 
 ### 3.3 Network foundation
 
@@ -107,22 +113,24 @@ API 接口注解
 现阶段采用按领域聚合的包结构:
 
 ```text
-business.exception
-business.function
-business.model
-business.processor
+model.domain
+model.ui.notice
+exception
+extension
+processor
 network
 ui
 viewmodel
 ```
 
-`business` 相关类按业务状态链路聚合, 不再按根级 `model`、`function`、`processor` 分散。
+业务状态模型、UI 通知模型、管线操作与处理协议分别归入 `model.domain`、`model.ui.notice`、`extension` 和
+`processor`, 异常类型归入 `exception`。
 
 关键命名约定:
 
-* `BusinessErrorProcessor`、`BusinessMetaProcessor` 和 `BusinessProgressProcessor` 保留 `Processor`,
-  表示业务状态处理协议, 避免和 Android `Handler` 混淆。
-* `ArchitectureBusiness` 表示架构层业务状态载体, 不绑定应用级公共响应字段。
+* `BusinessErrorProcessor<M>`、`BusinessMetaProcessor<M>` 和 `BusinessProgressProcessor` 保留 `Processor`,
+  表示业务状态处理协议；前两者保持 Meta 类型, Architecture 不将其擦除为 `Any?`。
+* `Business<M, D>` 表示领域业务数据状态, 不绑定网络或应用级公共响应字段。
 * `BusinessException` 表示服务端业务错误包装, 架构层只承载错误信息摘要。
 * Architecture UI 统一使用 `ArchitectureUi` 和 `pendingTask` 术语, 不混用 `workingCount`、
   `workCount` 或 `loadingCount`。

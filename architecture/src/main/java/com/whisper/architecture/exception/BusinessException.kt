@@ -1,4 +1,4 @@
-package com.whisper.architecture.business.exception
+package com.whisper.architecture.exception
 
 /**
  * 表示服务端业务错误的异常包装.

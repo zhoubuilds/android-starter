@@ -1,7 +1,7 @@
-package com.whisper.architecture.business.processor
+package com.whisper.architecture.processor
 
-import com.whisper.architecture.business.function.consumeSuccessMeta
-import com.whisper.architecture.business.model.ArchitectureBusiness
+import com.whisper.architecture.model.domain.Business
+import com.whisper.architecture.extension.consumeSuccessMeta
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -14,14 +14,14 @@ import kotlinx.coroutines.flow.Flow
  * @author whisper
  * @since 2026/07/27
  */
-interface BusinessMetaProcessor {
+interface BusinessMetaProcessor<M> {
 
     companion object {
 
         /**
-         * 不处理业务元信息的默认实现.
+         * 静默丢弃meta数据的实现.
          */
-        val NONE: BusinessMetaProcessor = object : BusinessMetaProcessor {
+        val NONE: BusinessMetaProcessor<Any?> = object : BusinessMetaProcessor<Any?> {
             override fun onBusinessMeta(metadata: Any?) = Unit
         }
     }
@@ -31,7 +31,7 @@ interface BusinessMetaProcessor {
      *
      * @param metadata 当前业务元信息.
      */
-    fun onBusinessMeta(metadata: Any?)
+    fun onBusinessMeta(metadata: M)
 
     /**
      * 使用当前处理器处理成功元信息并转换为业务数据.
@@ -39,6 +39,6 @@ interface BusinessMetaProcessor {
      * @receiver 只包含成功状态的业务 Flow.
      * @return 业务数据 Flow.
      */
-    fun <T, M> Flow<ArchitectureBusiness.Success<T, M>>.consumeSuccessMeta(): Flow<T> =
+    fun <D> Flow<Business.Success<M, D>>.consumeSuccessMeta(): Flow<D> =
         this@consumeSuccessMeta.consumeSuccessMeta(this@BusinessMetaProcessor)
 }

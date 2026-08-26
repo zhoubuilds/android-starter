@@ -1,17 +1,17 @@
 package com.whisper.foundation.function
 
-import com.whisper.architecture.business.exception.BusinessException
-import com.whisper.architecture.ui.message.UiMessage
-import com.whisper.architecture.ui.message.UiMessageImportance
-import com.whisper.architecture.ui.message.UiMessageTone
+import com.whisper.architecture.exception.BusinessException
+import com.whisper.architecture.model.ui.notice.NoticeImportance
+import com.whisper.architecture.model.ui.notice.NoticeTone
+import com.whisper.architecture.model.ui.notice.NoticeUi
 
 
-fun Throwable.toUiMessage(): UiMessage = when (this) {
+fun Throwable.toNoticeUi(): NoticeUi = when (this) {
     is BusinessException -> this.message
         ?.takeIf { m -> m.isNotBlank() }
         ?.let {
-            UiMessage(it, UiMessageImportance.LOW, UiMessageTone.ERROR)
-        } ?: UiMessage("未知错误", UiMessageImportance.LOW, UiMessageTone.ERROR)
+            NoticeUi(it, NoticeImportance.LOW, NoticeTone.ERROR)
+        } ?: NoticeUi("未知错误", NoticeImportance.LOW, NoticeTone.ERROR)
 
-    else -> UiMessage("网络错误", UiMessageImportance.LOW, UiMessageTone.ERROR)
+    else -> NoticeUi("网络错误", NoticeImportance.LOW, NoticeTone.ERROR)
 }

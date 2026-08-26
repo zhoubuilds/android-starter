@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-08-26 | whisper | CallAdapter 迁移到 Business<M, D> |
 | 2026-08-25 | whisper | 记录 Starter 网络实现、测试和维护边界 |
 
 本文面向 Network 维护者。设计取舍见 [设计文档](design.md)，业务接入见 [使用文档](usage.md)。
@@ -53,21 +54,22 @@ configureDefaultOkHttp
 
 ## 3. Business Flow CallAdapter
 
-当 API 返回 `Flow<Business<T>>` 时，CallAdapter 告诉 Retrofit 实际响应类型是 `ApiResponse<T>`，每次收集时 clone 原始 Call，并依次产生：
+当 API 返回 `Flow<Business<BusinessMetadata, T>>` 时，CallAdapter 告诉 Retrofit 实际响应类型是 `ApiResponse<T>`，每次收集时 clone 原始 Call，并依次产生：
 
 ```text
 Loading
-Success(data, metadata)
+Success(meta, data)
 ```
 
 或：
 
 ```text
 Loading
-Error(exception, optionalData, metadata)
+Failure(exception, meta, data)
 ```
 
-网络异常、HTTP 非成功响应和空响应体会转换为业务 Error；协程取消继续向上传播。普通 suspend API 不受该 CallAdapter 影响。
+业务失败响应会保留完整 Meta 和 data。网络异常、HTTP 非成功响应和空响应体没有可解析的业务响应，因此转换为
+`Failure(exception, BusinessMetadata.EMPTY, null)`；协程取消继续向上传播。普通 suspend API 不受该 CallAdapter 影响。
 
 ## 4. 组件解析
 
