@@ -1,13 +1,13 @@
 package com.whisper.foundation.viewmodel
 
 import com.whisper.architecture.model.domain.Business
-import com.whisper.architecture.model.ui.notice.NoticeUi
+import com.whisper.architecture.model.ui.notice.NoticeUiModel
 import com.whisper.architecture.processor.BusinessErrorProcessor
 import com.whisper.architecture.processor.BusinessProgressProcessor
 import com.whisper.architecture.ui.state.ArchitectureUiState
 import com.whisper.architecture.ui.state.DefaultArchitectureUiState
 import com.whisper.architecture.viewmodel.ArchitectureViewModel
-import com.whisper.foundation.function.toNoticeUi
+import com.whisper.foundation.function.toNoticeUiModel
 import com.whisper.foundation.model.business.BusinessMetadata
 
 
@@ -36,7 +36,7 @@ open class BusinessViewModel :
     }
 
     override fun onBusinessError(error: Business.Failure<BusinessMetadata, *>) {
-        showNotice(error.exception.toNoticeUi())
+        showNotice(error.exception.toNoticeUiModel())
     }
 
     /**
@@ -44,7 +44,7 @@ open class BusinessViewModel :
      *
      * @param notice UI 通知.
      */
-    protected fun showNotice(notice: NoticeUi) {
+    protected fun showNotice(notice: NoticeUiModel) {
         mutableArchitectureUiState.showNotice(notice)
     }
 

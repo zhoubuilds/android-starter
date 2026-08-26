@@ -1,6 +1,6 @@
 package com.whisper.architecture.ui.state
 
-import com.whisper.architecture.model.ui.notice.NoticeUi
+import com.whisper.architecture.model.ui.notice.NoticeUiModel
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -22,5 +22,5 @@ interface ArchitectureUiState {
     /**
      * 页面需要展示的 UI 通知.
      */
-    val noticeFlow: Flow<NoticeUi>
+    val noticeFlow: Flow<NoticeUiModel>
 }

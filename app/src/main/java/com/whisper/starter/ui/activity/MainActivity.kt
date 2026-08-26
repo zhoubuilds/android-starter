@@ -9,7 +9,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.whisper.architecture.extension.viewBinding
-import com.whisper.architecture.model.ui.notice.NoticeUi
+import com.whisper.architecture.model.ui.notice.NoticeUiModel
 import com.whisper.architecture.ui.activity.ArchitectureActivity
 import com.whisper.architecture.ui.component.ArchitectureUiComponent
 import com.whisper.aster.runtime.annotation.Route
@@ -36,7 +36,7 @@ class MainActivity : ArchitectureActivity<GettingViewModel>() {
             override fun onPendingTaskCountChanged(count: Int) {
             }
 
-            override fun handleNotice(notice: NoticeUi) {
+            override fun handleNotice(notice: NoticeUiModel) {
                 Toast.makeText(
                     context,
                     "${notice.importance}-${notice.tone}: ${notice.content}",

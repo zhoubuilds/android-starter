@@ -1,6 +1,6 @@
 package com.whisper.architecture.ui.state
 
-import com.whisper.architecture.model.ui.notice.NoticeUi
+import com.whisper.architecture.model.ui.notice.NoticeUiModel
 
 /**
  * 提供 Architecture UI 状态的修改能力.
@@ -28,5 +28,5 @@ interface MutableArchitectureUiState : ArchitectureUiState {
      *
      * @param notice UI 通知.
      */
-    fun showNotice(notice: NoticeUi)
+    fun showNotice(notice: NoticeUiModel)
 }

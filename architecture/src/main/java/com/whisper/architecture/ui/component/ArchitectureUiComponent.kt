@@ -5,7 +5,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.whisper.architecture.model.ui.notice.NoticeUi
+import com.whisper.architecture.model.ui.notice.NoticeUiModel
 import com.whisper.architecture.ui.state.ArchitectureUiState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -53,7 +53,7 @@ abstract class ArchitectureUiComponent(
      *
      * @param notice UI 通知.
      */
-    abstract fun handleNotice(notice: NoticeUi)
+    abstract fun handleNotice(notice: NoticeUiModel)
 
     /**
      * 将 Architecture UI 状态绑定到指定生命周期.
@@ -89,13 +89,13 @@ abstract class ArchitectureUiComponent(
                     }
                 }
 
-                val mergedNoticeFlow: Flow<NoticeUi> = if (stateList.isNotEmpty()) {
+                val mergedNoticeFlow: Flow<NoticeUiModel> = if (stateList.isNotEmpty()) {
                     merge(*stateList.map { state: ArchitectureUiState -> state.noticeFlow }.toTypedArray())
                 } else {
                     emptyFlow()
                 }
                 launch {
-                    mergedNoticeFlow.collect { notice: NoticeUi ->
+                    mergedNoticeFlow.collect { notice: NoticeUiModel ->
                         handleNotice(notice)
                     }
                 }

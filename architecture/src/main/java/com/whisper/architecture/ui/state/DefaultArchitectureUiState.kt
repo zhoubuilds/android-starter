@@ -1,6 +1,6 @@
 package com.whisper.architecture.ui.state
 
-import com.whisper.architecture.model.ui.notice.NoticeUi
+import com.whisper.architecture.model.ui.notice.NoticeUiModel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -28,7 +28,7 @@ class DefaultArchitectureUiState : MutableArchitectureUiState {
      *
      * 通知不会在无订阅者时重放, 调用方应只用于可丢弃的一次性展示事件.
      */
-    private val mutableNoticeFlow: MutableSharedFlow<NoticeUi> =
+    private val mutableNoticeFlow: MutableSharedFlow<NoticeUiModel> =
         MutableSharedFlow(
             replay = 0,
             extraBufferCapacity = 1,
@@ -38,7 +38,7 @@ class DefaultArchitectureUiState : MutableArchitectureUiState {
     override val pendingTaskCountFlow: Flow<Int>
         get() = mutablePendingTaskCountFlow
 
-    override val noticeFlow: Flow<NoticeUi>
+    override val noticeFlow: Flow<NoticeUiModel>
         get() = mutableNoticeFlow
 
     override fun onPendingTaskStarted() {
@@ -49,7 +49,7 @@ class DefaultArchitectureUiState : MutableArchitectureUiState {
         mutablePendingTaskCountFlow.update { count: Int -> (count - 1).coerceAtLeast(0) }
     }
 
-    override fun showNotice(notice: NoticeUi) {
+    override fun showNotice(notice: NoticeUiModel) {
         mutableNoticeFlow.tryEmit(notice)
     }
 }

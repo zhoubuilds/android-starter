@@ -2,7 +2,7 @@ package com.whisper.architecture.ui.state
 
 import com.whisper.architecture.model.ui.notice.NoticeImportance
 import com.whisper.architecture.model.ui.notice.NoticeTone
-import com.whisper.architecture.model.ui.notice.NoticeUi
+import com.whisper.architecture.model.ui.notice.NoticeUiModel
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -51,12 +51,12 @@ class ArchitectureUiStateTest {
     @Test
     fun showNotice_emitsToActiveCollector() = runBlocking {
         val state: MutableArchitectureUiState = DefaultArchitectureUiState()
-        val notice: NoticeUi = NoticeUi(
+        val notice: NoticeUiModel = NoticeUiModel(
             content = "done",
             importance = NoticeImportance.LOW,
             tone = NoticeTone.SUCCESS,
         )
-        val deferredNotice: Deferred<NoticeUi> = async {
+        val deferredNotice: Deferred<NoticeUiModel> = async {
             state.noticeFlow.first()
         }
 
