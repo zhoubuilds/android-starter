@@ -4,12 +4,16 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                         |
 |-----------------|---------|----------------------------------|
+| 2026-08-27      | whisper | 拆分开发流程与代码规则职责       |
+| 2026-08-27      | whisper | 明确 Aegis 标签与作者分组        |
+| 2026-08-27      | whisper | 统一 Processor 与 Meta 参数命名  |
+| 2026-08-26      | whisper | 补充公开注解命名规则               |
 | 2026-08-26      | whisper | 明确私有成员与 backing property 命名 |
 | 2026-08-26      | whisper | 补充 UI 状态与 Effect 组合命名   |
 | 2026-08-26      | whisper | 建立 Starter 通用代码规范        |
 
-本文定义 Android Starter 的通用代码书写和命名规则. 模块职责, 公开契约和接入方式仍以各模块的 `design.md`, `development.md` 和
-`usage.md` 为准.
+本文只定义 Android Starter 的通用代码书写和命名规则. 变更决策, 任务拆分, 验证, 文档同步和 Git 提交遵守
+[开发规范](development.md); 模块职责, 公开契约和接入方式仍以各模块的 `design.md`, `development.md` 和 `usage.md` 为准.
 
 ## 1. 适用范围
 
@@ -83,11 +87,15 @@ Starter 是面向不同应用的公共基座. 规范只约束可复用的工程�
 * 测试类以被测类型名开头并使用 `Test` 后缀.
 * 异常类型使用 `Exception` 后缀.
 * 只有角色稳定且能帮助理解时才使用 `Factory`, `Adapter`, `Provider`, `Repository`, `Processor` 等后缀.
+* `XxxProcessor` 类型的处理器参数统一命名为 `processor`, 不使用容易与 Android Handler 混淆的 `handler`.
+* 业务领域管线中的元信息统一命名为 `meta`, 不在同一契约中混用 `metadata`.
 * 普通私有成员使用 `lowerCamelCase`, 不添加 `_` 前缀, 例如 `repository`、`bindingJob`、`bindingLifecycleOwner`.
 * 只有私有可变属性作为同语义公开只读属性的 backing property 时使用 `_` 前缀, 例如 `_uiState` / `uiState`、
   `_noticeUiEffectFlow` / `noticeUiEffectFlow`.
 * `_` 表示 backing property, 不用于笼统标记 `private` 或可变属性.
 * 不使用 Java 时代的 `mName`、`sName` 等成员前缀.
+* 选择某个策略类型的注解使用 `UseXxx` 命名, 避免与被选择的接口或类同名.
+* 成对的公开概念使用完整限定词, 例如 `ApplicationInterceptors` / `NetworkInterceptors`, 不用语义不对称的简写.
 
 ### 4.2 模型角色后缀
 
@@ -174,6 +182,17 @@ Starter 是面向不同应用的公共基座. 规范只约束可复用的工程�
 `@aegis` 用于标记已经确认的公共契约或可观察行为. 它不是永远禁止修改的标记, 但修改其保护范围前必须取得明确授权, 并按照根目录
 `AGENTS.md` 记录审计信息.
 
+`@aegis` 与其后的全部 `@aegis-audit` 连续书写为一个标记组. 标记组结束后保留一行仅含 `*` 的 KDoc 空行, 再书写
+`@author` 和 `@since`:
+
+```kotlin
+ * @aegis 保护公开契约和可观察行为.
+ * @aegis-audit 2026-08-27 | whisper | 简要说明本次授权修改原因.
+ *
+ * @author whisper
+ * @since 2026/08/27
+```
+
 ## 8. 异常, 日志和隐私
 
 * 不使用异常控制普通业务流程.
@@ -240,7 +259,9 @@ fun loadProfile_whenResponseFails_preservesPayloadAndMetadata() {
 * 文档链接使用相对路径并在提交前检查目标存在.
 * 命令, 包名, 类型名和路径使用反引号.
 
-## 14. 提交前检查
+## 14. 代码完成自查
+
+以下检查聚焦代码本身. Git 暂存, 拆分和提交规则以 [开发规范](development.md) 为准.
 
 | 检查项               | 要求                                                   |
 |----------------------|--------------------------------------------------------|
