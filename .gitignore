@@ -1,17 +1,37 @@
-*.iml
-.gradle
-/.kotlin/
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/app/debug/
-/captures
-.externalNativeBuild
-.cxx
+# Gradle and Kotlin caches
+.gradle/
+.kotlin/
+**/build/
+
+# Local Android and Gradle configuration
 local.properties
+
+# IDE metadata
+.idea/
+*.iml
+
+# Android and native build outputs
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+/app/debug/
+/app/release/
+
+# Local signing and application service configuration
+keystore.properties
+secrets.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+google-services.json
+service-account*.json
+
+# Operating system and diagnostic files
+.DS_Store
+*.hprof
+*.log
