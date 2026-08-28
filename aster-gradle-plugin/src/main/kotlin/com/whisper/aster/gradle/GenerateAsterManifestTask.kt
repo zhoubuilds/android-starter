@@ -15,6 +15,7 @@ import org.gradle.api.tasks.TaskAction
  * 或 AAR 实际包含的所有模块 Registry.
  *
  * @aegis 保护任务输入/输出契约和生成 Manifest metadata 的 XML 协议.
+ *
  * @author whisper
  * @since 2026/07/21
  */

@@ -11,6 +11,7 @@ import com.google.devtools.ksp.processing.SymbolProcessorProvider
  * AutoService 会为该 Provider 生成标准的 ServiceLoader 注册文件.
  *
  * @aegis 保护 KSP 服务发现使用的 Provider 类型和处理器创建契约.
+ *
  * @author whisper
  * @since 2026/07/21
  */

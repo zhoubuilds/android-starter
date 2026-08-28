@@ -18,6 +18,7 @@ import com.whisper.aster.runtime.registry.AsterRegistryInstaller
  * 负责初始化模块 Registry, 构建路由请求并解析已注册的能力实现.
  *
  * @aegis 保护公开 API, 初始化发布, 路由查询和能力解析的行为语义.
+ *
  * @author whisper
  * @since 2026/07/22
  */

@@ -24,6 +24,7 @@ import java.util.IdentityHashMap
  * 保存目标路由, Intent 参数和启动选项, 并负责构建或发起 Activity 导航.
  *
  * @aegis 保护公开 API, Intent 快照, flags/options 和各导航入口的行为语义.
+ *
  * @author whisper
  * @since 2026/07/22
  */

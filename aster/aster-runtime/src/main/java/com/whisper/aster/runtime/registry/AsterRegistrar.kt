@@ -10,6 +10,7 @@ import com.whisper.aster.runtime.Capability
  * KSP 或手写 Registry 负责保证映射内容合法, Runtime 在目标首次使用时执行防御性检查.
  *
  * @aegis 保护生成代码使用的注册 API, 重复声明失败和注册阶段边界.
+ *
  * @author whisper
  * @since 2026/07/23
  */

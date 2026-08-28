@@ -9,6 +9,7 @@ import android.app.Application
  * 能力的构造函数和 [initialize] 只能初始化自身状态, 不得直接或间接解析其他能力.
  *
  * @aegis 保护能力接口和同步, 自包含, 禁止递归解析的初始化约束.
+ *
  * @author whisper
  * @since 2026/07/21
  */

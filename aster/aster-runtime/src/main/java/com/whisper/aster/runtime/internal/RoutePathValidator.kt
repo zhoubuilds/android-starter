@@ -6,6 +6,7 @@ package com.whisper.aster.runtime.internal
  * 使用与 Aster compiler 相同的通用路径格式, 但不校验具体模块的首段.
  *
  * @aegis 保护 Runtime 与 Compiler 一致的路由路径格式和校验结果语义.
+ *
  * @author whisper
  * @since 2026/07/23
  */

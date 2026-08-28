@@ -10,6 +10,7 @@ import org.gradle.api.GradleException
  * Android namespace 由 AGP 保证在当前构建图中唯一.
  *
  * @aegis 保护 `aster.segment` DSL, 格式校验, 最终冻结和配置顺序兼容语义.
+ *
  * @author whisper
  * @since 2026/07/21
  */

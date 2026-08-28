@@ -13,6 +13,7 @@ import com.google.devtools.ksp.symbol.Modifier
  * @param logger KSP 编译期错误日志记录器.
  *
  * @aegis 保护 `@Route` 的路径, segment, 目标类型和可访问性校验语义.
+ *
  * @author whisper
  * @since 2026/07/22
  */

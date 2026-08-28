@@ -38,6 +38,7 @@ import java.nio.charset.StandardCharsets
  * 扫描 app 模块中参与 Habitat 的 RoomDatabase, 并生成 Dao Provider 与总 Registry.
  *
  * @aegis 保护注解校验, 生成 Provider/Registry ABI, 命名和增量依赖语义.
+ *
  * @author whisper
  * @since 2026/07/27
  */

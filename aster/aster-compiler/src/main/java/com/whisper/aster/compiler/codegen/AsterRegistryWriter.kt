@@ -21,6 +21,7 @@ import com.squareup.kotlinpoet.TypeSpec
  * @param options Gradle 插件传递给 KSP 的处理器参数.
  *
  * @aegis 保护生成 Registry 的类名/ABI, 条目稳定排序和增量依赖语义.
+ *
  * @author whisper
  * @since 2026/07/22
  */

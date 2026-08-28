@@ -10,6 +10,7 @@ import android.util.Log
  * 消息过长时会按 Logcat 限制拆分.
  *
  * @aegis 保护构造 API, 最低级别/Logcat 可写判断, 分段和 throwable 拼接语义.
+ *
  * @author whisper
  * @since 2026/07/28
  */

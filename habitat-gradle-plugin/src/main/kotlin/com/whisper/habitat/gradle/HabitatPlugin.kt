@@ -12,6 +12,7 @@ import org.gradle.api.provider.Provider
  * Habitat Registry Manifest metadata.
  *
  * @aegis 保护插件入口, 支持模块白名单, 生成包名和单装配模块协议.
+ *
  * @author whisper
  * @since 2026/07/28
  */

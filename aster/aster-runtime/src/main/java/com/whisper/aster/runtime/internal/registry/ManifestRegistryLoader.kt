@@ -13,6 +13,7 @@ import com.whisper.aster.runtime.registry.AsterRegistryInstaller
  * 负责读取 Registry metadata、整理注册器类名并反射创建符合协议的安装器实例.
  *
  * @aegis 保护 Manifest metadata 前缀, 类名取值, 排序去重和加载失败边界.
+ *
  * @author whisper
  * @since 2026/07/22
  */

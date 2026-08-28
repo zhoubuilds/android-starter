@@ -10,6 +10,7 @@ import org.gradle.api.services.BuildServiceParameters
  * 同一个 Gradle Build 内只允许一个源码模块应用 Habitat 插件, 避免最终产物出现多个数据库装配入口.
  *
  * @aegis 保护单装配模块, 幂等注册和冲突失败语义.
+ *
  * @author whisper
  * @since 2026/07/28
  */

@@ -8,6 +8,7 @@ import kotlin.reflect.KClass
  * 每个参与注册的 RoomDatabase 对应一个 Dao Provider.
  *
  * @aegis 保护生成 Provider 与 Runtime 之间的 Dao 工厂映射 ABI.
+ *
  * @author whisper
  * @since 2026/07/27
  */

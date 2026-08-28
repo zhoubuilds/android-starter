@@ -7,6 +7,7 @@ package com.whisper.aster.runtime.annotation
  * `singleton` 为 true 时按能力名缓存实例, 为 false 时每次获取都创建新实例.
  *
  * @aegis 保护注解目标, 二进制保留策略, 参数和默认单例语义.
+ *
  * @author whisper
  * @since 2026/07/21
  */

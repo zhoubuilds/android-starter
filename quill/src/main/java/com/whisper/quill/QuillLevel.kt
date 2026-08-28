@@ -8,6 +8,7 @@ import android.util.Log
  * 封装 Android Logcat 使用的 priority, 便于写入器按级别过滤日志.
  *
  * @aegis 保护日志级别枚举成员和 Android priority 映射.
+ *
  * @author whisper
  * @since 2026/07/28
  */

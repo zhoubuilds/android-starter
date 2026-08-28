@@ -7,6 +7,7 @@ import java.lang.reflect.Modifier
  * 提供已冻结 Activity 路由的只读查询.
  *
  * @aegis 保护只读路由快照和目标 Activity 的运行时防御性校验语义.
+ *
  * @author whisper
  * @since 2026/07/20
  */

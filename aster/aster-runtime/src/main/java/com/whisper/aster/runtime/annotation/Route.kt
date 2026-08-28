@@ -10,6 +10,7 @@ package com.whisper.aster.runtime.annotation
  *
  * @param path Activity 的完整路由路径.
  * @aegis 保护注解目标, 二进制保留策略, 路径参数和已文档化校验规则.
+ *
  * @author whisper
  * @since 2026/07/23
  */

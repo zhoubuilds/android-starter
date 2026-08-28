@@ -8,6 +8,7 @@ import com.squareup.kotlinpoet.ClassName
  * 内部实现常量与需要跨模块保持一致的外部协议常量在此分别管理.
  *
  * @aegis 保护注解类名, KSP 参数, 生成类型和 Runtime ABI 等跨模块协议常量.
+ *
  * @author whisper
  * @since 2026/07/22
  */

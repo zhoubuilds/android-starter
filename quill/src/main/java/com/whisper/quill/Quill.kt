@@ -9,6 +9,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * 对外提供 lazy message API, 只有存在可处理当前日志的写入器时才会执行消息构建函数.
  *
  * @aegis 保护公开日志 API, lazy message, Writer 隔离和错误不穿透业务的语义.
+ *
  * @author whisper
  * @since 2026/07/28
  */

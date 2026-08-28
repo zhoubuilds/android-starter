@@ -12,6 +12,7 @@ import com.whisper.habitat.runtime.registry.HabitatRegistry
  * 负责读取 Habitat 插件写入的 Manifest metadata, 并反射创建符合协议的 Registry.
  *
  * @aegis 保护固定 metadata 名称, Registry 类名取值和可恢复加载失败语义.
+ *
  * @author whisper
  * @since 2026/07/28
  */

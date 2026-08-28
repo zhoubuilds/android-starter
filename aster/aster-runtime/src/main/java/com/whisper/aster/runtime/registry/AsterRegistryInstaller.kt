@@ -6,6 +6,7 @@ package com.whisper.aster.runtime.registry
  * KSP 为每个模块生成实现类, runtime 通过 Manifest 索引定位并调用实现.
  *
  * @aegis 保护生成 Registry 与 Runtime 之间的安装器 ABI 和调用契约.
+ *
  * @author whisper
  * @since 2026/07/20
  */

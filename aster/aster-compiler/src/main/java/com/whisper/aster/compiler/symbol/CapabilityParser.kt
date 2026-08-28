@@ -17,6 +17,7 @@ import com.google.devtools.ksp.symbol.Visibility
  * @param logger KSP 编译期错误日志记录器.
  *
  * @aegis 保护 `@Capable` 的名称, segment, 目标类型, 构造器和单例参数校验语义.
+ *
  * @author whisper
  * @since 2026/07/22
  */

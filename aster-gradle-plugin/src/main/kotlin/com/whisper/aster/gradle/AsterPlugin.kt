@@ -14,6 +14,7 @@ import org.gradle.kotlin.dsl.create
  * AGP 与 KSP 类型隔离在对应集成类中, 避免非目标模块加载可选宿主 API.
  *
  * @aegis 保护插件入口, DSL 名称, 支持模块白名单和跨模块协议参数.
+ *
  * @author whisper
  * @since 2026/07/21
  */

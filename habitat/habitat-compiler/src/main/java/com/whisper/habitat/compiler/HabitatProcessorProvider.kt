@@ -13,6 +13,7 @@ import com.google.devtools.ksp.processing.SymbolProcessorProvider
  * 为 KSP 创建 Habitat 注解处理器实例.
  *
  * @aegis 保护 KSP 服务发现使用的 Provider 类型和处理器创建契约.
+ *
  * @author whisper
  * @since 2026/07/27
  */

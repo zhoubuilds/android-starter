@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
  * 单例能力按能力名缓存, 非单例能力每次获取都会创建并初始化一个新实例.
  *
  * @aegis 保护单例/非单例生命周期, 按名称排序的类型解析和初始化语义.
+ *
  * @author whisper
  * @since 2026/07/21
  */

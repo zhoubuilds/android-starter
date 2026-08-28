@@ -11,6 +11,7 @@ import org.gradle.api.services.BuildServiceParameters
  * Gradle 管理, 不依赖跨 Project 读取、静态状态或任何构建产物.
  *
  * @aegis 保护 Build 内 segment 唯一性, 幂等注册和冲突失败语义.
+ *
  * @author whisper
  * @since 2026/07/23
  */

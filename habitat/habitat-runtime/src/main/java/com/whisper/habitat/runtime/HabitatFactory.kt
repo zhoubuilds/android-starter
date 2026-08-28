@@ -14,6 +14,7 @@ import kotlin.reflect.KClass
  * 业务模块通过 Dao 类型获取 Dao 实例, 不感知 Dao 最终归属的 RoomDatabase.
  *
  * @aegis 保护初始化发布, 按类型获取 Dao, 未初始化失败和可恢复加载失败语义.
+ *
  * @author whisper
  * @since 2026/07/27
  */

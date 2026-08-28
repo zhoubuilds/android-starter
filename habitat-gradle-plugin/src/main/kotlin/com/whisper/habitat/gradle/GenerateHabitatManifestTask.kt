@@ -14,6 +14,7 @@ import org.gradle.api.tasks.TaskAction
  * Manifest 由 AGP 接入当前 Variant, 最终由 runtime 从 ApplicationInfo metadata 读取.
  *
  * @aegis 保护任务输入/输出契约和生成 Manifest metadata 的 XML 协议.
+ *
  * @author whisper
  * @since 2026/07/28
  */

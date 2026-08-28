@@ -11,6 +11,7 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
  * @param logger KSP 编译期错误日志记录器.
  *
  * @aegis 保护 Route/Capable 互斥和名称/路径重复声明的失败语义.
+ *
  * @author whisper
  * @since 2026/07/22
  */

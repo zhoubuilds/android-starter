@@ -6,6 +6,7 @@ package com.whisper.quill
  * 写入器用于接收 Quill 分发的日志, 可以输出到 Logcat、文件或远端服务.
  *
  * @aegis 保护 Writer API, lazy 判断职责, 直接写入职责和返回值语义.
+ *
  * @author whisper
  * @since 2026/07/28
  */

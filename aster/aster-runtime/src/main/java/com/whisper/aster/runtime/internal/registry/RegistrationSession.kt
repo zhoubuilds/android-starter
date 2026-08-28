@@ -11,6 +11,7 @@ import com.whisper.aster.runtime.registry.AsterRegistrar
  * 注册完成后将全部定义冻结为只读状态, 后续写入会立即失败.
  *
  * @aegis 保护重复声明判定, 冻结快照和关闭后拒绝写入的会话语义.
+ *
  * @author whisper
  * @since 2026/07/23
  */
