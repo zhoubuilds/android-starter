@@ -4,6 +4,12 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-08-27      | whisper | 拆分单轮与多轮 Business 进度语义  |
+| 2026-08-27      | whisper | 明确 BusinessException 身份语义   |
+| 2026-08-27      | whisper | 收窄网络 consumer rules 职责      |
+| 2026-08-26      | whisper | 收窄 Architecture UI 组件扩展边界 |
+| 2026-08-26      | whisper | 调整 Business 进度为状态驱动       |
+| 2026-08-26      | whisper | 提供 Header 与 Endpoint 拦截器基础实现 |
 | 2026-08-26      | whisper | 整理 Architecture UI Owner 包边界 |
 | 2026-08-26      | whisper | 拆分 Architecture UI 状态与 Effect |
 | 2026-08-26      | whisper | 使用 Business 领域状态重构数据管线 |
@@ -20,7 +26,7 @@
 
 * 业务状态模型和 Flow 辅助处理。
 * Architecture UI 状态、Effect、组合 Owner 和 Activity / Fragment 基类。
-* Retrofit / OkHttp API 创建骨架。
+* Retrofit / OkHttp API 创建骨架与业务无关的拦截器基础实现。
 
 它不承载具体业务含义, 也不依赖 `app`、`foundation` 或 `feature:*` 模块。
 
@@ -65,8 +71,22 @@ Business
 `M` 表示主要载荷之外的完整元信息类型, `D` 表示主要业务载荷类型。Architecture 只根据状态分流并原样透传 `M` 和 `D`,
 不假设其中是否存在 `code`、`message` 或其它字段。成功和失败状态都保留 Meta 与主要载荷, 避免响应数据在进入 ViewModel 前丢失。
 
-`Loading` 是无载荷单例, 可直接交给 UI 观察, 也可以由 `consumeLoading` 消费并交给抽象进度处理器。`Outcome` 只表示已经完成的
-`Success` 或 `Failure`, 便于 Flow 操作符逐步收窄类型。服务端错误可通过 `BusinessException` 保存错误摘要, 具体协议解释和
+`Loading` 是无载荷单例, 可直接交给 UI 观察, 也可以由 `consumeLoading` 消费并交给抽象进度处理器. 单轮与多轮进度使用不同契约:
+
+* 常用的 `withBusinessProgress` / `consumeLoading` 将一次 Flow 收集视为一轮业务操作. 开始收集时开始进度, 收集正常结束、异常或取消时
+  完成进度. `withBusinessProgress` 不消费或解释 Loading / Outcome, 外部仍可观察完整状态; `consumeLoading` 只额外过滤 Loading.
+* `withBusinessProgressCycles` / `consumeLoadingCycles` 用于同一次收集中包含多轮状态的顺序流. 每轮首次 Loading 开始进度, 后续 Outcome
+  完成下游发送后结束; 同轮重复 Loading 不重复开始, Loading 后异常、取消或 Flow 结束时也会恢复当前进度. 没有 Loading 的 Outcome
+  不触发多轮进度.
+
+合法的单轮 Flow 通常依次发送 Loading、一个 Outcome 后结束, 因此两种契约在该场景下具有相同的回调顺序. 单轮入口不承担多轮状态机,
+多轮入口也不作为普通请求的默认写法. 并发操作应在各自 Flow 上分别处理进度后再聚合计数.
+进度回调应保持同步且不抛异常; 防御性处理仍会在开始回调失败后尝试配对完成, 并在管线已有异常或取消原因时将完成回调异常
+保留为 suppressed exception, 不覆盖原始失败.
+
+`Outcome` 只表示已经完成的 `Success` 或 `Failure`, 便于 Flow 操作符逐步收窄类型。`BusinessException` 是普通异常类,
+用于标记 `foundation` 根据应用协议主动判定的业务失败; 网络、HTTP 和解析异常继续保留自身类型。Architecture 只提供这个类型边界,
+不解释具体错误码或 Meta。同文案的不同异常实例保持独立身份, 不使用值相等语义合并两次失败。具体协议解释和
 `Business<M, D>` 的构造由 `foundation` 负责；不使用 typealias 隐藏 Meta 类型。
 
 ### 3.2 Architecture UI
@@ -83,12 +103,14 @@ Architecture UI 将页面级持续状态和一次性行为拆分建模:
 Owner 可以组合两种能力, UI 绑定位置则继续依赖两个窄契约。
 
 `ArchitectureActivity` 与 `ArchitectureFragment` 分别聚合并绑定操作数量状态与通知 Effect, 不要求来源名义上实现 Owner。
+`ArchitectureUiComponent` 只负责生命周期收集、来源聚合和分发, 不持有 `Context` 或其它具体渲染依赖。实现层通过两个
+`protected abstract` 回调完成渲染并自行持有所需依赖; 公开 `bind()` 不允许覆写, 以保护重复绑定和生命周期不变量。
 `ArchitectureViewModel` 实现只读 `ArchitectureUiOwner` 契约, 为常规 ViewModel 提供便捷组合。业务进度和错误处理协议由 Architecture 定义,
 具体实现由 `foundation` 的 `BusinessViewModel` 提供。成功 Meta 处理属于按需能力。
 
 ### 3.3 Network foundation
 
-网络层只负责 API 创建骨架:
+网络层负责 API 创建骨架和业务无关的请求改写机制:
 
 ```text
 API 接口注解
@@ -98,8 +120,10 @@ API 接口注解
     -> Retrofit
 ```
 
-架构层读取 API 接口上的声明并保持执行顺序, 但不创建业务拦截器、域名策略或序列化实例。应用层通过
-`NetworkComponentManager` 提供这些对象。
+架构层读取 API 接口上的声明并保持执行顺序。`RequestHeadersInterceptor` 和
+`EndpointRoutingInterceptor` 只提供公共 Header 注入与 Endpoint 改写算法, 不持有真实 Header、域名、网关或环境值。
+应用层通过具体拦截器子类和 `NetworkComponentManager` 提供真实值与取值策略。Provider 如有需要，也只属于实现层。
+Architecture consumer rules 只保护运行时网络声明的读取, 不替实现层规定反射构造、DI 或组件生命周期策略。
 
 ## 4. 模块边界
 
@@ -139,6 +163,7 @@ viewmodel
 
 * `BusinessErrorProcessor<M>`、`BusinessMetaProcessor<M>` 和 `BusinessProgressProcessor` 保留 `Processor`,
   表示业务状态处理协议；前两者保持 Meta 类型, Architecture 不将其擦除为 `Any?`。
+* 单轮业务进度使用简洁的 `withBusinessProgress` / `consumeLoading`; 多轮状态进度使用带 `Cycles` 后缀的对应入口.
 * `Business<M, D>` 表示领域业务数据状态, 不绑定网络或应用级公共响应字段。
 * `BusinessException` 表示服务端业务错误包装, 架构层只承载错误信息摘要。
 * `ActiveOperationCountUiState` 只表示正在进行的操作数量状态, `NoticeUiEffect` 只表示一次性通知,

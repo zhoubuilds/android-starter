@@ -4,6 +4,16 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                         |
 |-----------------|---------|----------------------------------|
+| 2026-08-28      | whisper | 补齐 ApiFactory 并发测试并清理依赖 |
+| 2026-08-27      | whisper | 拆分单轮与多轮 Business 进度入口 |
+| 2026-08-27      | whisper | 统一 Processor 与 Meta 参数命名  |
+| 2026-08-27      | whisper | 补齐 UI Component 行为测试        |
+| 2026-08-27      | whisper | 移出通用 ViewBinding 扩展         |
+| 2026-08-27      | whisper | 明确 BusinessException 身份契约  |
+| 2026-08-27      | whisper | 收窄网络 consumer rules 职责      |
+| 2026-08-26      | whisper | 收窄 Architecture UI 组件扩展边界 |
+| 2026-08-26      | whisper | 调整 Business 进度为状态驱动      |
+| 2026-08-26      | whisper | 迁入通用网络拦截器基础实现   |
 | 2026-08-26      | whisper | 迁移 UI Owner 到独立能力包       |
 | 2026-08-26      | whisper | 拆分 UI 状态、Effect 与组合 Owner |
 | 2026-08-26      | whisper | 迁移 Business 领域状态模型        |
@@ -37,6 +47,7 @@ architecture/
    |  |- AndroidManifest.xml
    |  `- keepRules/rules.keep
    `- test/java/com/whisper/architecture/
+      |- exception/
       |- extension/
       |- network/
       `- ui/
@@ -49,7 +60,7 @@ architecture/
 | `exception`                   | 服务端业务错误异常包装                 |
 | `extension`                   | Flow 与业务状态转换辅助函数            |
 | `processor`                   | 业务错误、元信息和进度处理协议         |
-| `network`                     | API 创建和网络组件声明                 |
+| `network`                     | API 创建、组件声明和通用拦截器机制     |
 | `ui.activity` / `ui.fragment` | Architecture UI 基类                   |
 | `ui.component`                | UI 状态与 Effect 生命周期绑定组件      |
 | `ui.state`                    | UI 持续状态只读契约                    |
@@ -69,8 +80,7 @@ Java target: 17
 
 主要依赖:
 
-* AndroidX AppCompat / Core KTX / Lifecycle Runtime KTX。
-* Material。
+* AndroidX AppCompat / Lifecycle ViewModel KTX / Lifecycle Runtime KTX。
 * OkHttp, 通过 `api` 暴露给网络注解和组件接口。
 * Retrofit, 通过 `api` 暴露给 `ApiFactory` 和 `NetworkComponentManager`。
 
@@ -81,8 +91,10 @@ Java target: 17
 `architecture` 只能表达技术抽象, 不写入具体业务规则。例如:
 
 * 不在 `Business<M, D>` 中假设应用级公共响应字段或解释 Meta/数据内容。
-* 不在 `BusinessException` 中解释业务错误语义。
+* `BusinessException` 只标记实现层主动判定的业务失败, 不在其中解释错误码、Meta 或其它业务语义。
+* `BusinessException` 保持普通异常的实例身份, 不实现基于消息的值相等、复制或解构契约。
 * 不在网络层内置 token、登录态或真实域名。
+* consumer rules 只保留 Architecture 自身运行时反射所需内容, 不承担 app 的组件实例化策略。
 * 不在 Architecture UI 状态、Effect 或 Owner 中绑定具体页面文案。
 * 不放仅表达 Android 控件行为的通用工具; 这类能力归属 `kit`。
 
@@ -129,11 +141,17 @@ Java target: 17
 
 重点覆盖:
 
-* `BusinessFlowExtensionsTest`: 业务状态 Flow 转换。
-* `ApiFactoryTest`: 网络声明解析、执行顺序和重复声明拦截。
+* `BusinessFlowExtensionsTest`: 业务状态 Flow 转换、单轮收集进度、多轮状态进度、并发收集隔离和进度回调异常保留。
+* `BusinessExceptionTest`: 业务异常实例身份及其在 `Business.Failure` 中的相等语义。
+* `ApiFactoryTest`: 网络声明解析、执行顺序、重复声明拦截、缓存发布、并发创建、安装竞争和失败重试。
+* `RequestHeadersInterceptorTest`: Header 运行期读取、覆盖和重复请求语义。
+* `EndpointRoutingInterceptorTest`: Endpoint origin 替换与请求 URL 保留语义。
 * `ArchitectureUiOwnerTest`: Architecture UI 状态和 Effect 更新。
+* `ArchitectureUiComponentContractTest`: 组件构造、渲染回调可见性和绑定入口封闭性。
+* `ArchitectureUiComponentTest`: STARTED 生命周期收集、多状态求和、多 Effect 合并和重复绑定行为。
 
-修改网络组件声明、状态模型或 Architecture UI Owner 并发语义时, 需要同步补充对应单元测试。
+修改网络组件声明、业务状态进度或 Architecture UI Owner 并发语义时, 需要同步补充对应单元测试。
+`ArchitectureUiComponentTest` 使用 Robolectric 驱动主线程和 `LifecycleRegistry`, 不用为测试改写生产调度或暴露内部任务。
 
 ## 5. 命名维护重点
 
@@ -142,13 +160,16 @@ Java target: 17
 * 业务领域对象放在 `model.domain`, UI 通知模型放在 `model.ui.notice`, UI 状态和 Effect 契约分别放在
   `ui.state` 与 `ui.effect`, 管线操作和处理协议分别放在 `extension` 与 `processor`。
 * 业务状态处理协议使用 `Processor`, 不使用容易和 Android 消息处理混淆的 `Handler`；处理 Meta 的协议必须保留 `M` 类型。
+* `Business*Processor` 类型的公开参数使用 `processor`, 领域元信息参数和属性统一使用 `meta`。
+* 常用单轮进度入口不添加后缀; 同一 Flow 收集内支持多轮 Loading / Outcome 的入口使用 `Cycles` 后缀。
 * `Business` 保持 `<M, D>` 双泛型；成功和失败状态不得丢弃已建模的 Meta 或主要载荷。
-* `BusinessException` 只描述服务端业务错误信息摘要, 不把具体业务解释写入架构层。
+* `BusinessException` 只描述服务端业务错误信息摘要并作为业务失败类型标记, 不把具体业务解释写入架构层;
+  它使用普通异常类保留实例身份, 不建模为 data class 值对象。
 * 持续状态契约使用 `UiState`, 一次性行为契约使用 `UiEffect`; 两种窄契约经常共同使用时通过 `Owner` 组合,
   不额外引入只做接口聚合的 `Store`。
 * Architecture UI 相关 API 使用 `activeOperation` 表达已经开始且尚未完成的通用操作, Flow 属性保留 `Flow` 后缀。
 
 ## 6. 当前关注点
 
-* `network` 只提供 API 创建骨架, 默认域名和安全策略必须由 app 组合根配置。
+* `network` 只提供 API 创建骨架与通用 Header / Endpoint 改写机制, 真实 Header、域名和安全策略必须由 app 组合根配置。
 * 多域名或动态租户路由不属于模板默认能力, 出现实际需求后再通过 app 层组件扩展。
