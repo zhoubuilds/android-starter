@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
  * 也不负责调度业务流程.
  *
  * @aegis 保护错误处理协议, 默认实现和 Flow 扩展的状态消费语义.
+ *
  * @author whisper
  * @since 2026/07/24
  */

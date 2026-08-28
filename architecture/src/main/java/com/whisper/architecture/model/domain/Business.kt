@@ -8,6 +8,10 @@ package com.whisper.architecture.model.domain
  *
  * @param M 元信息类型.
  * @param D 主要载荷类型.
+ *
+ * @aegis 保护 sealed 层级、状态类型、泛型方向和各状态载荷契约.
+ * @aegis-audit 2026-08-28 | whisper | 补齐源码保护标记, 与 Architecture 开发文档保持一致.
+ *
  * @author whisper
  * @since 2026/8/25
  */
