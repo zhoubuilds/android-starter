@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-08-27      | whisper | 迁入通用 ViewBinding 扩展         |
 | 2026-08-17      | 张梁    | 新增通用分享底部面板              |
 | 2026-08-17      | whisper | 新增全局栈顶 Activity 跟踪工具    |
 | 2026-08-17      | 张梁    | 新增通用内容瀑布流卡片            |
@@ -47,6 +48,7 @@ kit/
    |- main/
    |  |- java/com/whisper/kit/
    |  |  |- activity/
+   |  |  |- extension/
    |  |  |- function/
    |  |  |- view/feed/
    |  |  |- view/input/
@@ -70,6 +72,7 @@ kit/
 | 包                        | 职责                               |
 |---------------------------|------------------------------------|
 | `activity`                | 全局 Activity 生命周期跟踪工具     |
+| `extension`               | 通用 Android 与 ViewBinding 扩展   |
 | `function`                | 通用 Context 和 CharSequence 扩展  |
 | `view.feed`               | 通用内容瀑布流卡片                 |
 | `view.input`              | 分格文本输入控件                   |
@@ -102,6 +105,9 @@ kit/
 或弱引用已释放时返回 null. Activity 进入 stopped 状态后仍属于当前任务栈, 因此在销毁前继续作为栈顶返回; 调用方执行 UI 操作时仍须切到主线程.
 
 ## 5. 通用扩展
+
+`extension` 提供 Activity、Dialog 和 Fragment 的 ViewBinding 委托及其它通用 Android 扩展。当前 ViewBinding 实现从
+Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查。
 
 `function` 提供不依赖应用资源和业务语义的 Android 通用扩展. CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
 字体样式、指定 Typeface、下划线、删除线和点击行为. 所有扩展应作用于整段文本、保留原文本已有的 Span 并支持链式组合.

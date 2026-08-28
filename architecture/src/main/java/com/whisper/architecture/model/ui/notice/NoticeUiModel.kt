@@ -9,6 +9,7 @@ package com.whisper.architecture.model.ui.notice
  *
  * @aegis 保护通知字段, 类型和构造契约.
  * @aegis-audit 2026-08-26 | whisper | 统一 UI 渲染模型的角色后缀.
+ *
  * @author whisper
  * @since 2026/07/24
  */

@@ -14,6 +14,7 @@ import com.whisper.architecture.ui.state.ActiveOperationCountUiState
  * @aegis 保护基类 API 和在 `onCreate()` 中绑定 Architecture UI 状态的生命周期语义.
  * @aegis-audit 2026-08-26 | whisper | 将自动绑定契约迁移到状态与 Effect 的组合 Owner.
  * @aegis-audit 2026-08-26 | whisper | 基类改为分别依赖状态与 Effect 窄契约, Owner 保持可选组合.
+ *
  * @author whisper
  * @since 2026/07/24
  */

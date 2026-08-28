@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.update
  * @aegis-audit 2026-08-26 | whisper | 使用独立 StateFlow 和 SharedFlow 实现组合 Owner.
  * @aegis-audit 2026-08-26 | whisper | 将后端任务计数调整为通用操作计数并统一 Flow 后缀.
  * @aegis-audit 2026-08-26 | whisper | 将默认实现从 ViewModel 包迁移到 UI Owner 能力域.
+ *
  * @author whisper
  * @since 2026/08/26
  */

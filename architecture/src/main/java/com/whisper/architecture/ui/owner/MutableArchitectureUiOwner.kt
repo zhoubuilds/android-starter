@@ -9,6 +9,7 @@ import com.whisper.architecture.model.ui.notice.NoticeUiModel
  * @aegis-audit 2026-08-26 | whisper | 将可变 UI 容器迁移为 State 与 Effect 的组合 Owner.
  * @aegis-audit 2026-08-26 | whisper | 将后端任务更新协议调整为通用操作生命周期协议.
  * @aegis-audit 2026-08-26 | whisper | 将更新协议从 ViewModel 包迁移到 UI Owner 能力域.
+ *
  * @author whisper
  * @since 2026/08/26
  */

@@ -8,11 +8,11 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.whisper.architecture.extension.viewBinding
 import com.whisper.architecture.model.ui.notice.NoticeUiModel
 import com.whisper.architecture.ui.activity.ArchitectureActivity
 import com.whisper.architecture.ui.component.ArchitectureUiComponent
 import com.whisper.aster.runtime.annotation.Route
+import com.whisper.kit.extension.viewBinding
 import com.whisper.kit.recyclerview.listener.addOnItemChildClickListener
 import com.whisper.quill.Quill
 import com.whisper.starter.BuildConfig
@@ -32,13 +32,13 @@ class MainActivity : ArchitectureActivity<GettingViewModel>() {
     private val _viewBinding by viewBinding(ActivityMainBinding::inflate)
     override val viewModel = GettingViewModel()
     override val architectureUiComponent: ArchitectureUiComponent =
-        object : ArchitectureUiComponent(this) {
-            override fun onActiveOperationCountChanged(count: Int) {
+        object : ArchitectureUiComponent() {
+            protected override fun onActiveOperationCountChanged(count: Int) {
             }
 
-            override fun handleNotice(notice: NoticeUiModel) {
+            protected override fun handleNotice(notice: NoticeUiModel) {
                 Toast.makeText(
-                    context,
+                    this@MainActivity,
                     "${notice.importance}-${notice.tone}: ${notice.content}",
                     Toast.LENGTH_SHORT
                 ).show()

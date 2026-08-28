@@ -1,4 +1,4 @@
-package com.whisper.architecture.extension
+package com.whisper.kit.extension
 
 import android.app.Activity
 import android.app.Dialog

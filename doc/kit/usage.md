@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-08-27      | whisper | 迁入通用 ViewBinding 扩展         |
 | 2026-08-17      | 张梁    | 补充通用分享底部面板用法          |
 | 2026-08-14      | whisper | 明确分格输入样式显式引用方式      |
 | 2026-08-14      | whisper | 补充分格输入主题样式入口          |
@@ -44,7 +45,12 @@ dependencies {
 }
 ```
 
-## 2. 通用分享底部面板
+## 2. ViewBinding 扩展
+
+Activity、Dialog 和 Fragment 的 ViewBinding 委托位于 `com.whisper.kit.extension.viewBinding`。本次只迁移既有 API 和实现;
+其生命周期契约和使用建议留待 Kit 专项检查。
+
+## 3. 通用分享底部面板
 
 需要展示底部分享渠道选择时, 使用 `KitShareSheetDialog`。`kit` 只提供面板和入口点击分发, 调用方负责提供渠道文案、图标和实际分享动作:
 
@@ -70,7 +76,7 @@ KitShareSheetDialog.Builder(context)
 并在业务完成后自行关闭或保留面板。分享渠道不可用时, 调用方可以把 `ShareAction.enabled` 设为 `false`;
 不可用原因和提示文案仍由业务模块处理。
 
-## 3. 富文本扩展
+## 4. 富文本扩展
 
 需要组合不同颜色和点击区域时, 可以配合 AndroidX `buildSpannedString` 使用 `color()` 和 `onClick()`:
 
@@ -93,7 +99,7 @@ val content: CharSequence = buildSpannedString {
 `onClick()` 默认关闭下划线, 需要下划线时传入 `underline = true`. 该扩展不设置颜色, 应按视觉语义与 `color()` 组合使用.
 普通 `TextView` 承载点击文本时还需设置 `LinkMovementMethod`; 已统一处理可点击 Span 的公共组件不需要调用方重复设置.
 
-## 4. 分格文本输入
+## 5. 分格文本输入
 
 需要保留标准 EditText 输入能力并按格展示字符时, 使用 `KitCodeInputEditText`:
 
@@ -134,7 +140,7 @@ val content: CharSequence = buildSpannedString {
 控件会隐藏光标并把选区保持在文本末尾。页面使用 `-` 这类非描述性 hint 时, 应使用 `android:labelFor`
 将字段标题与输入控件关联, 避免损失无障碍语义。
 
-## 5. 刷新加载容器
+## 6. 刷新加载容器
 
 需要下拉刷新和上拉加载的纵向内容可以使用 `KitRefreshLoadLayout` 包裹。容器只负责交互和回调,
 具体刷新、加载、点赞、删除等业务状态仍由页面 ViewModel 维护。header/footer 子 View 角色必须通过
@@ -277,7 +283,7 @@ if (!state.loadingMore) {
 
 没有更多数据的文案或分割展示应由列表自身处理, 例如在列表末尾 item 或 RecyclerView decoration 中绘制。
 
-## 6. RecyclerView Decoration
+## 7. RecyclerView Decoration
 
 线性或网格列表可以使用 `ItemSpaceDecoration` 设置 item 间距:
 
@@ -307,7 +313,7 @@ recyclerView.addItemDecoration(
 Decoration 只接收 px 值, 不负责 dp 转换、主题色读取或业务尺寸选择. 分割线绘制边界见
 [RecyclerView Decoration 边界](recyclerview-decoration-boundary.md).
 
-## 7. RecyclerView ViewHolder
+## 8. RecyclerView ViewHolder
 
 ViewBinding item 可以使用 `ViewBindingHolder` 减少 ViewHolder 样板代码:
 
@@ -322,7 +328,7 @@ override fun onBindViewHolder(holder: ViewBindingHolder<ItemUserBinding>, positi
 
 该工具只持有 binding, 不持有 item 数据, 不处理业务点击事件。点击事件可按需搭配 RecyclerView 点击分发工具统一处理。
 
-## 8. RecyclerView 点击分发
+## 9. RecyclerView 点击分发
 
 RecyclerView item 内子 View 点击可以通过统一触摸监听分发, 避免在每个 ViewHolder 中分散绑定点击逻辑:
 

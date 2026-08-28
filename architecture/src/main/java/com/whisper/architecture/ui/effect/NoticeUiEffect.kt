@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.SharedFlow
  *
  * @aegis 保护通知通过 `SharedFlow` 暴露的一次性 Effect 契约.
  * @aegis-audit 2026-08-26 | whisper | 将页面通知从混合容器拆分为独立 SharedFlow Effect.
+ *
  * @author whisper
  * @since 2026/08/26
  */

@@ -1,6 +1,5 @@
 package com.whisper.architecture.ui.component
 
-import android.content.Context
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
@@ -20,20 +19,18 @@ import kotlinx.coroutines.launch
  * 将 Architecture UI 状态和 Effect 绑定到 UI 生命周期.
  *
  * 在 UI 进入 STARTED 状态时收集正在进行的操作数量和通知 Effect, 离开 STARTED 状态时停止收集.
+ * 组件只定义生命周期绑定与抽象渲染回调, 不持有 Context 或其它具体渲染依赖.
  *
  * @aegis 保护组件 API, STARTED 收集边界, 多状态合并和重复绑定语义.
  * @aegis-audit 2026-08-26 | whisper | 支持持续状态与一次性 Effect 分开绑定并保留 Owner 便捷入口.
  * @aegis-audit 2026-08-26 | whisper | 将后端任务聚合调整为通用操作数量聚合并统一 Flow 后缀.
  * @aegis-audit 2026-08-26 | whisper | 移除 Owner 绑定重载, 组件仅依赖状态与 Effect 窄契约.
+ * @aegis-audit 2026-08-26 | whisper | 移除具体渲染上下文并收窄组件扩展面.
+ *
  * @author whisper
  * @since 2026/07/24
  */
-abstract class ArchitectureUiComponent(
-    /**
-     * 用于展示 Architecture UI 状态的上下文.
-     */
-    protected val context: Context,
-) {
+abstract class ArchitectureUiComponent {
 
     /**
      * 当前绑定的生命周期持有者.
@@ -50,14 +47,14 @@ abstract class ArchitectureUiComponent(
      *
      * @param count 页面正在进行的操作总数.
      */
-    abstract fun onActiveOperationCountChanged(count: Int)
+    protected abstract fun onActiveOperationCountChanged(count: Int)
 
     /**
      * 展示 UI 通知.
      *
      * @param notice UI 通知.
      */
-    abstract fun handleNotice(notice: NoticeUiModel)
+    protected abstract fun handleNotice(notice: NoticeUiModel)
 
     /**
      * 将独立的 Architecture UI 状态和 Effect 来源绑定到指定生命周期.
@@ -66,7 +63,7 @@ abstract class ArchitectureUiComponent(
      * @param noticeUiEffects 需要合并的通知 UI Effect.
      * @param lifecycleOwner UI 生命周期持有者.
      */
-    open fun bind(
+    fun bind(
         activeOperationCountUiStates: Iterable<ActiveOperationCountUiState>,
         noticeUiEffects: Iterable<NoticeUiEffect>,
         lifecycleOwner: LifecycleOwner,
