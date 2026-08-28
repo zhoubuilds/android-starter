@@ -1,15 +1,4 @@
--keepattributes Signature,RuntimeVisibleAnnotations,AnnotationDefault
+# ApiFactory 通过运行时反射读取 API 级网络声明.
+-keepattributes RuntimeVisibleAnnotations,AnnotationDefault
 
 -keep,allowoptimization,allowobfuscation @interface com.whisper.architecture.network.annotation.**
-
--keepclassmembers,allowoptimization class * implements okhttp3.Interceptor {
-    <init>();
-}
-
--keepclassmembers,allowoptimization class * implements com.whisper.architecture.network.component.OkHttpCustomizer {
-    <init>();
-}
-
--keepclassmembers,allowoptimization class * implements com.whisper.architecture.network.component.RetrofitCustomizer {
-    <init>();
-}

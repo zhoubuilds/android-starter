@@ -36,12 +36,12 @@ dependencies {
     implementation(libs.material)
 
     implementation(libs.gson)
-    implementation(libs.okhttp)
     api(project(":kit"))
     api(project(":architecture"))
     api(project(":quill"))
 
     testImplementation(libs.junit)
+    testImplementation(libs.okhttp)
     testImplementation(libs.retrofit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

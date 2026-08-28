@@ -13,10 +13,17 @@ import kotlin.reflect.KClass
  * 不得等待可能创建 API 的任务. 返回的 OkHttp 组件仍必须满足运行期线程安全要求.
  *
  * @aegis 保护组件解析 API, 默认配置顺序和构建期并发/递归约束.
+ *
  * @author whisper
  * @since 2026/07/23
  */
 interface NetworkComponentManager {
+
+    companion object {
+
+        /** Retrofit 使用运行期 Endpoint 路由时可配置的占位 BaseUrl. */
+        const val ROUTING_PLACEHOLDER_BASE_URL: String = "https://placeholder.invalid/"
+    }
 
     /**
      * 配置所有 API 共用且允许接口级定制器覆盖的 OkHttp 参数.

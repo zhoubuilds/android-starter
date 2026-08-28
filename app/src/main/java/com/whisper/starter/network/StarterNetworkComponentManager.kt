@@ -3,9 +3,8 @@ package com.whisper.starter.network
 import com.whisper.architecture.network.component.NetworkComponentManager
 import com.whisper.architecture.network.component.OkHttpCustomizer
 import com.whisper.architecture.network.component.RetrofitCustomizer
+import com.whisper.architecture.network.interceptor.RequestHeadersInterceptor
 import com.whisper.foundation.network.BusinessFlowCallAdapterFactory
-import com.whisper.foundation.network.interceptor.RequestHeadersInterceptor
-import com.whisper.foundation.network.interceptor.RequestHeadersProvider
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
@@ -29,7 +28,7 @@ import kotlin.reflect.KClass
  */
 class StarterNetworkComponentManager(
     apiHost: String,
-    requestHeadersProvider: RequestHeadersProvider,
+    requestHeadersInterceptor: RequestHeadersInterceptor,
 ) : NetworkComponentManager {
 
     companion object {
@@ -40,8 +39,7 @@ class StarterNetworkComponentManager(
     }
 
     private val baseUrl: HttpUrl = normalizeBaseUrl(apiHost)
-    private val requestHeadersInterceptor: RequestHeadersInterceptor =
-        RequestHeadersInterceptor(requestHeadersProvider)
+    private val requestHeadersInterceptor: RequestHeadersInterceptor = requestHeadersInterceptor
     private val componentCache: ConcurrentHashMap<KClass<*>, Any> = ConcurrentHashMap()
 
     override fun configureDefaultOkHttp(builder: OkHttpClient.Builder) {

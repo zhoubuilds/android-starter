@@ -10,6 +10,7 @@ import kotlin.reflect.KClass
  * 缓存命中时不会执行, 重定向或重试时可能执行多次.
  *
  * @aegis 保护注解目标, 运行时保留策略, 参数类型和声明顺序语义.
+ *
  * @author whisper
  * @since 2026/07/23
  */

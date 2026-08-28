@@ -1,6 +1,8 @@
 package com.whisper.starter.network
 
+import com.whisper.architecture.network.interceptor.RequestHeadersInterceptor
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import retrofit2.Retrofit
@@ -17,7 +19,9 @@ class StarterNetworkComponentManagerTest {
     fun configureDefaultRetrofitUsesNormalizedApiHost() {
         val manager: StarterNetworkComponentManager = StarterNetworkComponentManager(
             apiHost = "https://example.test/service",
-            requestHeadersProvider = { emptyMap() },
+            requestHeadersInterceptor = object : RequestHeadersInterceptor() {
+                override fun resolveRequestHeaders(request: Request): Map<String, String> = emptyMap()
+            },
         )
         val builder: Retrofit.Builder = Retrofit.Builder()
 

@@ -9,6 +9,7 @@ import com.whisper.quill.LogcatQuillWriter
 import com.whisper.quill.Quill
 import com.whisper.quill.QuillLevel
 import com.whisper.starter.network.StarterNetworkComponentManager
+import com.whisper.starter.network.StarterRequestHeadersInterceptor
 import com.whisper.starter.network.StarterRequestHeadersProvider
 
 
@@ -27,7 +28,9 @@ class StarterApplication : Application() {
         ApiFactory.install(
             StarterNetworkComponentManager(
                 apiHost = BuildConfig.API_HOST,
-                requestHeadersProvider = StarterRequestHeadersProvider(this),
+                requestHeadersInterceptor = StarterRequestHeadersInterceptor(
+                    StarterRequestHeadersProvider(this),
+                ),
             )
         )
         Quill.addWriter(

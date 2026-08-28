@@ -1,18 +1,20 @@
 package com.whisper.architecture.network
 
-import android.util.Log
-import com.whisper.architecture.network.annotation.Interceptors
+import com.whisper.architecture.network.ApiFactory.create
+import com.whisper.architecture.network.ApiFactory.install
+import com.whisper.architecture.network.annotation.ApplicationInterceptors
 import com.whisper.architecture.network.annotation.NetworkInterceptors
-import com.whisper.architecture.network.annotation.OkHttpCustomizer
-import com.whisper.architecture.network.annotation.RetrofitCustomizer
+import com.whisper.architecture.network.annotation.UseOkHttpCustomizer
+import com.whisper.architecture.network.annotation.UseRetrofitCustomizer
 import com.whisper.architecture.network.component.NetworkComponentManager
-import com.whisper.architecture.network.component.OkHttpCustomizer as OkHttpCustomizerComponent
-import com.whisper.architecture.network.component.RetrofitCustomizer as RetrofitCustomizerComponent
+import com.whisper.architecture.network.component.OkHttpCustomizer
+import com.whisper.architecture.network.component.RetrofitCustomizer
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
+import java.util.logging.Logger
 import kotlin.reflect.KClass
 
 /**
@@ -22,18 +24,20 @@ import kotlin.reflect.KClass
  * 域名、序列化、安全策略和组件生命周期由 app 安装的 [NetworkComponentManager] 决定.
  *
  * @aegis 保护安装/创建 API 契约, 组件执行顺序, 缓存发布和并发恢复语义.
+ * @aegis-audit 2026-08-26 | whisper | 移除未使用的代际编号, 使用原子安装快照保留最后配置.
+ * @aegis-audit 2026-08-26 | whisper | 重命名网络声明注解以区分精确语义和组件契约.
+ *
  * @author whisper
  * @since 2026/07/06
  */
 object ApiFactory {
 
-    private const val TAG: String = "ApiFactory"
+    private val logger: Logger = Logger.getLogger(ApiFactory::class.java.name)
 
-    private val stateReference: AtomicReference<FactoryState?> = AtomicReference(null)
-    private val installLock: Any = Any()
+    private val installationReference: AtomicReference<Installation?> = AtomicReference(null)
 
     /**
-     * 跨状态代次串行化 API 首次构建的锁.
+     * 串行化 API 首次构建的锁.
      *
      * 构建期回调不得反向调用 [create] 或 [install], 也不得等待可能调用 [create] 的任务.
      */
@@ -42,27 +46,21 @@ object ApiFactory {
     /**
      * 安装应用层网络组件管理器.
      *
-     * 该方法应只在应用启动阶段调用一次. 重复安装会替换管理器和 API 缓存,
-     * 但已经被调用方持有的旧 API 实例不会失效.
+     * 该方法应只在应用启动阶段调用一次. 重复安装不是受支持的运行模式；发生误用时会原子替换为最后一次安装及其独立缓存,
+     * 但已经被调用方持有或正在创建的旧 API 实例不会失效.
      *
      * @param componentManager 应用层网络组件管理器.
      */
     fun install(componentManager: NetworkComponentManager) {
-        val recoveryState: FactoryState? = synchronized(installLock) {
-            val currentState: FactoryState? = stateReference.get()
-            val replacementState: FactoryState = FactoryState(
-                generation = (currentState?.generation ?: 0L) + 1L,
+        val previousInstallation: Installation? = installationReference.getAndSet(
+            Installation(
                 componentManager = componentManager,
             )
-            stateReference.set(replacementState)
-            if (currentState == null) null else replacementState
-        }
-        if (recoveryState != null) {
-            Log.w(
-                TAG,
-                "ApiFactory.install() was called more than once. The component manager and API " +
-                    "cache were atomically replaced as a best-effort recovery. Generation: " +
-                    "${recoveryState.generation}."
+        )
+        if (previousInstallation != null) {
+            logger.warning(
+                "ApiFactory.install() was called more than once. The latest component manager " +
+                    "and a new API cache were atomically installed as a best-effort recovery."
             )
         }
     }
@@ -75,12 +73,12 @@ object ApiFactory {
      */
     @Suppress("UNCHECKED_CAST")
     fun <T : Any> create(apiClass: KClass<T>): T {
-        val currentState: FactoryState = requireInstalled()
-        return currentState.apiCache[apiClass] as? T ?: synchronized(apiBuildLock) {
-            currentState.apiCache[apiClass] as? T ?: run {
+        val installation: Installation = requireInstallation()
+        return installation.apiCache[apiClass] as? T ?: synchronized(apiBuildLock) {
+            installation.apiCache[apiClass] as? T ?: run {
                 val declarations: ApiNetworkDeclarations = findNetworkDeclarations(apiClass)
-                buildApi(apiClass, currentState.componentManager, declarations).also { api: T ->
-                    currentState.apiCache[apiClass] = api
+                buildApi(apiClass, installation.componentManager, declarations).also { api: T ->
+                    installation.apiCache[apiClass] = api
                 }
             }
         }
@@ -100,7 +98,7 @@ object ApiFactory {
         )
         val retrofitBuilder: Retrofit.Builder = Retrofit.Builder()
         componentManager.configureDefaultRetrofit(retrofitBuilder, okHttpBuilder)
-        declarations.retrofitCustomizer?.let { customizerClass: KClass<out RetrofitCustomizerComponent> ->
+        declarations.retrofitCustomizer?.let { customizerClass: KClass<out RetrofitCustomizer> ->
             componentManager.resolveRetrofitCustomizer(apiClass, customizerClass)
                 .customize(retrofitBuilder)
         }
@@ -109,15 +107,19 @@ object ApiFactory {
 
     private fun findNetworkDeclarations(apiClass: KClass<*>): ApiNetworkDeclarations {
         val applicationInterceptors: List<KClass<out Interceptor>> =
-            apiClass.java.getAnnotation(Interceptors::class.java)?.value?.toList().orEmpty()
+            apiClass.java.getAnnotation(ApplicationInterceptors::class.java)?.value?.toList().orEmpty()
         val networkInterceptors: List<KClass<out Interceptor>> =
             apiClass.java.getAnnotation(NetworkInterceptors::class.java)?.value?.toList().orEmpty()
-        val okHttpCustomizer: KClass<out OkHttpCustomizerComponent>? =
-            apiClass.java.getAnnotation(OkHttpCustomizer::class.java)?.value
-        val retrofitCustomizer: KClass<out RetrofitCustomizerComponent>? =
-            apiClass.java.getAnnotation(RetrofitCustomizer::class.java)?.value
+        val okHttpCustomizer: KClass<out OkHttpCustomizer>? =
+            apiClass.java.getAnnotation(UseOkHttpCustomizer::class.java)?.value
+        val retrofitCustomizer: KClass<out RetrofitCustomizer>? =
+            apiClass.java.getAnnotation(UseRetrofitCustomizer::class.java)?.value
 
-        requireUniqueDeclarations(apiClass, Interceptors::class.simpleName.orEmpty(), applicationInterceptors)
+        requireUniqueDeclarations(
+            apiClass,
+            ApplicationInterceptors::class.simpleName.orEmpty(),
+            applicationInterceptors,
+        )
         requireUniqueDeclarations(apiClass, NetworkInterceptors::class.simpleName.orEmpty(), networkInterceptors)
         requireDistinctInterceptorChains(apiClass, applicationInterceptors, networkInterceptors)
 
@@ -160,17 +162,17 @@ object ApiFactory {
                 type.qualifiedName ?: type.toString()
             }
             "API interface ${apiClass.qualifiedName} declares the same types in " +
-                "@${Interceptors::class.simpleName} and @${NetworkInterceptors::class.simpleName}: " +
+                "@${ApplicationInterceptors::class.simpleName} and " +
+                "@${NetworkInterceptors::class.simpleName}: " +
                 "$sharedTypeNames."
         }
     }
 
-    private fun requireInstalled(): FactoryState = checkNotNull(stateReference.get()) {
+    private fun requireInstallation(): Installation = checkNotNull(installationReference.get()) {
         "ApiFactory.install() must be called before creating APIs."
     }
 
-    private class FactoryState(
-        val generation: Long,
+    private class Installation(
         val componentManager: NetworkComponentManager,
         val apiCache: MutableMap<KClass<*>, Any> = ConcurrentHashMap(),
     )
@@ -178,7 +180,7 @@ object ApiFactory {
     private data class ApiNetworkDeclarations(
         val applicationInterceptors: List<KClass<out Interceptor>>,
         val networkInterceptors: List<KClass<out Interceptor>>,
-        val okHttpCustomizer: KClass<out OkHttpCustomizerComponent>?,
-        val retrofitCustomizer: KClass<out RetrofitCustomizerComponent>?,
+        val okHttpCustomizer: KClass<out OkHttpCustomizer>?,
+        val retrofitCustomizer: KClass<out RetrofitCustomizer>?,
     )
 }

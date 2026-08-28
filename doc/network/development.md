@@ -4,6 +4,9 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-08-27 | whisper | 调整网络组件 keep rule 归属 |
+| 2026-08-26 | whisper | 同步 API 注解约束与 Architecture 拦截器实现 |
+| 2026-08-26 | whisper | 简化 ApiFactory 安装快照并移除代际状态 |
 | 2026-08-26 | whisper | CallAdapter 迁移到 Business<M, D> |
 | 2026-08-25 | whisper | 记录 Starter 网络实现、测试和维护边界 |
 
@@ -16,23 +19,24 @@ architecture/.../architecture/network/
 |- ApiFactory.kt
 |- OkHttpClientFactory.kt
 |- annotation/
-|  |- Interceptors.kt
+|  |- ApplicationInterceptors.kt
 |  |- NetworkInterceptors.kt
-|  |- OkHttpCustomizer.kt
-|  `- RetrofitCustomizer.kt
+|  |- UseOkHttpCustomizer.kt
+|  `- UseRetrofitCustomizer.kt
+|- interceptor/
+|  |- EndpointRoutingInterceptor.kt
+|  `- RequestHeadersInterceptor.kt
 `- component/
    |- NetworkComponentManager.kt
    |- OkHttpCustomizer.kt
    `- RetrofitCustomizer.kt
 
 foundation/.../foundation/network/
-|- BusinessFlowCallAdapterFactory.kt
-`- interceptor/
-   |- RequestHeadersInterceptor.kt
-   `- RequestHeadersProvider.kt
+`- BusinessFlowCallAdapterFactory.kt
 
 app/.../starter/network/
 |- StarterNetworkComponentManager.kt
+|- StarterRequestHeadersInterceptor.kt
 `- StarterRequestHeadersProvider.kt
 ```
 
@@ -51,6 +55,13 @@ configureDefaultOkHttp
 ```
 
 `configureDefaultRetrofit()` 接收已经完成 API 级 OkHttp 配置的 Builder。Retrofit customizer 最后执行，因此可以覆盖前面的 client 绑定。
+
+固定顺序不表示后置入口可以随意推翻前置契约:
+
+* 默认配置只放所有 API 都必须具备的能力。
+* 两类 interceptor 注解只表达有序增量, 不提供排除或删除默认值的语义。
+* OkHttp customizer 不用于增删普通拦截器。
+* Retrofit customizer 是受信任的高级入口; 当前 Builder API 技术上能替换 client 或 callFactory, 维护者必须保证公共安全策略仍然生效。
 
 ## 3. Business Flow CallAdapter
 
@@ -73,7 +84,8 @@ Failure(exception, meta, data)
 
 ## 4. 组件解析
 
-模板 app 对 API 注解声明的拦截器和 Customizer 提供无参构造反射兜底，并缓存实例。实际项目接入 DI 后，建议在 `resolve*` 方法中显式映射：
+模板 app 对 API 注解声明的拦截器和 Customizer 提供无参构造反射兜底，并缓存实例。反射只是无依赖组件的便利回退,
+不是业务组件生命周期协议。实际项目接入 DI 后, 应在 `resolve*` 方法中显式映射:
 
 ```kotlin
 override fun resolveInterceptor(
@@ -85,11 +97,26 @@ override fun resolveInterceptor(
 }
 ```
 
-需要运行时 token、租户或时间戳时，向拦截器注入 Provider，在 `intercept()` 执行时读取，不要在 API 构建期发起网络请求。
+需要运行时 token、租户或时间戳时，在 app 的具体拦截器中按请求解析；实现层可以向该子类注入 Provider，
+但 Provider 不属于 Architecture 契约。不要在 API 构建期发起网络请求。
+
+API 注解应引用稳定契约或 marker, 由 app 将其映射到具体实现。当 API 位于 `*-api` 模块时, 不得引用 `*-impl` 类型。
+`UseRetrofitCustomizer` 属于特权入口, 必须覆写 `resolveRetrofitCustomizer()` 显式映射并审查实现, 不依赖无参反射回退。
+
+`RequestHeadersInterceptor` 是默认链中的公共 Header 模板，app 子类通过 `resolveRequestHeaders(request)` 提供实际值。
+API 级路由拦截器继承 `EndpointRoutingInterceptor`,
+并由 app 提供目标 Endpoint。对请求的常规修改顺序是公共 Header、Endpoint 路由、鉴权、签名; 签名必须看到最终 URL 和 Header。
 
 ## 5. 混淆规则
 
-`architecture/consumer-rules.keep` 保留运行时注解属性，以及被反射调用的 interceptor / customizer 无参构造器。新增不同的反射创建协议时需要同步更新规则并验证 Release。
+`architecture/consumer-rules.keep` 只保留 `ApiFactory` 读取 API 声明所需的运行时注解属性、默认值和注解类型,
+不规定 interceptor / customizer 的实例化方式。
+
+Starter app 当前通过 `StarterNetworkComponentManager` 反射调用无参构造器, 因此由 `app/proguard-rules.pro` 使用
+`-keepclasseswithmembers` 同时保活具备无参构造器的组件实现类和该构造器。只使用 `-keepclassmembers` 不足以防止实现类整体被裁剪。
+接入 DI 或改为显式映射后, 应在 app 中删除或收窄这些通用反射规则。新增其它反射创建协议时也由选择该协议的实现模块提供规则。
+
+keep rule 调整必须使用启用 R8 的 application 变体验证最终合并配置和产物。仅构建未开启混淆的 Release 不能证明规则有效。
 
 ## 6. 验证命令
 
@@ -119,4 +146,10 @@ override fun resolveInterceptor(
 * 示例为本地 HTTP 回退保留 cleartext；生产项目使用 HTTPS 后应在 app 安全配置中关闭。
 * 不得加入信任所有证书、主机名或占位签名实现。
 * API 注解中不要从 `*-api` 模块反向引用 `*-impl` 类型。
+* 可选拦截器使用 API 注解增量声明, 不放入默认配置后再为部分 API 设计排除规则。
+* 不使用 Customizer 增删普通拦截器; 组件顺序由 interceptor 注解明确表达。
+* `EndpointRoutingInterceptor` 默认不使用目标 Endpoint 的 path; 需要网关 path 前缀时覆写 `buildTargetUrl()` 并添加边界测试。
+* `UseRetrofitCustomizer` 必须由 app 显式映射并审查, 不得绕过已安装的证书、鉴权和公共拦截器。
+* 同一 Retrofit API 内出现不同网络组合时拆分接口, 不引入方法级排除或覆盖逻辑。
 * 新增请求 Header 前检查服务端契约和隐私合规要求。
+* `ApiFactory.install()` 正常情况下只调用一次；重复安装的最后快照只用于尽力恢复, 不得作为环境切换协议。

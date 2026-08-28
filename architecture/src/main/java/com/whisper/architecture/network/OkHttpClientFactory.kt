@@ -13,6 +13,7 @@ import kotlin.reflect.KClass
  * app 安装的组件管理器决定.
  *
  * @aegis 保护默认配置, application interceptor, network interceptor 和定制器的执行顺序.
+ *
  * @author whisper
  * @since 2026/07/06
  */

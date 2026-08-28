@@ -4,6 +4,9 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-08-27 | whisper | 说明网络组件 keep rule 归属 |
+| 2026-08-26 | whisper | 同步 API 注解约束与 Architecture 拦截器接入 |
+| 2026-08-26 | whisper | 明确重复安装的最后快照恢复语义 |
 | 2026-08-26 | whisper | API 使用显式 Business Meta/数据类型 |
 | 2026-08-25 | whisper | 增加单域名 app 组合根接入示例 |
 
@@ -28,12 +31,15 @@ Application 启动时完成唯一装配：
 ApiFactory.install(
     StarterNetworkComponentManager(
         apiHost = BuildConfig.API_HOST,
-        requestHeadersProvider = StarterRequestHeadersProvider(this),
+        requestHeadersInterceptor = StarterRequestHeadersInterceptor(
+            StarterRequestHeadersProvider(this),
+        ),
     )
 )
 ```
 
-必须在首次调用 `ApiFactory.create()` 前安装。重复安装只用于错误恢复，不是切换环境的常规 API。
+必须在首次调用 `ApiFactory.create()` 前安装。重复安装不是受支持的常规操作；发生误用时最后一次安装会替换组件管理器和 API 缓存作为尽力恢复,
+已经获取或正在创建的旧 API 不会失效。因此不得使用重复安装切换运行期环境。
 
 ## 3. 声明 API
 
@@ -81,39 +87,82 @@ repository.profile()
 
 ## 5. 公共请求头
 
-Foundation 只定义：
+Architecture 只提供抽象的 Header 注入模板:
 
 ```kotlin
-fun interface RequestHeadersProvider {
-    fun currentHeaders(): Map<String, String>
+abstract class RequestHeadersInterceptor : Interceptor {
+    final override fun intercept(chain: Interceptor.Chain): Response
+
+    protected abstract fun resolveRequestHeaders(
+        request: Request,
+    ): Map<String, String>
 }
 ```
 
-Header 集合由 app 提供。模板默认发送平台、包名、语言、应用/API 版本和时间戳，不发送设备唯一标识。项目可以替换 Provider：
+`RequestHeadersInterceptor` 在每次请求时调用抽象方法，并覆盖同名 Header。Header 集合由 app 的具体子类提供。
+模板 app 默认发送平台、包名、语言、应用/API 版本和时间戳，不发送设备唯一标识。实现层可以按需使用 Provider，但它不是 Architecture 契约:
 
 ```kotlin
-val provider = RequestHeadersProvider {
-    buildMap {
-        put("Platform", "android")
-        sessionTokenProvider.currentToken()?.let { put("Authorization", "Bearer $it") }
-    }
+class StarterRequestHeadersInterceptor(
+    private val provider: StarterRequestHeadersProvider,
+) : RequestHeadersInterceptor() {
+
+    override fun resolveRequestHeaders(request: Request): Map<String, String> =
+        provider.currentHeaders()
 }
 ```
 
-需要登录态时，Provider 应依赖稳定的 auth 契约，不应让 Foundation 或 Architecture 依赖具体登录实现。
+需要登录态时，app 的具体拦截器或其 Provider 应依赖稳定的 auth 契约，不应让 Foundation 或 Architecture 依赖具体登录实现。
 
 ## 6. API 级定制
 
-优先使用 `@Interceptors` 声明必须执行的请求逻辑。只有观察真实网络交换时才使用 `@NetworkInterceptors`。
+默认网络配置只放所有 API 都必须具备的能力。可选的域名路由、鉴权、签名等能力由 API 通过注解按顺序增量声明:
 
 ```kotlin
-@Interceptors(AuthInterceptor::class)
-@OkHttpCustomizer(UploadTimeoutCustomizer::class)
+@ApplicationInterceptors(
+    ServiceBaseUrlInterceptor::class,
+    AuthInterceptor::class,
+)
+@UseOkHttpCustomizer(UploadTimeoutCustomizer::class)
 interface UploadApi
 ```
 
-模板 Manager 默认只能反射创建无参组件。带依赖的组件应由 app 在 `resolveInterceptor()`、`resolveOkHttpCustomizer()` 或 `resolveRetrofitCustomizer()` 中显式返回。
+使用时遵守以下顺序:
+
+1. 必须每次执行的请求逻辑使用 `@ApplicationInterceptors`。
+2. 只有观察真实网络交换时才使用 `@NetworkInterceptors`; 它不在缓存直接命中时执行, 重试或重定向时可能执行多次。
+3. 超时、缓存、Dispatcher 等无法由拦截器表达的特殊 OkHttp 配置才使用 `@UseOkHttpCustomizer`。
+4. `@UseRetrofitCustomizer` 只用于少量 Retrofit 特殊配置, 不作为常规 API 声明入口。
+
+少一项能力时直接省略对应声明。不使用 Customizer 从 Builder 中删除默认或已声明的普通拦截器,
+也不增加 `ExcludeInterceptor` 之类的反向配置。如果某项默认能力需要被部分 API 移除, 应将它改为接口级声明。
+
+注解中的类型应使用稳定契约或 marker。当 API 位于 `*-api` 模块时, 不得引用 `*-impl` 中的具体组件。带依赖的实现由 app 在
+`resolveInterceptor()`、`resolveOkHttpCustomizer()` 或 `resolveRetrofitCustomizer()` 中显式返回; 模板的无参反射只是无依赖组件的便利回退。
+`UseRetrofitCustomizer` 必须由 app 显式映射并审查, 不使用无参反射回退。
+
+模板无参反射依赖 `app/proguard-rules.pro` 中的组件构造器规则。Architecture 只保证 API 声明注解可在运行时读取,
+不会替实现层保留构造器。实际项目改用 DI 或全部显式映射后, 应删除或收窄 app 的通用反射规则。
+
+Customizer 不应重新管理普通拦截器。`RetrofitCustomizer` 虽然技术上可以替换 client 或 callFactory, 但业务 API 不得因此绕过 app 提供的证书、
+鉴权和公共拦截器。需要完全独立网络栈的链路应使用专用工厂, 不通过业务 `ApiFactory` 创建。
+
+注解作用于整个 API 接口。同一接口中的方法需要不同网络组合时, 将它们拆分为不同 Retrofit API 接口。
 
 ## 7. 多域名扩展
 
 不要为了预想中的多域名需求把 flavor 常量下沉到 Foundation。出现明确需求后，在 app 层增加路由拦截器或 Retrofit customizer，并让业务 API 只依赖稳定 marker。域名选择、租户状态和环境配置仍由 app 组合根持有。
+
+Architecture 的 `EndpointRoutingInterceptor` 可以承担通用 URL 改写:
+
+```kotlin
+class ServiceEndpointRoutingInterceptor(
+    private val endpointProvider: () -> HttpUrl?,
+) : EndpointRoutingInterceptor() {
+
+    override fun resolveTargetEndpoint(request: Request): HttpUrl? = endpointProvider()
+}
+```
+
+默认实现只替换 scheme、host 和 port, 原请求的 path、query 和 fragment 保持不变。如果网关 Endpoint 含 path 前缀,
+覆写 `buildTargetUrl()` 并明确测试路径拼接规则。应用组合根再将稳定的 API 声明类型映射到该实例。
