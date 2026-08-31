@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明               |
 |-----------------|---------|------------------------|
+| 2026-08-31      | whisper | 统一 Prism 文档入口    |
 | 2026-08-31      | whisper | 区分项目规范与智能体规则 |
 | 2026-08-28      | whisper | 建立开源仓库入口文档   |
 
@@ -69,7 +70,7 @@ release tag.
 3. 调整应用名称, 图标, 主题, 版本和签名配置.
 4. 根据项目需要保留或移除 Prism, Aster, Habitat, Quill, Kit 等可选能力.
 
-Prism 的配置契约和完整退出步骤见 [`build-logic/README.md`](build-logic/README.md).
+Prism 的配置契约和完整退出步骤见 [Prism 使用文档](doc/prism/usage.md).
 
 ## 验证
 
@@ -92,6 +93,7 @@ Prism 的配置契约和完整退出步骤见 [`build-logic/README.md`](build-lo
 * Architecture: [设计](doc/architecture/design.md), [开发](doc/architecture/development.md),
   [使用](doc/architecture/usage.md).
 * Network: [设计](doc/network/design.md), [开发](doc/network/development.md), [使用](doc/network/usage.md).
+* Prism: [设计](doc/prism/design.md), [开发](doc/prism/development.md), [使用](doc/prism/usage.md).
 * Aster: [设计](doc/aster/design.md), [开发](doc/aster/development.md), [使用](doc/aster/usage.md).
 * Habitat: [设计](doc/habitat/design.md), [开发](doc/habitat/development.md), [使用](doc/habitat/usage.md).
 * Quill: [设计](doc/quill/design.md), [开发](doc/quill/development.md), [使用](doc/quill/usage.md).

@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                         |
 |-----------------|---------|----------------------------------|
+| 2026-08-31      | whisper | 明确 Prism 应用构建配置职责      |
 | 2026-08-31      | whisper | 明确通用规范与 Aegis 文档边界    |
 | 2026-08-28      | whisper | 接入 EditorConfig 编辑器基线     |
 | 2026-08-28      | whisper | 明确忽略与属性文件注释编码       |
@@ -234,7 +235,7 @@ Starter 是面向不同应用的公共基座. 规范只约束可复用的工程�
 * 构建脚本使用 Kotlin DSL.
 * 依赖及插件版本优先由 `gradle/libs.versions.toml` 统一管理.
 * 优先复用 `build-logic` 中已有约定插件, 但可选插件不得成为所有模块的隐式前提.
-* Prism 只负责可选的 BuildConfig 生成; 未接入 Prism 的项目仍应能够使用标准 Android 构建配置.
+* Prism 只负责可选的应用构建配置生成; 未接入 Prism 的项目仍应能够使用标准 Android 构建配置.
 * flavor, BuildConfig 和环境回退值由 app 或根构建配置维护, 不在下层业务 / 架构模块重复声明.
 * KSP, Aster, Habitat 等生成链路使用各自的 Gradle 配置, 不混入普通 `implementation`.
 * 新增 keep rule 时说明反射, 序列化, JNI, 路由或插件发现等真实原因, 并保持范围最小.

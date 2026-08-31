@@ -80,7 +80,7 @@ class PrismPluginFunctionalTest {
      * 验证仅包含 exports 时仍按最终 BuildConfig feature 挂接全部变体任务.
      */
     @Test
-    fun generateBuildConfig_withExportsOnlyConfig_dependsOnAllVariants() {
+    fun generatePrismBuildConfigSources_withExportsOnlyConfig_dependsOnAllVariants() {
         val projectDir: File = createProject(
             config =
                 """
@@ -95,7 +95,7 @@ class PrismPluginFunctionalTest {
 
         val result: BuildResult = runBuild(
             projectDir = projectDir,
-            "generateBuildConfig",
+            "generatePrismBuildConfigSources",
             "--dry-run"
         )
 
@@ -150,7 +150,7 @@ class PrismPluginFunctionalTest {
      * 验证未开启 BuildConfig 时聚合任务不会引用不存在的 AGP 任务.
      */
     @Test
-    fun generateBuildConfig_whenFeatureDisabled_hasNoVariantDependencies() {
+    fun generatePrismBuildConfigSources_whenFeatureDisabled_hasNoVariantDependencies() {
         val projectDir: File = createProject(
             config = "",
             buildConfigEnabled = false
@@ -158,11 +158,11 @@ class PrismPluginFunctionalTest {
 
         val result: BuildResult = runBuild(
             projectDir = projectDir,
-            "generateBuildConfig",
+            "generatePrismBuildConfigSources",
             "--dry-run"
         )
 
-        assertTrue(result.output.contains(":generateBuildConfig SKIPPED"))
+        assertTrue(result.output.contains(":generatePrismBuildConfigSources SKIPPED"))
         assertFalse(result.output.contains(":generateDebugBuildConfig"))
         assertFalse(result.output.contains(":generateReleaseBuildConfig"))
     }
@@ -171,7 +171,7 @@ class PrismPluginFunctionalTest {
      * 验证多个 flavor dimension 使用 AGP 提供的完整 variant 名称挂接任务.
      */
     @Test
-    fun generateBuildConfig_withMultipleFlavorDimensions_dependsOnCombinedVariants() {
+    fun generatePrismBuildConfigSources_withMultipleFlavorDimensions_dependsOnCombinedVariants() {
         val projectDir: File = createProject(
             config =
                 """
@@ -191,7 +191,7 @@ class PrismPluginFunctionalTest {
 
         val result: BuildResult = runBuild(
             projectDir = projectDir,
-            "generateBuildConfig",
+            "generatePrismBuildConfigSources",
             "--dry-run"
         )
 

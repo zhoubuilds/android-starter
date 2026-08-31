@@ -1,5 +1,5 @@
 # Default application configuration used when prism.appConfig.file is not set.
-# See build-logic/README.md for the complete Prism contract and opt-out steps.
+# See doc/prism/usage.md for the complete Prism contract and opt-out steps.
 #
 # Optional reusable scalar values. References can only target this table by using
 # { reference = "values.<name>" }. Do not commit real secrets to this public template.

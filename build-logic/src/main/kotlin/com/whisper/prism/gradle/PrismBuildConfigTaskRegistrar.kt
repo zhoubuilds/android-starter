@@ -20,7 +20,7 @@ internal class PrismBuildConfigTaskRegistrar {
      * @param target 当前 Gradle 项目
      */
     fun register(target: Project) {
-        target.tasks.register(GENERATE_BUILD_CONFIG_TASK_NAME) {
+        target.tasks.register(GENERATE_PRISM_BUILD_CONFIG_SOURCES_TASK_NAME) {
             group = TASK_GROUP
             description = "Generate BuildConfig sources for all configured Android variants."
         }
@@ -49,7 +49,7 @@ internal class PrismBuildConfigTaskRegistrar {
             }
             val buildConfigTaskName: String =
                 "generate${variant.name.toTaskNameSegment()}BuildConfig"
-            target.tasks.named(GENERATE_BUILD_CONFIG_TASK_NAME) {
+            target.tasks.named(GENERATE_PRISM_BUILD_CONFIG_SOURCES_TASK_NAME) {
                 dependsOn(buildConfigTaskName)
             }
         }
@@ -73,6 +73,7 @@ internal class PrismBuildConfigTaskRegistrar {
         /**
          * BuildConfig 聚合任务名称
          */
-        private const val GENERATE_BUILD_CONFIG_TASK_NAME: String = "generateBuildConfig"
+        private const val GENERATE_PRISM_BUILD_CONFIG_SOURCES_TASK_NAME: String =
+            "generatePrismBuildConfigSources"
     }
 }

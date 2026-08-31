@@ -122,7 +122,8 @@ import java.io.File
  * 文件不存在、TOML 语法错误、未知分组、字段类型错误、无效 reference 和环境名称错误都会在 Gradle 配置阶段失败.
  * 语法错误包含文件、行号和列号, 深层结构错误包含文件和 TOML 配置路径.
  *
- * 插件注册 `prism > generateBuildConfig` 开发辅助任务, 用于 clean 后预生成已有 Android variants 的 BuildConfig 源码.
+ * 插件注册 `prism > generatePrismBuildConfigSources` 开发辅助任务, 用于 clean 后预生成已有 Android variants 的
+ * BuildConfig 源码.
  * 该任务不参与 flavor 创建、字段注入、assemble 或打包流程.
  *
  * @author whisper
