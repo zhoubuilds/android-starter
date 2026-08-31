@@ -4,6 +4,7 @@
 
 | 修订时间（CST）  | 修订人     | 修订说明                  |
 |------------|---------|-----------------------|
+| 2026-08-31 | whisper | 明确固定 Manifest metadata 协议取舍 |
 | 2026-07-28 | whisper | 整理 Habitat 设计目标、模型和取舍 |
 
 本文记录 Habitat 的设计目标、核心模型、最终方案和主要取舍。维护实现请阅读 [开发文档](development.md), 业务接入请阅读 [使用文档](usage.md)。
@@ -107,6 +108,10 @@ Gradle 插件根据 Android namespace 计算 Registry 生成包名, 通过 KSP �
 ```
 
 Runtime 从最终 `ApplicationInfo.metaData` 精确读取该 value 并反射加载 Registry。
+
+metadata 的 name 和 value 不反转。固定 name 是最终 APK 中唯一的 Habitat 槽位, 两个外部 AAR 提供不同 Registry 时会由
+Manifest Merger 暴露冲突; 如果改用 Registry 全限定类名作为 name, 不同入口会以不同 key 自然共存, 反而绕过单装配约束。
+当前 plugin、compiler 和 runtime 按同一协议版本交付, 在出现并行协议迁移需求前不为 metadata name 增加版本后缀。
 
 ## 5. 单装配入口
 

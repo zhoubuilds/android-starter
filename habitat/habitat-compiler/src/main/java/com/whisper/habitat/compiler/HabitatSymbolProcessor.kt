@@ -1,5 +1,6 @@
 package com.whisper.habitat.compiler
 
+import com.google.devtools.ksp.getVisibility
 import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.processing.KSPLogger
@@ -10,12 +11,14 @@ import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSFile
+import com.google.devtools.ksp.symbol.KSFunction
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSValueArgument
 import com.google.devtools.ksp.symbol.Modifier
 import com.google.devtools.ksp.symbol.Nullability
+import com.google.devtools.ksp.symbol.Visibility
 import com.google.devtools.ksp.validate
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
@@ -38,6 +41,9 @@ import java.nio.charset.StandardCharsets
  * 扫描 app 模块中参与 Habitat 的 RoomDatabase, 并生成 Dao Provider 与总 Registry.
  *
  * @aegis 保护注解校验, 生成 Provider/Registry ABI, 命名和增量依赖语义.
+ * @aegis-audit 2026-08-31 | whisper | 经授权支持继承 Dao accessor 的收集、override 去重和增量依赖.
+ * @aegis-audit 2026-08-31 | whisper | 经授权补全生成代码可访问性与调用形态校验.
+ * @aegis-audit 2026-08-31 | whisper | 经授权消除实例入口级联误报并补全重复归属定位.
  *
  * @author whisper
  * @since 2026/07/27
@@ -92,6 +98,7 @@ class HabitatSymbolProcessor(
             val databaseModel: HabitatDatabaseModel = parseDatabase(
                 declaration = declaration,
                 generatedPackage = generatedPackage,
+                resolver = resolver,
             ) ?: return@forEach
             databaseModels[databaseModel.databaseQualifiedName] = databaseModel
         }
@@ -162,9 +169,16 @@ class HabitatSymbolProcessor(
     private fun parseDatabase(
         declaration: KSClassDeclaration,
         generatedPackage: String,
+        resolver: Resolver,
     ): HabitatDatabaseModel? {
         val databaseQualifiedName: String = declaration.qualifiedName?.asString()
             ?: return logError(declaration, "Habitat database must have a qualified name.")
+        if (!declaration.isAccessibleFromGeneratedProvider()) {
+            return logError(
+                declaration,
+                "Habitat database $databaseQualifiedName and its containing declarations must be public or internal.",
+            )
+        }
         if (!declaration.hasAnnotation(ROOM_DATABASE)) {
             return logError(declaration, "Habitat database $databaseQualifiedName must be annotated with @Database.")
         }
@@ -175,18 +189,24 @@ class HabitatSymbolProcessor(
             )
         }
 
-        val instanceAccessor: HabitatDatabaseInstanceAccessor = findInstanceAccessor(declaration)
-            ?: return logError(
-                declaration,
-                "Habitat database $databaseQualifiedName must declare a companion object property or function " +
-                    "annotated with @HabitatDatabaseInstance.",
-            )
+        val instanceAccessor: HabitatDatabaseInstanceAccessor = when (
+            val result: HabitatDatabaseInstanceAccessorResult = findInstanceAccessor(declaration)
+        ) {
+            is HabitatDatabaseInstanceAccessorResult.Found -> result.accessor
+            HabitatDatabaseInstanceAccessorResult.Invalid -> return null
+            HabitatDatabaseInstanceAccessorResult.Missing -> {
+                return logError(
+                    declaration,
+                    "Habitat database $databaseQualifiedName must declare a companion object property or function " +
+                        "annotated with @HabitatDatabaseInstance.",
+                )
+            }
+        }
 
-        val daoMethods: List<HabitatDaoMethod> = declaration.declarations
-            .filterIsInstance<KSFunctionDeclaration>()
-            .filter { function: KSFunctionDeclaration -> function.isDaoAccessor() }
-            .mapNotNull { function: KSFunctionDeclaration -> parseDaoMethod(function) }
-            .toList()
+        val daoMethods: List<HabitatDaoMethod> = collectDaoMethods(
+            declaration = declaration,
+            resolver = resolver,
+        )
         val entities: List<HabitatEntity> = readRoomEntities(declaration)
 
         return HabitatDatabaseModel(
@@ -199,15 +219,18 @@ class HabitatSymbolProcessor(
             instanceAccessor = instanceAccessor,
             daoMethods = daoMethods,
             entities = entities,
+            declaration = declaration,
             sourceFile = declaration.containingFile,
         )
     }
 
-    private fun findInstanceAccessor(declaration: KSClassDeclaration): HabitatDatabaseInstanceAccessor? {
+    private fun findInstanceAccessor(
+        declaration: KSClassDeclaration,
+    ): HabitatDatabaseInstanceAccessorResult {
         val companionObject: KSClassDeclaration = declaration.declarations
             .filterIsInstance<KSClassDeclaration>()
             .firstOrNull(KSClassDeclaration::isCompanionObject)
-            ?: return null
+            ?: return HabitatDatabaseInstanceAccessorResult.Missing
         val instanceProperties: List<KSPropertyDeclaration> = companionObject.declarations
             .filterIsInstance<KSPropertyDeclaration>()
             .filter { property: KSPropertyDeclaration ->
@@ -227,20 +250,29 @@ class HabitatSymbolProcessor(
                 "Only one @HabitatDatabaseInstance property or function is allowed in " +
                     "${declaration.qualifiedName?.asString()}.",
             )
-            return null
+            return HabitatDatabaseInstanceAccessorResult.Invalid
         }
         val property: KSPropertyDeclaration? = instanceProperties.firstOrNull()
         if (property != null) {
-            return parseInstanceProperty(property, declaration)
+            val accessor: HabitatDatabaseInstanceAccessor = parseInstanceProperty(property, declaration)
+                ?: return HabitatDatabaseInstanceAccessorResult.Invalid
+            return HabitatDatabaseInstanceAccessorResult.Found(accessor)
         }
-        val function: KSFunctionDeclaration = instanceFunctions.firstOrNull() ?: return null
-        return parseInstanceFunction(function, declaration)
+        val function: KSFunctionDeclaration = instanceFunctions.firstOrNull()
+            ?: return HabitatDatabaseInstanceAccessorResult.Missing
+        val accessor: HabitatDatabaseInstanceAccessor = parseInstanceFunction(function, declaration)
+            ?: return HabitatDatabaseInstanceAccessorResult.Invalid
+        return HabitatDatabaseInstanceAccessorResult.Found(accessor)
     }
 
     private fun parseInstanceProperty(
         property: KSPropertyDeclaration,
         declaration: KSClassDeclaration,
     ): HabitatDatabaseInstanceAccessor? {
+        if (property.extensionReceiver != null) {
+            reportError(property, "@HabitatDatabaseInstance property must not have an extension receiver.")
+            return null
+        }
         val propertyType: KSType = property.type.resolve()
         val propertyTypeName: String? = propertyType.declaration.qualifiedName?.asString()
         val databaseTypeName: String? = declaration.qualifiedName?.asString()
@@ -258,8 +290,11 @@ class HabitatSymbolProcessor(
             )
             return null
         }
-        if (Modifier.PRIVATE in property.modifiers || Modifier.PROTECTED in property.modifiers) {
-            reportError(property, "@HabitatDatabaseInstance property must be public.")
+        if (!property.isAccessibleFromGeneratedProvider()) {
+            reportError(
+                property,
+                "@HabitatDatabaseInstance property and its containing declarations must be public or internal.",
+            )
             return null
         }
         return HabitatDatabaseInstanceAccessor(
@@ -277,6 +312,18 @@ class HabitatSymbolProcessor(
             reportError(function, "@HabitatDatabaseInstance function must not declare parameters.")
             return null
         }
+        if (function.extensionReceiver != null) {
+            reportError(function, "@HabitatDatabaseInstance function must not have an extension receiver.")
+            return null
+        }
+        if (Modifier.SUSPEND in function.modifiers) {
+            reportError(function, "@HabitatDatabaseInstance function must not be suspend.")
+            return null
+        }
+        if (function.typeParameters.isNotEmpty()) {
+            reportError(function, "@HabitatDatabaseInstance function must not declare type parameters.")
+            return null
+        }
         val returnType: KSType = function.returnType?.resolve()
             ?: return logError(function, "@HabitatDatabaseInstance function must return $databaseTypeName.")
         val returnTypeName: String? = returnType.declaration.qualifiedName?.asString()
@@ -291,8 +338,11 @@ class HabitatSymbolProcessor(
             reportError(function, "@HabitatDatabaseInstance function must return $databaseTypeName.")
             return null
         }
-        if (Modifier.PRIVATE in function.modifiers || Modifier.PROTECTED in function.modifiers) {
-            reportError(function, "@HabitatDatabaseInstance function must be public.")
+        if (!function.isAccessibleFromGeneratedProvider()) {
+            reportError(
+                function,
+                "@HabitatDatabaseInstance function and its containing declarations must be public or internal.",
+            )
             return null
         }
         return HabitatDatabaseInstanceAccessor(
@@ -301,59 +351,184 @@ class HabitatSymbolProcessor(
         )
     }
 
-    private fun KSFunctionDeclaration.isDaoAccessor(): Boolean {
-        val returnType: KSType = this.returnType?.resolve() ?: return false
-        val returnDeclaration: KSDeclaration = returnType.declaration
-        return Modifier.ABSTRACT in modifiers &&
-            parameters.isEmpty() &&
-            returnDeclaration.hasAnnotation(ROOM_DAO)
+    private fun collectDaoMethods(
+        declaration: KSClassDeclaration,
+        resolver: Resolver,
+    ): List<HabitatDaoMethod> {
+        val databaseType: KSType = declaration.asStarProjectedType()
+        val daoFunctions: List<HabitatDaoAccessorCandidate> = declaration.getAllFunctions()
+            .mapNotNull { function: KSFunctionDeclaration ->
+                function.toDaoAccessorCandidate(databaseType)
+            }
+            .toList()
+        return daoFunctions
+            .filterNot { function: HabitatDaoAccessorCandidate ->
+                daoFunctions.any { candidate: HabitatDaoAccessorCandidate ->
+                    candidate.function != function.function && resolver.overrides(
+                        overrider = candidate.function,
+                        overridee = function.function,
+                        containingClass = declaration,
+                    )
+                }
+            }
+            .groupBy(HabitatDaoAccessorCandidate::signature)
+            .values
+            .mapNotNull { functions: List<HabitatDaoAccessorCandidate> ->
+                parseDaoMethod(
+                    function = functions.first(),
+                    accessorSourceFiles = functions.mapNotNull { candidate: HabitatDaoAccessorCandidate ->
+                        candidate.function.containingFile
+                    },
+                )
+            }
     }
 
-    private fun parseDaoMethod(function: KSFunctionDeclaration): HabitatDaoMethod? {
-        val returnType: KSType = function.returnType?.resolve()
-            ?: return logError(function, "Habitat Dao accessor must declare a return type.")
+    private fun KSFunctionDeclaration.toDaoAccessorCandidate(
+        databaseType: KSType,
+    ): HabitatDaoAccessorCandidate? {
+        if (!isAbstract) {
+            return null
+        }
+        val memberFunction: KSFunction = asMemberOf(databaseType)
+        val returnType: KSType = memberFunction.returnType
+            ?.takeUnless { type: KSType -> memberFunction.isError || type.isError }
+            ?: return null
+        val returnDeclaration: KSDeclaration = returnType.declaration
+        if (!returnDeclaration.hasAnnotation(ROOM_DAO)) {
+            return null
+        }
+        return HabitatDaoAccessorCandidate(
+            function = this,
+            memberFunction = memberFunction,
+            returnType = returnType,
+            signature = HabitatDaoAccessorSignature(
+                methodName = simpleName.asString(),
+                receiverTypeName = memberFunction.extensionReceiverType
+                    ?.declaration
+                    ?.qualifiedName
+                    ?.asString(),
+                parameterTypeNames = memberFunction.parameterTypes.map { type: KSType? ->
+                    type?.declaration?.qualifiedName?.asString()
+                },
+                returnTypeName = returnDeclaration.qualifiedName?.asString(),
+            ),
+        )
+    }
+
+    private fun parseDaoMethod(
+        function: HabitatDaoAccessorCandidate,
+        accessorSourceFiles: List<KSFile>,
+    ): HabitatDaoMethod? {
+        val declaration: KSFunctionDeclaration = function.function
+        val methodName: String = declaration.simpleName.asString()
+        if (declaration.parameters.isNotEmpty()) {
+            return logError(declaration, "Habitat Dao accessor $methodName must not declare parameters.")
+        }
+        if (function.memberFunction.extensionReceiverType != null) {
+            return logError(declaration, "Habitat Dao accessor $methodName must not have an extension receiver.")
+        }
+        if (Modifier.SUSPEND in declaration.modifiers) {
+            return logError(declaration, "Habitat Dao accessor $methodName must not be suspend.")
+        }
+        if (declaration.typeParameters.isNotEmpty()) {
+            return logError(declaration, "Habitat Dao accessor $methodName must not declare type parameters.")
+        }
+        val returnType: KSType = function.returnType
+        if (returnType.nullability == Nullability.NULLABLE) {
+            return logError(declaration, "Habitat Dao accessor $methodName must return a non-null Dao.")
+        }
+        if (!declaration.isAccessibleFromGeneratedProvider()) {
+            return logError(
+                declaration,
+                "Habitat Dao accessor $methodName and its containing declarations must be public or internal.",
+            )
+        }
         val daoQualifiedName: String = returnType.declaration.qualifiedName?.asString()
-            ?: return logError(function, "Habitat Dao return type must have a qualified name.")
+            ?: return logError(declaration, "Habitat Dao return type must have a qualified name.")
+        if (!returnType.declaration.isAccessibleFromGeneratedProvider()) {
+            return logError(
+                declaration,
+                "Habitat Dao return type $daoQualifiedName and its containing declarations must be public or internal.",
+            )
+        }
         return HabitatDaoMethod(
-            methodName = function.simpleName.asString(),
+            methodName = methodName,
             daoClassName = ClassName.bestGuess(daoQualifiedName),
-            sourceFile = returnType.declaration.containingFile,
+            sourceFiles = accessorSourceFiles
+                .plus(listOfNotNull(returnType.declaration.containingFile))
+                .distinctBy(KSFile::filePath),
         )
     }
 
     private fun validateDatabases(models: List<HabitatDatabaseModel>): Boolean {
-        val duplicateProviderNames: Set<String> = models
-            .map { model: HabitatDatabaseModel -> model.providerClassName.canonicalName }
-            .groupingBy { providerName: String -> providerName }
-            .eachCount()
-            .filterValues { count: Int -> count > 1 }
-            .keys
-        duplicateProviderNames.forEach { providerName: String ->
-            reportError("Habitat provider $providerName is generated by multiple databases.")
+        val providerConflicts: Map<String, List<HabitatDatabaseModel>> = findDatabaseOwnershipConflicts(
+            models = models,
+            ownershipKeys = { model: HabitatDatabaseModel ->
+                listOf(model.providerClassName.canonicalName)
+            },
+        )
+        reportDatabaseOwnershipConflicts(providerConflicts) { providerName: String, databaseNames: String ->
+            "Habitat provider $providerName is generated by multiple Habitat databases. " +
+                "Conflicting databases: $databaseNames."
         }
 
-        val duplicateDaoNames: Set<String> = models
-            .flatMap { model: HabitatDatabaseModel ->
+        val daoConflicts: Map<String, List<HabitatDatabaseModel>> = findDatabaseOwnershipConflicts(
+            models = models,
+            ownershipKeys = { model: HabitatDatabaseModel ->
                 model.daoMethods.map { method: HabitatDaoMethod -> method.daoClassName.canonicalName }
-            }
-            .groupingBy { daoName: String -> daoName }
-            .eachCount()
-            .filterValues { count: Int -> count > 1 }
-            .keys
-        duplicateDaoNames.forEach { daoName: String ->
-            reportError("Dao $daoName is registered in multiple Habitat databases.")
+            },
+        )
+        reportDatabaseOwnershipConflicts(daoConflicts) { daoName: String, databaseNames: String ->
+            "Dao $daoName is registered in multiple Habitat databases. Conflicting databases: $databaseNames."
         }
 
-        val duplicateEntityNames: Set<String> = models
-            .flatMap(HabitatDatabaseModel::entities)
-            .groupingBy { entity: HabitatEntity -> entity.qualifiedName }
-            .eachCount()
-            .filterValues { count: Int -> count > 1 }
-            .keys
-        duplicateEntityNames.forEach { entityName: String ->
-            reportError("Entity $entityName is declared in multiple Habitat databases.")
+        val entityConflicts: Map<String, List<HabitatDatabaseModel>> = findDatabaseOwnershipConflicts(
+            models = models,
+            ownershipKeys = { model: HabitatDatabaseModel ->
+                model.entities.map(HabitatEntity::qualifiedName)
+            },
+        )
+        reportDatabaseOwnershipConflicts(entityConflicts) { entityName: String, databaseNames: String ->
+            "Entity $entityName is declared in multiple Habitat databases. Conflicting databases: $databaseNames."
         }
-        return duplicateProviderNames.isEmpty() && duplicateDaoNames.isEmpty() && duplicateEntityNames.isEmpty()
+        return providerConflicts.isEmpty() && daoConflicts.isEmpty() && entityConflicts.isEmpty()
+    }
+
+    private fun findDatabaseOwnershipConflicts(
+        models: List<HabitatDatabaseModel>,
+        ownershipKeys: (HabitatDatabaseModel) -> List<String>,
+    ): Map<String, List<HabitatDatabaseModel>> {
+        return models
+            .flatMap { model: HabitatDatabaseModel ->
+                ownershipKeys(model)
+                    .distinct()
+                    .map { key: String -> key to model }
+            }
+            .groupBy(
+                keySelector = { entry: Pair<String, HabitatDatabaseModel> -> entry.first },
+                valueTransform = { entry: Pair<String, HabitatDatabaseModel> -> entry.second },
+            )
+            .mapValues { entry: Map.Entry<String, List<HabitatDatabaseModel>> ->
+                entry.value
+                    .distinctBy(HabitatDatabaseModel::databaseQualifiedName)
+                    .sortedBy(HabitatDatabaseModel::databaseQualifiedName)
+            }
+            .filterValues { owners: List<HabitatDatabaseModel> -> owners.size > 1 }
+            .toSortedMap()
+    }
+
+    private fun reportDatabaseOwnershipConflicts(
+        conflicts: Map<String, List<HabitatDatabaseModel>>,
+        message: (conflictName: String, databaseNames: String) -> String,
+    ) {
+        conflicts.forEach { (conflictName: String, owners: List<HabitatDatabaseModel>) ->
+            val databaseNames: String = owners.joinToString { model: HabitatDatabaseModel ->
+                model.databaseQualifiedName
+            }
+            owners.forEach { model: HabitatDatabaseModel ->
+                reportError(model.declaration, message(conflictName, databaseNames))
+            }
+        }
     }
 
     private fun createProviderClassName(
@@ -496,6 +671,18 @@ class HabitatSymbolProcessor(
         }
     }
 
+    private fun KSDeclaration.isAccessibleFromGeneratedProvider(): Boolean {
+        var currentDeclaration: KSDeclaration? = this
+        while (currentDeclaration != null) {
+            val visibility: Visibility = currentDeclaration.getVisibility()
+            if (visibility != Visibility.PUBLIC && visibility != Visibility.INTERNAL) {
+                return false
+            }
+            currentDeclaration = currentDeclaration.parentDeclaration
+        }
+        return true
+    }
+
     private fun KSClassDeclaration.extendsClass(qualifiedName: String): Boolean {
         val visited: MutableSet<String> = mutableSetOf()
         return extendsClass(qualifiedName, visited)
@@ -566,6 +753,7 @@ class HabitatSymbolProcessor(
         val instanceAccessor: HabitatDatabaseInstanceAccessor,
         val daoMethods: List<HabitatDaoMethod>,
         val entities: List<HabitatEntity>,
+        val declaration: KSClassDeclaration,
         val sourceFile: KSFile?,
     ) {
 
@@ -574,7 +762,7 @@ class HabitatSymbolProcessor(
          */
         fun providerSourceFiles(): List<KSFile> {
             return listOfNotNull(sourceFile)
-                .plus(daoMethods.mapNotNull(HabitatDaoMethod::sourceFile))
+                .plus(daoMethods.flatMap(HabitatDaoMethod::sourceFiles))
                 .distinctBy(KSFile::filePath)
         }
 
@@ -594,7 +782,27 @@ class HabitatSymbolProcessor(
     private data class HabitatDaoMethod(
         val methodName: String,
         val daoClassName: ClassName,
-        val sourceFile: KSFile?,
+        val sourceFiles: List<KSFile>,
+    )
+
+    /**
+     * Habitat Dao accessor 解析候选.
+     */
+    private data class HabitatDaoAccessorCandidate(
+        val function: KSFunctionDeclaration,
+        val memberFunction: KSFunction,
+        val returnType: KSType,
+        val signature: HabitatDaoAccessorSignature,
+    )
+
+    /**
+     * Habitat Dao accessor 去重签名.
+     */
+    private data class HabitatDaoAccessorSignature(
+        val methodName: String,
+        val receiverTypeName: String?,
+        val parameterTypeNames: List<String?>,
+        val returnTypeName: String?,
     )
 
     /**
@@ -604,6 +812,20 @@ class HabitatSymbolProcessor(
         val memberName: String,
         val kind: HabitatDatabaseInstanceAccessorKind,
     )
+
+    /**
+     * Habitat 数据库实例入口解析结果.
+     */
+    private sealed interface HabitatDatabaseInstanceAccessorResult {
+
+        data class Found(
+            val accessor: HabitatDatabaseInstanceAccessor,
+        ) : HabitatDatabaseInstanceAccessorResult
+
+        data object Missing : HabitatDatabaseInstanceAccessorResult
+
+        data object Invalid : HabitatDatabaseInstanceAccessorResult
+    }
 
     /**
      * Habitat 数据库实例入口类型.

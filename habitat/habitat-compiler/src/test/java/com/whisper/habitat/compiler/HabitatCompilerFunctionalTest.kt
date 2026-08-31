@@ -5,6 +5,7 @@ import java.io.File
 import java.net.URL
 import org.gradle.testkit.runner.BuildResult
 import org.gradle.testkit.runner.GradleRunner
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -114,6 +115,534 @@ class HabitatCompilerFunctionalTest {
     }
 
     /**
+     * 验证 internal 数据库、实例入口、Dao accessor 和 Dao 对同模块生成代码可见.
+     */
+    @Test
+    fun generatesProviderForInternalDeclarations() {
+        val projectDir: File = createValidationProject(
+            daoDeclaration = "internal interface UserDao",
+            databaseDeclaration = "internal abstract class AppDatabase",
+            instanceAccessor = """
+                @HabitatDatabaseInstance
+                internal val instance: AppDatabase
+                    get() = error("No test instance.")
+            """.trimIndent(),
+            daoAccessor = "internal abstract fun userDao(): UserDao",
+        )
+
+        runBuild(projectDir)
+
+        val providerSource: String = generatedProviderFile(projectDir, "AppDatabaseHabitatDaoProvider").readText()
+        assertTrue(providerSource.contains("UserDao::class to { AppDatabase.instance.userDao() }"))
+    }
+
+    /**
+     * 验证不可访问的数据库在 KSP 阶段直接失败.
+     */
+    @Test
+    fun rejectsInaccessibleDatabase() {
+        val projectDir: File = createValidationProject(
+            databaseDeclaration = "private abstract class AppDatabase",
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "Habitat database com.example.database.AppDatabase and its containing declarations " +
+                "must be public or internal.",
+        )
+    }
+
+    /**
+     * 验证不可访问的 companion object 会使实例入口在 KSP 阶段失败.
+     */
+    @Test
+    fun rejectsInstanceAccessorInInaccessibleCompanionObject() {
+        val projectDir: File = createValidationProject(
+            companionDeclaration = "private companion object",
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "@HabitatDatabaseInstance property and its containing declarations " +
+                "must be public or internal.",
+        )
+    }
+
+    /**
+     * 验证 extension property 不能作为数据库实例入口.
+     */
+    @Test
+    fun rejectsExtensionPropertyInstanceAccessor() {
+        val projectDir: File = createValidationProject(
+            additionalDeclarations = "class InstanceReceiver",
+            instanceAccessor = """
+                @HabitatDatabaseInstance
+                val InstanceReceiver.instance: AppDatabase
+                    get() = error("No test instance.")
+            """.trimIndent(),
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "@HabitatDatabaseInstance property must not have an extension receiver.",
+        )
+    }
+
+    /**
+     * 验证 extension function 不能作为数据库实例入口.
+     */
+    @Test
+    fun rejectsExtensionFunctionInstanceAccessor() {
+        val projectDir: File = createValidationProject(
+            additionalDeclarations = "class InstanceReceiver",
+            instanceAccessor = """
+                @HabitatDatabaseInstance
+                fun InstanceReceiver.instance(): AppDatabase = error("No test instance.")
+            """.trimIndent(),
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "@HabitatDatabaseInstance function must not have an extension receiver.",
+        )
+    }
+
+    /**
+     * 验证 suspend function 不能作为数据库实例入口.
+     */
+    @Test
+    fun rejectsSuspendFunctionInstanceAccessor() {
+        val projectDir: File = createValidationProject(
+            instanceAccessor = """
+                @HabitatDatabaseInstance
+                suspend fun instance(): AppDatabase = error("No test instance.")
+            """.trimIndent(),
+        )
+
+        val result: BuildResult = assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "@HabitatDatabaseInstance function must not be suspend.",
+        )
+        assertFalse(
+            result.output.contains(
+                "Habitat database com.example.database.AppDatabase must declare a companion object property or " +
+                    "function annotated with @HabitatDatabaseInstance."
+            )
+        )
+    }
+
+    /**
+     * 验证无效入口不会影响其它数据库报告真正缺失的实例入口.
+     */
+    @Test
+    fun reportsMissingInstanceAccessorIndependentlyFromInvalidAccessor() {
+        val projectDir: File = createProject(
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @Dao
+                interface UserDao
+
+                class UserEntity
+                class LogEntity
+
+                @HabitatDatabase
+                @Database(entities = [UserEntity::class], version = 1)
+                abstract class InvalidDatabase : RoomDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        suspend fun instance(): InvalidDatabase = error("No test instance.")
+                    }
+
+                    abstract fun userDao(): UserDao
+                }
+
+                @HabitatDatabase
+                @Database(entities = [LogEntity::class], version = 1)
+                abstract class MissingDatabase : RoomDatabase() {
+
+                    abstract fun userDao(): UserDao
+                }
+            """.trimIndent()
+        )
+
+        val result: BuildResult = runBuildAndFail(projectDir)
+        val invalidDatabaseMissingMessage: String =
+            "Habitat database com.example.database.InvalidDatabase must declare a companion object property or " +
+                "function annotated with @HabitatDatabaseInstance."
+        val missingDatabaseMessage: String =
+            "Habitat database com.example.database.MissingDatabase must declare a companion object property or " +
+                "function annotated with @HabitatDatabaseInstance."
+
+        assertTrue(result.output.contains("@HabitatDatabaseInstance function must not be suspend."))
+        assertFalse(result.output.contains(invalidDatabaseMissingMessage))
+        assertTrue(result.output.contains(missingDatabaseMessage))
+        assertFalse(generatedRegistryFile(projectDir).exists())
+    }
+
+    /**
+     * 验证泛型 function 不能作为数据库实例入口.
+     */
+    @Test
+    fun rejectsGenericFunctionInstanceAccessor() {
+        val projectDir: File = createValidationProject(
+            instanceAccessor = """
+                @HabitatDatabaseInstance
+                fun <T> instance(): AppDatabase = error("No test instance.")
+            """.trimIndent(),
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "@HabitatDatabaseInstance function must not declare type parameters.",
+        )
+    }
+
+    /**
+     * 验证 protected Dao accessor 在 KSP 阶段直接失败.
+     */
+    @Test
+    fun rejectsProtectedDaoAccessor() {
+        val projectDir: File = createValidationProject(
+            daoAccessor = "protected abstract fun userDao(): UserDao",
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "Habitat Dao accessor userDao and its containing declarations must be public or internal.",
+        )
+    }
+
+    /**
+     * 验证带参数的抽象 Dao accessor 在 KSP 阶段直接失败.
+     */
+    @Test
+    fun rejectsParameterizedDaoAccessor() {
+        val projectDir: File = createValidationProject(
+            daoAccessor = "abstract fun userDao(id: Int): UserDao",
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "Habitat Dao accessor userDao must not declare parameters.",
+        )
+    }
+
+    /**
+     * 验证 extension Dao accessor 在 KSP 阶段直接失败.
+     */
+    @Test
+    fun rejectsExtensionDaoAccessor() {
+        val projectDir: File = createValidationProject(
+            additionalDeclarations = "class DaoReceiver",
+            daoAccessor = "abstract fun DaoReceiver.userDao(): UserDao",
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "Habitat Dao accessor userDao must not have an extension receiver.",
+        )
+    }
+
+    /**
+     * 验证 suspend Dao accessor 在 KSP 阶段直接失败.
+     */
+    @Test
+    fun rejectsSuspendDaoAccessor() {
+        val projectDir: File = createValidationProject(
+            daoAccessor = "abstract suspend fun userDao(): UserDao",
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "Habitat Dao accessor userDao must not be suspend.",
+        )
+    }
+
+    /**
+     * 验证泛型 Dao accessor 在 KSP 阶段直接失败.
+     */
+    @Test
+    fun rejectsGenericDaoAccessor() {
+        val projectDir: File = createValidationProject(
+            daoAccessor = "abstract fun <T> userDao(): UserDao",
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "Habitat Dao accessor userDao must not declare type parameters.",
+        )
+    }
+
+    /**
+     * 验证 nullable Dao accessor 在 KSP 阶段直接失败.
+     */
+    @Test
+    fun rejectsNullableDaoAccessor() {
+        val projectDir: File = createValidationProject(
+            daoAccessor = "abstract fun userDao(): UserDao?",
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "Habitat Dao accessor userDao must return a non-null Dao.",
+        )
+    }
+
+    /**
+     * 验证数据库从父类继承的 Dao accessor 会进入生成 Provider.
+     */
+    @Test
+    fun generatesProviderForInheritedDaoAccessor() {
+        val projectDir: File = createProject(
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @Dao
+                interface UserDao
+
+                @Dao
+                interface OrderDao
+
+                class UserEntity
+                class OrderEntity
+
+                abstract class BaseDatabase<D : Any> : RoomDatabase() {
+
+                    abstract fun userDao(): D
+                }
+
+                interface OrderDaoAccessors {
+
+                    fun orderDao(): OrderDao
+                }
+
+                @HabitatDatabase
+                @Database(entities = [UserEntity::class, OrderEntity::class], version = 1)
+                abstract class AppDatabase : BaseDatabase<UserDao>(), OrderDaoAccessors {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: AppDatabase
+                            get() = error("No test instance.")
+                    }
+                }
+            """.trimIndent()
+        )
+
+        runBuild(projectDir)
+
+        val providerSource: String = generatedProviderFile(projectDir, "AppDatabaseHabitatDaoProvider").readText()
+        assertTrue(providerSource.contains("UserDao::class to { AppDatabase.instance.userDao() }"))
+        assertTrue(providerSource.contains("OrderDao::class to { AppDatabase.instance.orderDao() }"))
+    }
+
+    /**
+     * 验证继承 accessor 源文件变化时会在增量构建中刷新 Provider.
+     */
+    @Test
+    fun regeneratesProviderWhenInheritedAccessorSourceChanges() {
+        val projectDir: File = createProject(
+            source = """
+                package com.example.database
+
+                import androidx.room.Database
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                class UserEntity
+
+                @HabitatDatabase
+                @Database(entities = [UserEntity::class], version = 1)
+                abstract class AppDatabase : BaseDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: AppDatabase
+                            get() = error("No test instance.")
+                    }
+                }
+            """.trimIndent()
+        )
+        val baseDatabasePath: String = "src/main/kotlin/com/example/database/BaseDatabase.kt"
+        writeFixtureSource(
+            projectDir = projectDir,
+            relativePath = baseDatabasePath,
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.RoomDatabase
+
+                @Dao
+                interface UserDao
+
+                abstract class BaseDatabase : RoomDatabase() {
+
+                    abstract fun userDao(): UserDao
+                }
+            """.trimIndent()
+        )
+
+        runBuild(projectDir)
+
+        val providerFile: File = generatedProviderFile(projectDir, "AppDatabaseHabitatDaoProvider")
+        assertTrue(providerFile.readText().contains("UserDao::class to { AppDatabase.instance.userDao() }"))
+
+        writeFixtureSource(
+            projectDir = projectDir,
+            relativePath = baseDatabasePath,
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.RoomDatabase
+
+                @Dao
+                interface UserDao
+
+                @Dao
+                interface OrderDao
+
+                abstract class BaseDatabase : RoomDatabase() {
+
+                    abstract fun userDao(): UserDao
+
+                    abstract fun orderDao(): OrderDao
+                }
+            """.trimIndent()
+        )
+
+        runBuild(projectDir)
+
+        val updatedProviderSource: String = providerFile.readText()
+        assertTrue(updatedProviderSource.contains("UserDao::class to { AppDatabase.instance.userDao() }"))
+        assertTrue(updatedProviderSource.contains("OrderDao::class to { AppDatabase.instance.orderDao() }"))
+    }
+
+    /**
+     * 验证子类 override 继承的 Dao accessor 时只生成一个 Dao 工厂.
+     */
+    @Test
+    fun generatesSingleFactoryForOverriddenDaoAccessor() {
+        val projectDir: File = createProject(
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @Dao
+                interface UserDao
+
+                class UserEntity
+
+                abstract class BaseDatabase : RoomDatabase() {
+
+                    abstract fun userDao(): UserDao
+                }
+
+                @HabitatDatabase
+                @Database(entities = [UserEntity::class], version = 1)
+                abstract class AppDatabase : BaseDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: AppDatabase
+                            get() = error("No test instance.")
+                    }
+
+                    abstract override fun userDao(): UserDao
+                }
+            """.trimIndent()
+        )
+
+        runBuild(projectDir)
+
+        val providerSource: String = generatedProviderFile(projectDir, "AppDatabaseHabitatDaoProvider").readText()
+        val factoryCount: Int = Regex("UserDao::class to").findAll(providerSource).count()
+        assertEquals(1, factoryCount)
+    }
+
+    /**
+     * 验证继承的 Dao accessor 仍参与跨数据库重复归属校验.
+     */
+    @Test
+    fun rejectsDuplicateInheritedDaoRegistrations() {
+        val projectDir: File = createProject(
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @Dao
+                interface UserDao
+
+                class UserEntity
+                class LogEntity
+
+                abstract class BaseDatabase : RoomDatabase() {
+
+                    abstract fun userDao(): UserDao
+                }
+
+                @HabitatDatabase
+                @Database(entities = [UserEntity::class], version = 1)
+                abstract class AppDatabase : BaseDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: AppDatabase
+                            get() = error("No test instance.")
+                    }
+                }
+
+                @HabitatDatabase
+                @Database(entities = [LogEntity::class], version = 1)
+                abstract class LogDatabase : BaseDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: LogDatabase
+                            get() = error("No test instance.")
+                    }
+                }
+            """.trimIndent()
+        )
+
+        val result: BuildResult = runBuildAndFail(projectDir)
+
+        assertTrue(result.output.contains("Dao com.example.database.UserDao is registered in multiple Habitat databases."))
+        assertFalse(generatedRegistryFile(projectDir).exists())
+    }
+
+    /**
      * 验证 nullable 数据库实例入口会在 KSP 阶段失败.
      */
     @Test
@@ -155,6 +684,12 @@ class HabitatCompilerFunctionalTest {
                 "@HabitatDatabaseInstance property must return a non-null com.example.database.AppDatabase."
             )
         )
+        assertFalse(
+            result.output.contains(
+                "Habitat database com.example.database.AppDatabase must declare a companion object property or " +
+                    "function annotated with @HabitatDatabaseInstance."
+            )
+        )
         assertFalse(generatedRegistryFile(projectDir).exists())
     }
 
@@ -192,6 +727,18 @@ class HabitatCompilerFunctionalTest {
 
                     abstract fun userDao(): UserDao
                 }
+            """.trimIndent()
+        )
+        writeFixtureSource(
+            projectDir = projectDir,
+            relativePath = "src/main/kotlin/com/example/database/LogDatabase.kt",
+            source = """
+                package com.example.database
+
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
 
                 @HabitatDatabase
                 @Database(entities = [LogEntity::class], version = 1)
@@ -210,9 +757,217 @@ class HabitatCompilerFunctionalTest {
         )
 
         val result: BuildResult = runBuildAndFail(projectDir)
+        val conflictMessage: String =
+            "Dao com.example.database.UserDao is registered in multiple Habitat databases. Conflicting databases: " +
+                "com.example.database.AppDatabase, com.example.database.LogDatabase."
 
-        assertTrue(result.output.contains("Dao com.example.database.UserDao is registered in multiple Habitat databases."))
+        assertEquals(2, Regex(Regex.escape(conflictMessage)).findAll(result.output).count())
+        assertTrue(result.output.contains("AppDatabase.kt:"))
+        assertTrue(result.output.contains("LogDatabase.kt:"))
         assertFalse(generatedRegistryFile(projectDir).exists())
+    }
+
+    /**
+     * 验证重复 Entity 会列出并定位全部冲突数据库.
+     */
+    @Test
+    fun reportsAllDatabasesForDuplicateEntityDeclarations() {
+        val projectDir: File = createProject(
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @Dao
+                interface UserDao
+
+                @Dao
+                interface LogDao
+
+                class SharedEntity
+
+                @HabitatDatabase
+                @Database(entities = [SharedEntity::class], version = 1)
+                abstract class AppDatabase : RoomDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: AppDatabase
+                            get() = error("No test instance.")
+                    }
+
+                    abstract fun userDao(): UserDao
+                }
+            """.trimIndent()
+        )
+        writeFixtureSource(
+            projectDir = projectDir,
+            relativePath = "src/main/kotlin/com/example/database/LogDatabase.kt",
+            source = """
+                package com.example.database
+
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @HabitatDatabase
+                @Database(entities = [SharedEntity::class], version = 1)
+                abstract class LogDatabase : RoomDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: LogDatabase
+                            get() = error("No test instance.")
+                    }
+
+                    abstract fun logDao(): LogDao
+                }
+            """.trimIndent()
+        )
+
+        val result: BuildResult = runBuildAndFail(projectDir)
+        val conflictMessage: String =
+            "Entity com.example.database.SharedEntity is declared in multiple Habitat databases. " +
+                "Conflicting databases: com.example.database.AppDatabase, com.example.database.LogDatabase."
+
+        assertEquals(2, Regex(Regex.escape(conflictMessage)).findAll(result.output).count())
+        assertTrue(result.output.contains("AppDatabase.kt:"))
+        assertTrue(result.output.contains("LogDatabase.kt:"))
+        assertFalse(generatedRegistryFile(projectDir).exists())
+    }
+
+    /**
+     * 验证 Provider 名称冲突会列出全部数据库并绑定到数据库声明.
+     */
+    @Test
+    fun reportsAllDatabasesForDuplicateProviderNames() {
+        val projectDir: File = createProject(
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @Dao
+                interface UserDao
+
+                @Dao
+                interface LogDao
+
+                class UserEntity
+                class LogEntity
+
+                class Outer {
+
+                    @HabitatDatabase
+                    @Database(entities = [UserEntity::class], version = 1)
+                    abstract class Inner : RoomDatabase() {
+
+                        companion object {
+
+                            @HabitatDatabaseInstance
+                            val instance: Inner
+                                get() = error("No test instance.")
+                        }
+
+                        abstract fun userDao(): UserDao
+                    }
+                }
+
+                @HabitatDatabase
+                @Database(entities = [LogEntity::class], version = 1)
+                abstract class Outer_Inner : RoomDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: Outer_Inner
+                            get() = error("No test instance.")
+                    }
+
+                    abstract fun logDao(): LogDao
+                }
+            """.trimIndent()
+        )
+
+        val result: BuildResult = runBuildAndFail(projectDir)
+        val conflictMessage: String =
+            "Habitat provider com.example.habitat.generated.providers.com.example.database." +
+                "Outer_InnerHabitatDaoProvider is generated by multiple Habitat databases. Conflicting databases: " +
+                "com.example.database.Outer.Inner, com.example.database.Outer_Inner."
+
+        assertEquals(2, Regex(Regex.escape(conflictMessage)).findAll(result.output).count())
+        assertTrue(result.output.contains("AppDatabase.kt:"))
+        assertFalse(generatedRegistryFile(projectDir).exists())
+    }
+
+    private fun createValidationProject(
+        additionalDeclarations: String = "",
+        daoDeclaration: String = "interface UserDao",
+        databaseDeclaration: String = "abstract class AppDatabase",
+        companionDeclaration: String = "companion object",
+        instanceAccessor: String = """
+            @HabitatDatabaseInstance
+            val instance: AppDatabase
+                get() = error("No test instance.")
+        """.trimIndent(),
+        daoAccessor: String = "abstract fun userDao(): UserDao",
+    ): File {
+        return createProject(
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @Dao
+                $daoDeclaration
+
+                class UserEntity
+
+                $additionalDeclarations
+
+                @HabitatDatabase
+                @Database(entities = [UserEntity::class], version = 1)
+                $databaseDeclaration : RoomDatabase() {
+
+                    $companionDeclaration {
+
+                        $instanceAccessor
+                    }
+
+                    $daoAccessor
+                }
+            """.trimIndent()
+        )
+    }
+
+    private fun assertValidationFailure(
+        projectDir: File,
+        expectedMessage: String,
+    ): BuildResult {
+        val result: BuildResult = runBuildAndFail(projectDir)
+
+        assertTrue(
+            "Expected compiler output to contain '$expectedMessage'.\n${result.output}",
+            result.output.contains(expectedMessage),
+        )
+        assertTrue(result.output.contains("AppDatabase.kt"))
+        assertFalse(generatedRegistryFile(projectDir).exists())
+        return result
     }
 
     private fun createProject(source: String): File {

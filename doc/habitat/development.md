@@ -4,6 +4,12 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                                  |
 |-----------------|---------|-------------------------------------------|
+| 2026-08-31      | whisper | 清理过时技术债和过程记录                  |
+| 2026-08-31      | whisper | 补齐 Android、Manifest、R8 和并发集成测试 |
+| 2026-08-31      | whisper | 消除级联误报并补全重复归属定位            |
+| 2026-08-31      | whisper | 补全生成代码可访问性和调用形态校验        |
+| 2026-08-31      | whisper | 支持继承 Dao accessor 收集与 override 去重 |
+| 2026-08-31      | whisper | 补充 Registry 类缺失时的 Runtime 降级测试 |
 | 2026-08-25      | whisper | 迁移到公共模板并更新插件命名空间与验证基线 |
 | 2026-08-20      | whisper | 标记稳定契约与关键协议的 Aegis 保护范围    |
 | 2026-07-28      | whisper | 整理 Habitat 模块结构、实现链路和验证基线 |
@@ -119,7 +125,7 @@ Resolver
   -> 查找 @HabitatDatabase
   -> 读取 habitat.registryPackage
   -> validate() 当前轮可用声明
-  -> 解析 RoomDatabase、实例入口、Dao 方法和 Entity
+  -> 解析 RoomDatabase、实例入口、直接/继承 Dao 方法和 Entity
   -> 累计 HabitatDatabaseModel
   -> 返回 deferred symbols
   -> finish() 检查最终 deferred 和重复声明
@@ -135,14 +141,17 @@ Resolver
 `@HabitatDatabase`:
 
 * 目标必须是具名 RoomDatabase class。
+* 数据库及其外层声明必须对同模块生成代码可见, 支持 `public` 和 `internal`。
 * 必须同时标记 Room `@Database`。
 * 必须继承 `androidx.room.RoomDatabase`。
 * 必须在 companion object 中声明唯一的 `@HabitatDatabaseInstance`。
 
 `@HabitatDatabaseInstance`:
 
-* 可以标记公开非空 property。
-* 可以标记公开无参 function。
+* 可以标记非空 property 或无参 function。
+* 入口及其外层声明必须对同模块生成代码可见, 支持 `public` 和 `internal`。
+* property 和 function 都不能带 extension receiver。
+* function 不能是 `suspend`, 也不能声明类型参数。
 * 返回类型必须等于当前 RoomDatabase 类型。
 * 不能声明多个入口。
 
@@ -151,12 +160,22 @@ Dao 方法:
 * 必须属于标记了 `@HabitatDatabase` 的 RoomDatabase。
 * 必须是无参抽象方法。
 * 返回类型声明必须标记 Room `@Dao`。
+* accessor、Dao 类型及其外层声明必须对同模块生成代码可见, 支持 `public` 和 `internal`。
+* accessor 不能带 extension receiver, 不能是 `suspend`, 也不能声明类型参数。
+* Dao 返回值不能 nullable。
+* 可以由数据库直接声明, 也可以从数据库父类或接口继承。
+* 子类 override 继承 accessor 时只使用最派生声明, 不重复生成 Dao 工厂。
+* 继承函数通过最终数据库类型解析, 支持父类类型参数绑定到具体 Dao 返回类型。
 
 全局校验:
 
 * Provider 全限定名不能重复。
 * 同一个 Dao 不能被多个 Habitat 数据库注册。
 * 同一个 Entity 不能被多个 Habitat 数据库声明。
+
+实例入口解析明确区分“有效”“缺失”和“无效”。缺失入口时报告数据库配置错误; 入口存在但声明形态无效时只保留原始
+symbol 上的根因, 不追加“缺少入口”的级联误报。Provider、Dao 或 Entity 重复归属时, 冲突数据库按全限定名排序,
+错误分别绑定到每个数据库声明并列出全部参与者。
 
 ### 3.4 生成代码
 
@@ -190,7 +209,8 @@ No Habitat database was found. Generated empty Habitat registry.
 
 ### 3.5 增量依赖
 
-Provider 关联 database source 和 Dao source。Registry 关联 database source、Dao source 和 Entity source。空 Registry 使用 `Dependencies.ALL_FILES`, 确保未来新增 `@HabitatDatabase` 时不会遗漏。
+Provider 关联 database source、Dao accessor source 和 Dao source。Registry 关联 database source、Dao accessor source、
+Dao source 和 Entity source。空 Registry 使用 `Dependencies.ALL_FILES`, 确保未来新增 `@HabitatDatabase` 时不会遗漏。
 
 ## 4. Runtime
 
@@ -279,8 +299,8 @@ Registry 通过 Manifest 字符串反射加载, 因此类名、public 无参构�
 | 2.7 | P2 | Provider 生成路径纳入数据库全限定名                 |
 | 2.8 | P2 | 拒绝 nullable `@HabitatDatabaseInstance` |
 | 2.9 | P3 | 支持 KSP 多 round 和 final deferred error  |
-
-剩余 P3 文档问题: `ManifestRegistryLoader.load()` 的 `@return` 仍描述为排序去重后的 Registry 列表, 但当前实现只读取固定 metadata 并最多创建一个 Registry。建议后续调整注释。
+| 2.10 | P1 | 支持继承 Dao accessor 收集、override 去重和重复归属校验 |
+| 2.11 | P2 | 补全生成代码可访问性和调用形态前置校验           |
 
 ## 7. 验证基线
 
@@ -305,24 +325,26 @@ starter 默认不在 app 中启用 Habitat。接入到数据库装配模块后, 
 <module>/build/intermediates/merged_manifest/<variant>/process<Variant>MainManifest/AndroidManifest.xml
 ```
 
-专项测试覆盖正常生成、编译链路和 debug AAR consumer rules 打包。接入方还需要验证实际 Variant 的 Manifest 合并、release R8、library AAR 被外部 app 消费和异常分支运行时行为。
+专项测试覆盖正常生成与编译链路、debug AAR consumer rules 打包、真实 application/library Variant 与 KSP 参数接线、
+外部 AAR Manifest metadata 冲突和 release R8 反射 ABI。接入方仍需要结合业务数据库与发布配置验证最终 release 包中的
+初始化和 Dao 获取流程。
 
 ## 8. 测试覆盖
 
 Habitat 已补充 dedicated test 目录:
 
-* `habitat-gradle-plugin/src/test`: 覆盖 Manifest 任务、插件模块类型白名单和装配模块唯一性服务。
-* `habitat/habitat-runtime/src/test`: 覆盖 `HabitatFactory` 未初始化使用错误和已安装 Provider 的 Dao 获取。
-* `habitat/habitat-compiler/src/test`: 使用真实 compiler JAR 和 KSP Gradle 插件覆盖 Provider / Registry 生成、function 实例入口、nullable 实例入口拒绝和重复 Dao 拒绝。
+* `habitat-gradle-plugin/src/test`: 覆盖 Manifest 任务、插件模块类型白名单、装配模块唯一性服务, 以及真实 AGP/KSP 下的
+  application/library 接线、外部 AAR metadata 合并冲突和 release R8 consumer rule。
+* `habitat/habitat-runtime/src/test`: 覆盖 `HabitatFactory` 未初始化使用错误、已安装 Provider 的 Dao 获取、初始化与 `get()`
+  的并发交错, 以及 metadata 缺失、类不存在、类型不匹配、构造失败、Registry/Provider 读取失败时记录 warning 并安装
+  空 Dao 注册表的降级行为。
+* `habitat/habitat-compiler/src/test`: 使用真实 compiler JAR 和 KSP Gradle 插件覆盖 Provider / Registry 生成、function
+  实例入口、nullable 实例入口拒绝、直接/继承 Dao 生成、override 去重、继承 accessor 增量更新、重复 Dao 拒绝, 以及
+  生成代码可访问性、不支持调用形态的前置校验、实例入口非级联诊断和重复归属源码定位。
 
 后续建议继续补充:
 
-* Gradle plugin application / library 两类模块的完整 KSP 参数配置功能测试。
 * KSP 多 round 和 final deferred error 测试。
-* Runtime Manifest metadata 缺失、类不存在、类型不匹配、构造失败的加载测试。
-* HabitatFactory 与数据库实例初始化交错的并发测试。
-
-旧脚手架文件的 add/delete 暂存状态已清理。提交 Habitat 变更前仍应复查 staging, 避免将无关 scaffold 残影带入提交。
 
 ## 9. Aegis 保护范围
 

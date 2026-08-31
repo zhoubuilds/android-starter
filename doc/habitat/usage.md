@@ -4,6 +4,10 @@
 
 | 修订时间（CST）  | 修订人     | 修订说明                  |
 |------------|---------|-----------------------|
+| 2026-08-31 | whisper | 补充编译错误定位和冲突参与者说明 |
+| 2026-08-31 | whisper | 明确生成代码可访问性和声明形态约束 |
+| 2026-08-31 | whisper | 明确继承 Dao accessor 的注册语义 |
+| 2026-08-31 | whisper | 明确 compiler 接入条件与 Registry 缺失降级语义 |
 | 2026-08-25 | whisper | 迁移到公共模板并更新插件命名空间       |
 | 2026-07-28 | whisper | 整理 Habitat 接入、使用和排错说明 |
 
@@ -28,7 +32,8 @@ Habitat 不提供:
 
 ## 2. 接入模块类型
 
-只有最终数据库装配模块需要应用 Habitat Gradle 插件和 KSP processor。该模块通常是 app, 也可以是一个被 app 依赖的 Android library。
+需要使用 Habitat 自动注册 Dao 时, 只有最终数据库装配模块需要应用 Habitat Gradle 插件和 KSP processor。该模块通常是 app,
+也可以是一个被 app 依赖的 Android library。
 
 starter 默认不在 app 中启用 Habitat。项目存在需要统一发现的 Room Dao 时, 再由唯一数据库装配模块按本文步骤显式接入。
 
@@ -75,7 +80,7 @@ library 装配模块使用 `alias(libs.plugins.android.library)`。
 
 ## 4. 配置依赖
 
-装配模块需要依赖 runtime 和 compiler:
+需要使用 Habitat 自动注册 Dao 的装配模块依赖 runtime 和 compiler:
 
 ```kotlin
 dependencies {
@@ -92,7 +97,9 @@ dependencies {
 }
 ```
 
-当前插件只检查 KSP Gradle 插件是否存在, 不会自动添加 `habitat-compiler` 依赖。遗漏 processor 时可能生成空 Registry 或无法生成 Registry, 因此需要检查每个生产 Variant 的 KSP 依赖。
+当前插件只检查 KSP Gradle 插件是否存在, 不会强制或自动添加 `habitat-compiler` 依赖。未接入 compiler 不会导致构建失败;
+Runtime 找不到生成 Registry 时会记录 warning, 并安装空 Dao 注册表。这是受支持的容错结果, 不是自动注册 Dao 时的推荐配置。
+需要自动注册 Dao 时, 最终装配模块仍必须为每个生产 Variant 接入 processor。
 
 ## 5. 声明数据库
 
@@ -113,10 +120,19 @@ abstract class AppDataBase : RoomDatabase() {
 }
 ```
 
+数据库及其外层声明需要对同模块生成代码可见, 可以使用 `public` 或 `internal`, 不能使用 `private`、`protected` 或
+Java package-private。
+
 Dao 方法约束:
 
 * 必须是无参抽象方法。
 * 返回类型必须是标记了 Room `@Dao` 的类型。
+* accessor、Dao 类型及其外层声明必须对同模块生成代码可见, 可以使用 `public` 或 `internal`。
+* 不能带 extension receiver, 不能是 `suspend`, 也不能声明类型参数。
+* Dao 返回值不能 nullable。
+* 可以直接声明在当前数据库中, 也可以从数据库父类或接口继承。
+* 子类 override 继承方法时只注册最派生声明。
+* 泛型父类 accessor 按最终数据库绑定的具体 Dao 返回类型注册。
 * 同一个 Dao 类型只能出现在一个参与 Habitat 的数据库中。
 
 Entity 约束:
@@ -182,10 +198,14 @@ fun instance(): AppDataBase {
 
 * 必须在 RoomDatabase companion object 中。
 * 一个数据库只能声明一个入口。
-* 入口必须 public。
+* 入口及其外层声明必须对同模块生成代码可见, 可以使用 `public` 或 `internal`。
 * 返回类型必须是当前数据库类型。
 * 返回值不能 nullable。
-* 函数入口不能声明参数。
+* 属性和函数都不能带 extension receiver。
+* 函数入口不能声明参数, 不能是 `suspend`, 也不能声明类型参数。
+
+不支持的实例入口或 Dao accessor 会由 KSP 直接在原始声明处报告文件、行号和具体原因, 不会继续生成必然无法编译的
+Provider。Dao、Entity 或 Provider 重复归属时, 每个冲突数据库声明都会收到包含全部参与数据库名称的错误。
 
 ## 7. 初始化
 
@@ -269,7 +289,7 @@ release 开启 R8 后至少检查:
 
 检查:
 
-* Dao 方法是否声明在 `@HabitatDatabase` 数据库中。
+* Dao 方法是否声明在 `@HabitatDatabase` 数据库中, 或由该数据库继承。
 * Dao 返回类型是否标记了 Room `@Dao`。
 * 装配模块是否添加 `ksp(project(":habitat:habitat-compiler"))`。
 * 是否执行了 `HabitatFactory.initialize(application)`。
@@ -293,8 +313,9 @@ release 开启 R8 后至少检查:
 
 ### 10.5 运行时 Registry class not found
 
-检查:
+Runtime 会记录 warning 并安装空 Dao 注册表。需要自动注册 Dao 时检查:
 
+* 装配模块是否为当前 Variant 接入 `habitat-compiler`。
 * merged Manifest 中是否存在 `com.whisper.habitat.registry`。
 * metadata value 是否指向 `<android.namespace>.habitat.generated.GeneratedHabitatRegistry`。
 * release 包是否保留 Registry 类名和 public 无参构造。

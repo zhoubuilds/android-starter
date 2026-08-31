@@ -48,4 +48,7 @@ dependencies {
     testImplementation("com.android.tools.build:gradle-api:$agpApiVersion")
     testImplementation("com.google.devtools.ksp:symbol-processing-gradle-plugin:$kspPluginVersion")
     testImplementation("junit:junit:$junitVersion")
+
+    // 真实 Android TestKit fixture 离线解析完整 AGP 实现, 不进入插件发布产物.
+    testRuntimeOnly("com.android.tools.build:gradle:$agpApiVersion")
 }
