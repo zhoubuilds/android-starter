@@ -104,6 +104,49 @@ class PrismPluginFunctionalTest {
     }
 
     /**
+     * 验证 exports 同时支持标量字面量和 values 引用.
+     */
+    @Test
+    fun exports_withLiteralsAndValueReference_exposesResolvedValues() {
+        val projectDir: File = createProject(
+            config =
+                """
+                [values]
+                sharedValue = "from-values"
+
+                [exports]
+                literalString = "literal"
+                literalBoolean = true
+                literalInteger = 7
+                literalLong = 2147483648
+                literalDouble = 1.5
+                referencedString = { reference = "values.sharedValue" }
+                """.trimIndent(),
+            additionalBuildScript =
+                """
+                tasks.register('verifyExports') {
+                    doLast {
+                        def stringType = kotlin.jvm.JvmClassMappingKt.getKotlinClass(String.class)
+                        def booleanType = kotlin.jvm.JvmClassMappingKt.getKotlinClass(Boolean.class)
+                        def intType = kotlin.jvm.JvmClassMappingKt.getKotlinClass(Integer.class)
+                        def longType = kotlin.jvm.JvmClassMappingKt.getKotlinClass(Long.class)
+                        def doubleType = kotlin.jvm.JvmClassMappingKt.getKotlinClass(Double.class)
+
+                        assert prismAppConfig.get('literalString', stringType) == 'literal'
+                        assert prismAppConfig.get('literalBoolean', booleanType)
+                        assert prismAppConfig.get('literalInteger', intType) == 7
+                        assert prismAppConfig.get('literalLong', longType) == 2147483648L
+                        assert prismAppConfig.get('literalDouble', doubleType) == 1.5d
+                        assert prismAppConfig.get('referencedString', stringType) == 'from-values'
+                    }
+                }
+                """.trimIndent()
+        )
+
+        runBuild(projectDir = projectDir, "verifyExports")
+    }
+
+    /**
      * 验证未开启 BuildConfig 时聚合任务不会引用不存在的 AGP 任务.
      */
     @Test
@@ -226,6 +269,50 @@ class PrismPluginFunctionalTest {
             result.output.contains(
                 "Unsupported app config reference at " +
                     "default.buildConfig.INVALID_REFERENCE: exports.applicationId"
+            )
+        )
+    }
+
+    /**
+     * 验证 exports 引用仍然只能指向 values.
+     */
+    @Test
+    fun exportReference_whenNamespaceUnsupported_reportsExportPath() {
+        val projectDir: File = createProject(
+            config =
+                """
+                [exports]
+                invalidReference = { reference = "exports.other" }
+                """.trimIndent()
+        )
+
+        val result: BuildResult = runBuildAndFail(projectDir = projectDir, "help")
+
+        assertTrue(
+            result.output.contains(
+                "Unsupported app config reference at exports.invalidReference: exports.other"
+            )
+        )
+    }
+
+    /**
+     * 验证 exports 引用不存在的 values 字段时报告导出路径.
+     */
+    @Test
+    fun exportReference_whenValueMissing_reportsExportPath() {
+        val projectDir: File = createProject(
+            config =
+                """
+                [exports]
+                missingReference = { reference = "values.missing" }
+                """.trimIndent()
+        )
+
+        val result: BuildResult = runBuildAndFail(projectDir = projectDir, "help")
+
+        assertTrue(
+            result.output.contains(
+                "Unknown app config reference at exports.missingReference: values.missing"
             )
         )
     }

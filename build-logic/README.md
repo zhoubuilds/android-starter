@@ -1,5 +1,11 @@
 # Prism Gradle Plugin
 
+## Revision history
+
+| Date (CST) | Author  | Change                                      |
+|------------|---------|---------------------------------------------|
+| 2026-08-31 | whisper | Allow exports to use literals or references |
+
 `build-logic` contains the optional `com.whisper.prism` plugin. Prism reads one TOML application configuration and applies its exported values, shared Android configuration, and optional environment product flavors.
 
 ## Apply the plugin
@@ -39,11 +45,11 @@ An explicit file must exist and never silently falls back. When the property is 
 
 ```toml
 [values]
-applicationId = "com.example.app"
 serviceApiKey = "example-api-key"
 
 [exports]
-applicationId = { reference = "values.applicationId" }
+applicationId = "com.example.app"
+serviceApiKey = { reference = "values.serviceApiKey" }
 
 [default]
 buildConfig.API_HOST = "https://api.example.com"
@@ -61,13 +67,13 @@ buildConfig.API_HOST = "https://api.example.com"
 ```
 
 - `[values]` stores reusable scalar values.
-- `[exports]` exposes selected `values.*` entries to build scripts through `prismAppConfig.get<T>(name)`.
+- `[exports]` exposes scalar literals or selected `values.*` entries to build scripts through `prismAppConfig.get<T>(name)`.
 - `[default]` configures every variant through Android `defaultConfig`.
 - `[[environments]]` is optional. When present, Prism creates an `env` flavor dimension and one product flavor per entry.
 - `buildConfig`, `manifestPlaceholders`, and `resValues` are the only supported variant sections.
-- References must use `{ reference = "values.<name>" }`.
+- References must use `{ reference = "values.<name>" }`; `[values]` remains the only reference namespace.
 
-Supported scalar types are String, Boolean, Integer/Long, and finite Double. Prism validates TOML structure, references, environment names, BuildConfig identifiers, and value types during Gradle configuration.
+Exports and reusable values support String, Boolean, Integer/Long, and finite Double. Prism validates TOML structure, references, environment names, BuildConfig identifiers, and value types during Gradle configuration.
 
 Application metadata remains explicit in the Android DSL:
 

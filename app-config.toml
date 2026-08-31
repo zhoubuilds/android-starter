@@ -1,11 +1,25 @@
 # Default application configuration used when prism.appConfig.file is not set.
+# See build-logic/README.md for the complete Prism contract and opt-out steps.
+#
+# Optional reusable scalar values. References can only target this table by using
+# { reference = "values.<name>" }. Do not commit real secrets to this public template.
+#
+# [values]
+# sharedApiKey = "example-api-key"
 
-[values]
+# Values exposed to module build scripts through prismAppConfig.get<T>("name").
+# Each export can be a supported scalar literal or a reference to values.*.
+[exports]
 applicationId = "com.whisper.starter"
 
-[exports]
-applicationId = { reference = "values.applicationId" }
-
+# Shared Android defaultConfig values applied to every variant.
+# Supported sections are buildConfig, manifestPlaceholders, and resValues.
 [default]
 buildConfig.API_VERSION = "1.0.0"
 buildConfig.API_HOST = "https://placeholder.invalid/"
+
+# Optional environment flavors. Each entry creates one flavor in the env dimension.
+#
+# [[environments]]
+# name = "dev"
+# buildConfig.API_HOST = "https://dev-api.example.com/"

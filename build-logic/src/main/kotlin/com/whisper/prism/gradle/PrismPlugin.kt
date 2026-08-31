@@ -61,11 +61,11 @@ import java.io.File
  *
  * ```toml
  * [values]
- * applicationId = "com.example.app"
  * serviceApiKey = "example-api-key"
  *
  * [exports]
- * applicationId = { reference = "values.applicationId" }
+ * applicationId = "com.example.app"
+ * serviceApiKey = { reference = "values.serviceApiKey" }
  *
  * [default]
  * buildConfig.API_HOST = "https://api.example.com"
@@ -87,7 +87,7 @@ import java.io.File
  * 顶层只允许以下分组:
  *
  * - <code>&#91;values&#93;</code>: 保存 TOML 内部复用的基础值. 支持 String、Boolean、Integer、Long 和 Double, 不支持 reference.
- * - <code>&#91;exports&#93;</code>: 选择允许模块构建脚本读取的值. 每个导出都必须引用 `values.*`.
+ * - <code>&#91;exports&#93;</code>: 选择允许模块构建脚本读取的值. 每个导出可以使用标量字面量或引用 `values.*`.
  * - <code>&#91;default&#93;</code>: 配置所有 Android variants 共享的 `defaultConfig` 字段.
  * - <code>&#91;&#91;environments&#93;&#93;</code>: 配置 `env` flavor dimension 下的环境 product flavor 和环境差异字段.
  *
@@ -110,11 +110,12 @@ import java.io.File
  * ## reference 和 exports
  *
  * reference 固定使用 `{ reference = "values.<name>" }` 结构, 只能指向 <code>&#91;values&#93;</code>. reference 不能指向
- * exports、default、environment 或另一个 reference, 因此不会产生递归解析或循环引用.
+ * exports, default, environment 或另一个 reference, 因此不会产生递归解析或循环引用.
  *
- * 模块构建脚本通过 `prismAppConfig.get<T>("name")` 读取 <code>&#91;exports&#93;</code>. 支持的 `T` 为 `String`、
- * `Boolean`、`Int`、`Long` 和 `Double`. TOML Integer 由解析器保存为 Long; 读取为 Int 时会额外检查 Int 取值范围.
- * 未导出、类型不匹配或类型不受支持时会在 Gradle 配置阶段失败.
+ * 模块构建脚本通过 `prismAppConfig.get<T>("name")` 读取 <code>&#91;exports&#93;</code>. export 支持 String, Boolean,
+ * Integer/Long 和有限 Double 字面量, 也可以引用相同类型的 values. 支持的 `T` 为 `String`, `Boolean`, `Int`,
+ * `Long` 和 `Double`. TOML Integer 由解析器保存为 Long; 读取为 Int 时会额外检查 Int 取值范围. 未导出, 类型不匹配或
+ * 类型不受支持时会在 Gradle 配置阶段失败.
  *
  * ## 校验和辅助任务
  *
@@ -607,8 +608,7 @@ class PrismPlugin : Plugin<Project> {
                 val name: String = entry.key
                 val path: String = "$EXPORTS_KEY.$name"
                 validateValueName(name = name, path = EXPORTS_KEY)
-                name to entry.value.toValueReference(path = path)
-                    .resolve(values = values, path = path)
+                name to entry.value.resolveValue(values = values, path = path)
             }
     }
 
