@@ -4,6 +4,7 @@
 
 | 修订时间（CST）  | 修订人     | 修订说明                  |
 |------------|---------|-----------------------|
+| 2026-08-31 | whisper | 支持 Dao qualifier 多数据库绑定和类型安全获取 |
 | 2026-08-31 | whisper | 补充编译错误定位和冲突参与者说明 |
 | 2026-08-31 | whisper | 明确生成代码可访问性和声明形态约束 |
 | 2026-08-31 | whisper | 明确继承 Dao accessor 的注册语义 |
@@ -17,9 +18,9 @@
 
 Habitat 提供:
 
-* 通过 Dao 类型获取 Room Dao 实例。
+* 通过 Dao 类型获取唯一 Room Dao 实例, 或通过 Dao 类型和 qualifier 精确获取实例。
 * application/library 装配模块的 Provider、Registry 和 Manifest 自动生成。
-* 多 RoomDatabase 下的 Dao 唯一归属校验。
+* 多 RoomDatabase 下的 Dao qualifier 完整性和唯一性校验。
 
 Habitat 不提供:
 
@@ -133,12 +134,50 @@ Dao 方法约束:
 * 可以直接声明在当前数据库中, 也可以从数据库父类或接口继承。
 * 子类 override 继承方法时只注册最派生声明。
 * 泛型父类 accessor 按最终数据库绑定的具体 Dao 返回类型注册。
-* 同一个 Dao 类型只能出现在一个参与 Habitat 的数据库中。
+* 同一个 Dao 类型可以出现在多个参与 Habitat 的数据库中, 但必须通过 `@HabitatDaoBinding` 消除歧义。
 
 Entity 约束:
 
 * Entity 仍由 Room `@Database.entities` 手动声明。
-* 同一个 Entity 不能出现在多个参与 Habitat 的数据库中。
+* 同一个 Entity 可以出现在多个数据库中, Habitat 不额外限制; schema 和 Dao 查询合法性由 Room 编译器检查。
+
+### 5.1 声明 Dao binding
+
+推荐使用语义稳定的常量作为 qualifier, 不使用数据库类名:
+
+```kotlin
+object UserStorage {
+
+    const val ACCOUNT: String = "user.account"
+
+    const val ARCHIVE: String = "user.archive"
+}
+```
+
+同一个 Dao 由多个数据库提供时, 每个 accessor 都必须显式标记:
+
+```kotlin
+@HabitatDaoBinding(UserStorage.ACCOUNT)
+abstract fun userDao(): UserDao
+```
+
+另一个数据库使用不同 qualifier:
+
+```kotlin
+@HabitatDaoBinding(UserStorage.ARCHIVE)
+abstract fun userDao(): UserDao
+```
+
+绑定规则:
+
+* 标准接入推荐为 accessor 显式声明 qualifier; 省略注解只用于唯一绑定的简化写法和现有代码兼容。
+* 同一个 Dao 只有一个 accessor 时可以省略 `@HabitatDaoBinding`; 生成的内部 key 为 `null`。
+* 唯一 accessor 显式标记后, 既可以带 qualifier 获取, 也可以省略 qualifier 获取。
+* 同一个 Dao 有多个 accessor 时必须全部显式标记, 混用显式和省略形式会导致 KSP error。
+* qualifier 不能为空白, 并且在同一个 Dao 类型内必须唯一。
+* 不同 Dao 类型可以复用同一个 qualifier。
+* Room 不允许同一个 RoomDatabase 声明多个返回同一 Dao 类型的抽象 accessor; 多绑定用于不同数据库之间的装配。
+* Habitat 不提供默认 binding; 多个 binding 下省略 qualifier 不会选择其中任意一个。
 
 ## 6. 声明数据库实例入口
 
@@ -251,11 +290,32 @@ val userDao: UserDao? = HabitatFactory.get(UserDao::class)
 val userDao: UserDao? = HabitatFactory.get<UserDao>()
 ```
 
+按 Dao 类型和 qualifier 精确获取:
+
+```kotlin
+val userDao: UserDao? = HabitatFactory.get(
+    UserDao::class,
+    UserStorage.ACCOUNT,
+)
+```
+
+或使用 reified 版本:
+
+```kotlin
+val userDao: UserDao? = HabitatFactory.get<UserDao>(UserStorage.ACCOUNT)
+```
+
 返回值为 nullable:
 
+* 目标 Dao 只有一个绑定时, 非限定获取返回该唯一绑定, 无论 accessor 是否显式标记。
+* 目标 Dao 有多个绑定时, 非限定获取记录 warning 并返回 `null`, 不会任意选择数据库。
 * Dao 未注册时返回 `null`。
+* qualifier 为空、未注册或不属于请求的 Dao 类型时返回 `null`。
 * Dao 工厂执行失败时返回 `null`。
 * Dao 工厂返回类型不匹配时返回 `null`。
+
+Provider 和 `HabitatFactory` 保存的是延迟工厂函数。安装 Registry 时不会访问数据库实例或缓存 Dao; 只有成功命中绑定后才会
+调用对应数据库 accessor。
 
 初始化前调用属于使用错误:
 
@@ -294,15 +354,23 @@ release 开启 R8 后至少检查:
 * 装配模块是否添加 `ksp(project(":habitat:habitat-compiler"))`。
 * 是否执行了 `HabitatFactory.initialize(application)`。
 
-### 10.2 `Missing KSP option 'habitat.registryPackage'`
+### 10.2 `Dao binding not found` 或 `Multiple Dao bindings found`
+
+检查:
+
+* `HabitatFactory.get()` 使用的 qualifier 是否与 accessor 上的 `@HabitatDaoBinding` 完全一致。
+* 同一个 Dao 存在多个 binding 时是否使用了带 qualifier 的重载。
+* qualifier 是否为非空白的稳定常量。
+
+### 10.3 `Missing KSP option 'habitat.registryPackage'`
 
 检查装配模块是否应用 `com.whisper.habitat` 插件, 并且 Android plugin 是否在 Habitat 之前应用。
 
-### 10.3 `Only one Habitat assembly module is allowed`
+### 10.4 `Only one Habitat assembly module is allowed`
 
 同一个 Gradle Build 中有多个源码模块应用了 `com.whisper.habitat`。只保留最终数据库装配模块上的插件。
 
-### 10.4 生成 Registry 为空
+### 10.5 生成 Registry 为空
 
 检查:
 
@@ -311,7 +379,7 @@ release 开启 R8 后至少检查:
 * 数据库是否声明唯一的 `@HabitatDatabaseInstance`。
 * KSP 是否有 error 或 final deferred symbol。
 
-### 10.5 运行时 Registry class not found
+### 10.6 运行时 Registry class not found
 
 Runtime 会记录 warning 并安装空 Dao 注册表。需要自动注册 Dao 时检查:
 

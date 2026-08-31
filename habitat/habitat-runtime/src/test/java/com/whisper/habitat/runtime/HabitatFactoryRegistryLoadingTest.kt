@@ -8,13 +8,13 @@ import android.util.Log
 import com.whisper.habitat.runtime.registry.HabitatDaoProvider
 import com.whisper.habitat.runtime.registry.HabitatRegistry
 import java.lang.reflect.Field
+import java.lang.reflect.Method
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.reflect.KClass
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -44,14 +44,14 @@ class HabitatFactoryRegistryLoadingTest {
 
     @Before
     fun setUp() {
-        resetFactoryState()
+        resetDaoBindings()
         clearRegistryMetadata(RuntimeEnvironment.getApplication())
         ShadowLog.clear()
     }
 
     @After
     fun tearDown() {
-        resetFactoryState()
+        resetDaoBindings()
         clearRegistryMetadata(RuntimeEnvironment.getApplication())
         ShadowLog.clear()
     }
@@ -155,6 +155,78 @@ class HabitatFactoryRegistryLoadingTest {
     }
 
     /**
+     * 验证多绑定 Dao 的非限定获取记录 warning 并返回 null.
+     */
+    @Test
+    fun getWithoutQualifierWhenMultipleBindingsWarnsAndReturnsNull() {
+        var factoryCallCount: Int = 0
+        installProviders(
+            listOf(
+                TestDaoProvider(
+                    mapOf(
+                        ACCOUNT_QUALIFIER to {
+                            factoryCallCount += 1
+                            TestDao()
+                        },
+                        ARCHIVE_QUALIFIER to {
+                            factoryCallCount += 1
+                            TestDao()
+                        },
+                    )
+                )
+            )
+        )
+
+        assertNull(HabitatFactory.get<TestDao>())
+        assertEquals(0, factoryCallCount)
+
+        val warning: ShadowLog.LogItem = warningContaining("Multiple Dao bindings found")
+        assertTrue(warning.msg.contains(ACCOUNT_QUALIFIER))
+        assertTrue(warning.msg.contains(ARCHIVE_QUALIFIER))
+    }
+
+    /**
+     * 验证 Dao 类型下不存在请求的限定符时记录 warning 并返回 null.
+     */
+    @Test
+    fun getWithUnknownQualifierWarnsAndReturnsNull() {
+        installProviders(
+            listOf(
+                TestDaoProvider(
+                    mapOf(ACCOUNT_QUALIFIER to { TestDao() })
+                )
+            )
+        )
+
+        assertNull(HabitatFactory.get<TestDao>(ARCHIVE_QUALIFIER))
+
+        val warning: ShadowLog.LogItem = warningContaining("Dao binding not found")
+        assertTrue(warning.msg.contains(checkNotNull(TestDao::class.qualifiedName)))
+        assertTrue(warning.msg.contains(ARCHIVE_QUALIFIER))
+    }
+
+    /**
+     * 验证限定工厂返回错误类型时记录 warning 并返回 null.
+     */
+    @Test
+    fun getWithQualifierWhenFactoryReturnsWrongTypeWarnsAndReturnsNull() {
+        installProviders(
+            listOf(
+                TestDaoProvider(
+                    mapOf(ACCOUNT_QUALIFIER to { OtherDao() })
+                )
+            )
+        )
+
+        assertNull(HabitatFactory.get<TestDao>(ACCOUNT_QUALIFIER))
+
+        val warning: ShadowLog.LogItem = warningContaining("Dao type mismatch")
+        assertTrue(warning.msg.contains(checkNotNull(TestDao::class.qualifiedName)))
+        assertTrue(warning.msg.contains(checkNotNull(OtherDao::class.qualifiedName)))
+        assertTrue(warning.msg.contains(ACCOUNT_QUALIFIER))
+    }
+
+    /**
      * 验证 get 会等待正在进行的 initialize 发布状态, 而不是误报未初始化.
      */
     @Test
@@ -221,11 +293,19 @@ class HabitatFactoryRegistryLoadingTest {
             .single { item: ShadowLog.LogItem -> item.msg.contains(message) }
     }
 
-    private fun resetFactoryState() {
-        val field: Field = HabitatFactory::class.java.getDeclaredField("stateReference")
+    private fun resetDaoBindings() {
+        val field: Field = HabitatFactory::class.java.getDeclaredField("daoBindings")
         field.isAccessible = true
-        val reference: AtomicReference<*> = field.get(HabitatFactory) as AtomicReference<*>
-        reference.set(null)
+        field.set(HabitatFactory, null)
+    }
+
+    private fun installProviders(providers: List<HabitatDaoProvider>) {
+        val method: Method = HabitatFactory::class.java.getDeclaredMethod(
+            "installProviders",
+            List::class.java,
+        )
+        method.isAccessible = true
+        method.invoke(HabitatFactory, providers)
     }
 
     class NotRegistry
@@ -281,20 +361,26 @@ class HabitatFactoryRegistryLoadingTest {
 
     private class ThrowingProvider : HabitatDaoProvider {
 
-        override val daoFactories: Map<KClass<*>, () -> Any>
+        override val daoFactories: Map<KClass<*>, Map<String?, () -> Any>>
             get() = error("Provider factories failed.")
     }
 
     private class TestDaoProvider(
-        private val dao: TestDao,
+        factories: Map<String?, () -> Any>,
     ) : HabitatDaoProvider {
 
-        override val daoFactories: Map<KClass<*>, () -> Any> = mapOf(
-            TestDao::class to { dao }
+        constructor(dao: TestDao) : this(
+            factories = mapOf(null to { dao })
+        )
+
+        override val daoFactories: Map<KClass<*>, Map<String?, () -> Any>> = mapOf(
+            TestDao::class to factories
         )
     }
 
     class TestDao
+
+    class OtherDao
 
     private companion object {
 
@@ -305,6 +391,10 @@ class HabitatFactoryRegistryLoadingTest {
         private const val ASYNC_TIMEOUT_SECONDS: Long = 5L
 
         private const val GET_BLOCK_ASSERTION_MILLIS: Long = 200L
+
+        private const val ACCOUNT_QUALIFIER: String = "user.account"
+
+        private const val ARCHIVE_QUALIFIER: String = "user.archive"
 
         private const val MISSING_REGISTRY_CLASS_NAME: String =
             "com.example.habitat.MissingHabitatRegistry"

@@ -44,6 +44,8 @@ import java.nio.charset.StandardCharsets
  * @aegis-audit 2026-08-31 | whisper | 经授权支持继承 Dao accessor 的收集、override 去重和增量依赖.
  * @aegis-audit 2026-08-31 | whisper | 经授权补全生成代码可访问性与调用形态校验.
  * @aegis-audit 2026-08-31 | whisper | 经授权消除实例入口级联误报并补全重复归属定位.
+ * @aegis-audit 2026-08-31 | whisper | 经授权支持 Dao qualifier 解析、冲突校验和多数据库绑定生成.
+ * @aegis-audit 2026-08-31 | whisper | 经授权移除阻碍同一 Dao 跨库绑定的 Entity 唯一归属限制.
  *
  * @author whisper
  * @since 2026/07/27
@@ -207,8 +209,6 @@ class HabitatSymbolProcessor(
             declaration = declaration,
             resolver = resolver,
         )
-        val entities: List<HabitatEntity> = readRoomEntities(declaration)
-
         return HabitatDatabaseModel(
             databaseQualifiedName = databaseQualifiedName,
             databaseClassName = ClassName.bestGuess(databaseQualifiedName),
@@ -218,7 +218,6 @@ class HabitatSymbolProcessor(
             ),
             instanceAccessor = instanceAccessor,
             daoMethods = daoMethods,
-            entities = entities,
             declaration = declaration,
             sourceFile = declaration.containingFile,
         )
@@ -451,9 +450,26 @@ class HabitatSymbolProcessor(
                 "Habitat Dao return type $daoQualifiedName and its containing declarations must be public or internal.",
             )
         }
+        val bindingAnnotation: KSAnnotation? = declaration.findAnnotation(HABITAT_DAO_BINDING)
+        val qualifier: String? = if (bindingAnnotation == null) {
+            null
+        } else {
+            val value: String? = bindingAnnotation.arguments
+                .firstOrNull { argument: KSValueArgument -> argument.name?.asString() == "value" }
+                ?.value as? String
+            if (value == null) {
+                return logError(declaration, "@HabitatDaoBinding must declare a String qualifier.")
+            }
+            if (value.isBlank()) {
+                return logError(declaration, "@HabitatDaoBinding qualifier must not be blank.")
+            }
+            value
+        }
         return HabitatDaoMethod(
             methodName = methodName,
             daoClassName = ClassName.bestGuess(daoQualifiedName),
+            qualifier = qualifier,
+            declaration = declaration,
             sourceFiles = accessorSourceFiles
                 .plus(listOfNotNull(returnType.declaration.containingFile))
                 .distinctBy(KSFile::filePath),
@@ -472,26 +488,56 @@ class HabitatSymbolProcessor(
                 "Conflicting databases: $databaseNames."
         }
 
-        val daoConflicts: Map<String, List<HabitatDatabaseModel>> = findDatabaseOwnershipConflicts(
-            models = models,
-            ownershipKeys = { model: HabitatDatabaseModel ->
-                model.daoMethods.map { method: HabitatDaoMethod -> method.daoClassName.canonicalName }
-            },
-        )
-        reportDatabaseOwnershipConflicts(daoConflicts) { daoName: String, databaseNames: String ->
-            "Dao $daoName is registered in multiple Habitat databases. Conflicting databases: $databaseNames."
-        }
+        val daoBindingsValid: Boolean = validateDaoBindings(models)
 
-        val entityConflicts: Map<String, List<HabitatDatabaseModel>> = findDatabaseOwnershipConflicts(
-            models = models,
-            ownershipKeys = { model: HabitatDatabaseModel ->
-                model.entities.map(HabitatEntity::qualifiedName)
-            },
-        )
-        reportDatabaseOwnershipConflicts(entityConflicts) { entityName: String, databaseNames: String ->
-            "Entity $entityName is declared in multiple Habitat databases. Conflicting databases: $databaseNames."
+        return providerConflicts.isEmpty() && daoBindingsValid
+    }
+
+    private fun validateDaoBindings(models: List<HabitatDatabaseModel>): Boolean {
+        var isValid: Boolean = true
+        val bindingsByDao: Map<String, List<HabitatDaoBindingOwner>> = models
+            .flatMap { model: HabitatDatabaseModel ->
+                model.daoMethods.map { method: HabitatDaoMethod ->
+                    HabitatDaoBindingOwner(database = model, method = method)
+                }
+            }
+            .groupBy { owner: HabitatDaoBindingOwner -> owner.method.daoClassName.canonicalName }
+        bindingsByDao.forEach { (daoName: String, owners: List<HabitatDaoBindingOwner>) ->
+            if (owners.size <= 1) {
+                return@forEach
+            }
+            val accessorNames: String = owners
+                .map(HabitatDaoBindingOwner::displayName)
+                .sorted()
+                .joinToString()
+            if (owners.any { owner: HabitatDaoBindingOwner -> owner.method.qualifier == null }) {
+                isValid = false
+                val message: String =
+                    "Dao $daoName has multiple Habitat accessors. Every accessor must declare " +
+                        "@HabitatDaoBinding with a unique qualifier. Conflicting accessors: $accessorNames."
+                owners.forEach { owner: HabitatDaoBindingOwner ->
+                    reportError(owner.method.declaration, message)
+                }
+                return@forEach
+            }
+            owners
+                .groupBy { owner: HabitatDaoBindingOwner -> checkNotNull(owner.method.qualifier) }
+                .filterValues { qualifierOwners: List<HabitatDaoBindingOwner> -> qualifierOwners.size > 1 }
+                .forEach { (qualifier: String, qualifierOwners: List<HabitatDaoBindingOwner>) ->
+                    isValid = false
+                    val conflictingAccessors: String = qualifierOwners
+                        .map(HabitatDaoBindingOwner::displayName)
+                        .sorted()
+                        .joinToString()
+                    val message: String =
+                        "Dao $daoName uses duplicate Habitat qualifier '$qualifier'. " +
+                            "Conflicting accessors: $conflictingAccessors."
+                    qualifierOwners.forEach { owner: HabitatDaoBindingOwner ->
+                        reportError(owner.method.declaration, message)
+                    }
+                }
         }
-        return providerConflicts.isEmpty() && daoConflicts.isEmpty() && entityConflicts.isEmpty()
+        return isValid
     }
 
     private fun findDatabaseOwnershipConflicts(
@@ -550,9 +596,13 @@ class HabitatSymbolProcessor(
 
     private fun writeProvider(model: HabitatDatabaseModel) {
         val factoryType: LambdaTypeName = LambdaTypeName.get(returnType = ANY_CLASS_NAME)
+        val qualifiedFactoryMapType: ParameterizedTypeName = MAP_CLASS_NAME.parameterizedBy(
+            STRING_CLASS_NAME.copy(nullable = true),
+            factoryType,
+        )
         val factoryMapType: ParameterizedTypeName = MAP_CLASS_NAME.parameterizedBy(
             KCLASS_CLASS_NAME.parameterizedBy(STAR),
-            factoryType,
+            qualifiedFactoryMapType,
         )
         val providerType: TypeSpec = TypeSpec.classBuilder(model.providerClassName)
             .addSuperinterface(HABITAT_DAO_PROVIDER_CLASS_NAME)
@@ -578,29 +628,41 @@ class HabitatSymbolProcessor(
         val builder: CodeBlock.Builder = CodeBlock.builder()
             .add("mapOf(\n")
             .indent()
-        model.daoMethods.forEach { method: HabitatDaoMethod ->
-            // 使用 lambda 延迟读取数据库实例, 避免 Provider 初始化时抢先触发数据库单例读取.
-            when (model.instanceAccessor.kind) {
-                HabitatDatabaseInstanceAccessorKind.PROPERTY -> {
-                    builder.addStatement(
-                        "%T::class to { %T.%N.%N() },",
-                        method.daoClassName,
-                        model.databaseClassName,
-                        model.instanceAccessor.memberName,
-                        method.methodName,
-                    )
+        model.daoMethods
+            .groupBy { method: HabitatDaoMethod -> method.daoClassName.canonicalName }
+            .values
+            .forEach { methods: List<HabitatDaoMethod> ->
+                builder.add("%T::class to mapOf(\n", methods.first().daoClassName)
+                builder.indent()
+                methods.forEach { method: HabitatDaoMethod ->
+                    if (method.qualifier == null) {
+                        builder.add("null")
+                    } else {
+                        builder.add("%S", method.qualifier)
+                    }
+                    // 使用 lambda 延迟读取数据库实例, 避免 Provider 初始化时抢先触发数据库单例读取.
+                    when (model.instanceAccessor.kind) {
+                        HabitatDatabaseInstanceAccessorKind.PROPERTY -> {
+                            builder.add(
+                                " to { %T.%N.%N() },\n",
+                                model.databaseClassName,
+                                model.instanceAccessor.memberName,
+                                method.methodName,
+                            )
+                        }
+                        HabitatDatabaseInstanceAccessorKind.FUNCTION -> {
+                            builder.add(
+                                " to { %T.%N().%N() },\n",
+                                model.databaseClassName,
+                                model.instanceAccessor.memberName,
+                                method.methodName,
+                            )
+                        }
+                    }
                 }
-                HabitatDatabaseInstanceAccessorKind.FUNCTION -> {
-                    builder.addStatement(
-                        "%T::class to { %T.%N().%N() },",
-                        method.daoClassName,
-                        model.databaseClassName,
-                        model.instanceAccessor.memberName,
-                        method.methodName,
-                    )
-                }
+                builder.unindent()
+                builder.add("),\n")
             }
-        }
         return builder
             .unindent()
             .add(")")
@@ -634,25 +696,6 @@ class HabitatSymbolProcessor(
             .addType(registryType)
             .build()
         writeFile(fileSpec, dependencies)
-    }
-
-    private fun readRoomEntities(declaration: KSClassDeclaration): List<HabitatEntity> {
-        val roomAnnotation: KSAnnotation = declaration.findAnnotation(ROOM_DATABASE) ?: return emptyList()
-        val entitiesArgument: KSValueArgument = roomAnnotation.arguments
-            .firstOrNull { argument: KSValueArgument -> argument.name?.asString() == "entities" }
-            ?: return emptyList()
-        val value: Any = entitiesArgument.value ?: return emptyList()
-        val entityValues: List<*> = value as? List<*> ?: listOf(value)
-        return entityValues.mapNotNull { entityValue: Any? ->
-            val entityType: KSType = entityValue as? KSType ?: return@mapNotNull null
-            val entityDeclaration: KSDeclaration = entityType.declaration
-            val entityQualifiedName: String = entityDeclaration.qualifiedName?.asString()
-                ?: return@mapNotNull null
-            HabitatEntity(
-                qualifiedName = entityQualifiedName,
-                sourceFile = entityDeclaration.containingFile,
-            )
-        }
     }
 
     private fun collectSourceFiles(models: List<HabitatDatabaseModel>): List<KSFile> {
@@ -752,7 +795,6 @@ class HabitatSymbolProcessor(
         val providerClassName: ClassName,
         val instanceAccessor: HabitatDatabaseInstanceAccessor,
         val daoMethods: List<HabitatDaoMethod>,
-        val entities: List<HabitatEntity>,
         val declaration: KSClassDeclaration,
         val sourceFile: KSFile?,
     ) {
@@ -771,8 +813,6 @@ class HabitatSymbolProcessor(
          */
         fun allSourceFiles(): List<KSFile> {
             return providerSourceFiles()
-                .plus(entities.mapNotNull(HabitatEntity::sourceFile))
-                .distinctBy(KSFile::filePath)
         }
     }
 
@@ -782,8 +822,23 @@ class HabitatSymbolProcessor(
     private data class HabitatDaoMethod(
         val methodName: String,
         val daoClassName: ClassName,
+        val qualifier: String?,
+        val declaration: KSFunctionDeclaration,
         val sourceFiles: List<KSFile>,
     )
+
+    /**
+     * Habitat Dao 绑定及其数据库归属.
+     */
+    private data class HabitatDaoBindingOwner(
+        val database: HabitatDatabaseModel,
+        val method: HabitatDaoMethod,
+    ) {
+
+        fun displayName(): String {
+            return "${database.databaseQualifiedName}.${method.methodName}"
+        }
+    }
 
     /**
      * Habitat Dao accessor 解析候选.
@@ -836,14 +891,6 @@ class HabitatSymbolProcessor(
     }
 
     /**
-     * Habitat Entity 生成模型.
-     */
-    private data class HabitatEntity(
-        val qualifiedName: String,
-        val sourceFile: KSFile?,
-    )
-
-    /**
      * Habitat 处理器常量.
      */
     private companion object {
@@ -873,6 +920,11 @@ class HabitatSymbolProcessor(
          * Kotlin KClass 类型.
          */
         private val KCLASS_CLASS_NAME: ClassName = ClassName("kotlin.reflect", "KClass")
+
+        /**
+         * Kotlin String 类型.
+         */
+        private val STRING_CLASS_NAME: ClassName = ClassName("kotlin", "String")
 
         /**
          * Kotlin Map 类型.
@@ -907,6 +959,12 @@ class HabitatSymbolProcessor(
          */
         private const val HABITAT_DATABASE_INSTANCE: String =
             "com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance"
+
+        /**
+         * HabitatDaoBinding 注解的全限定类名.
+         */
+        private const val HABITAT_DAO_BINDING: String =
+            "com.whisper.habitat.runtime.annotation.HabitatDaoBinding"
 
         /**
          * Room Database 注解的全限定类名.

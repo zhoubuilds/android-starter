@@ -4,6 +4,8 @@
 
 | 修订时间（CST）  | 修订人     | 修订说明                  |
 |------------|---------|-----------------------|
+| 2026-08-31 | whisper | 简化 Dao binding 快照发布实现 |
+| 2026-08-31 | whisper | 支持 Dao qualifier 多数据库绑定 |
 | 2026-08-31 | whisper | 明确固定 Manifest metadata 协议取舍 |
 | 2026-07-28 | whisper | 整理 Habitat 设计目标、模型和取舍 |
 
@@ -15,10 +17,10 @@
 
 Habitat 的目标是提供一个独立于 Aster 的 Dao 发现入口:
 
-* 业务模块按 Dao 类型获取实例, 不感知 Dao 属于哪个 RoomDatabase。
+* 业务模块按 Dao 类型获取唯一实例, 或按 Dao 类型和语义 qualifier 精确获取实例。
 * 数据库最终装配仍由 app 或唯一装配 library 负责。
 * Room 的实体、Dao、schema 和迁移检查仍交给 Room 编译器。
-* Dao 重复归属和 Entity 重复声明尽量在 KSP 阶段失败。
+* 多 Dao 绑定的缺失或重复 qualifier 在 KSP 阶段失败。
 * 运行时不扫描 Dex, 不硬编码 app 包名, 不要求业务手写总注册表。
 
 ## 2. 非目标
@@ -30,7 +32,7 @@ Habitat 不计划承担以下职责:
 * 管理数据库迁移、备份、加密、清理策略或 schema 版本。
 * 替代 Repository、UseCase 或依赖注入容器。
 * 支持按数据库名获取 Dao。
-* 允许同一个 Dao 在同一个 Habitat 装配入口中绑定到多个数据库。
+* 为多个 Dao 绑定推断默认数据库。
 
 ## 3. 核心模型
 
@@ -52,20 +54,27 @@ feature:user-impl
 
 `app` 拥有最终依赖图, 可以看到实际打入 APK 的业务 Dao 和 Entity。业务模块只依赖自己的 `api`、`impl` 和 `habitat-runtime`, 不引用 app 数据库类。
 
+同一个 Dao 类型可以由多个数据库提供。qualifier 描述 `account`、`archive` 等业务存储角色, 不要求 feature 知道数据库类名。
+只有一个绑定时, 无论 accessor 是否显式声明 qualifier, 都允许按类型获取; 存在多个绑定时必须带 qualifier 精确获取。
+Habitat 不定义默认 binding, 因此不会在多个候选中任意选择。
+
 ### 3.2 Dao Provider 模型
 
-每个参与 Habitat 的 RoomDatabase 生成一个 Dao Provider。Provider 只暴露 Dao 类型到工厂的映射:
+每个参与 Habitat 的 RoomDatabase 生成一个 Dao Provider。Provider 暴露 Dao 类型、可空 qualifier 和工厂函数的二级映射:
 
 ```kotlin
 class AppDataBaseHabitatDaoProvider : HabitatDaoProvider {
 
-    override val daoFactories: Map<KClass<*>, () -> Any> = mapOf(
-        UserDao::class to { AppDataBase.instance.userDao() },
+    override val daoFactories: Map<KClass<*>, Map<String?, () -> Any>> = mapOf(
+        UserDao::class to mapOf(
+            "user.account" to { AppDataBase.instance.userDao() },
+        ),
     )
 }
 ```
 
-工厂使用 lambda 延迟读取数据库实例, 避免 `HabitatFactory.initialize()` 安装 Provider 时抢先访问数据库单例。
+未标记 `@HabitatDaoBinding` 的唯一 accessor 使用 `null` key。显式标记的 accessor 使用注解值作为 key。工厂使用 lambda 延迟
+读取数据库实例, `HabitatFactory.initialize()` 只安装函数, 不创建或缓存 Dao 对象, 从而避免初始化时抢先访问数据库单例。
 
 ### 3.3 Registry 模型
 
@@ -115,7 +124,7 @@ Manifest Merger 暴露冲突; 如果改用 Registry 全限定类名作为 name, 
 
 ## 5. 单装配入口
 
-同一个最终 APK 只允许一个 Habitat 装配入口。原因是 Dao 和 Entity 的唯一归属需要在同一份数据库装配上下文中判断, 多个装配入口会让冲突检查边界变得不稳定。
+同一个最终 APK 只允许一个 Habitat 装配入口。Dao qualifier 的完整性和唯一性需要在同一份数据库装配上下文中判断, 多个装配入口会让冲突检查边界变得不稳定。
 
 当前有两层保护:
 
@@ -131,13 +140,14 @@ Habitat 按责任边界处理错误:
 * KSP 可确认的问题直接输出 error 并停止生成 Provider / Registry。
 * Gradle 插件配置错误直接中断构建。
 * `HabitatFactory.get()` 在 `initialize()` 前调用属于使用错误, 直接抛异常。
-* Manifest 缺失、Registry 反射失败、Provider 加载失败、Dao 找不到、Dao 工厂失败和类型不匹配记录 Logcat warning 并返回安全值。
+* Manifest 缺失、Registry 反射失败、Provider 加载失败、Dao 或 qualifier 找不到、多绑定歧义、Dao 工厂失败和类型不匹配记录
+  Logcat warning 并返回安全值。
 
 运行时默认避免因为生成物或注册表损坏导致业务崩溃, 但不掩盖明确的使用错误。
 
 ## 7. 并发设计
 
-`HabitatFactory` 使用 `AtomicReference` 发布不可变 `FactoryState`, 并用初始化锁保证只安装一次。`get()` 在状态为空时会进入同一把锁等待正在进行的初始化完成, 避免把初始化过程中的短暂空值误判为未初始化。
+`HabitatFactory` 使用 `@Volatile` 可空只读 Map 发布 Dao binding 快照, 并用初始化锁保证只安装一次。`get()` 在快照为空时会进入同一把锁等待正在进行的初始化完成, 避免把初始化过程中的短暂空值误判为未初始化。快照在发布后不再修改, 普通 Map 可以安全地被多个线程并发读取。
 
 数据库实例本身由业务数据库类负责线程安全。当前 `AppDataBase` 使用 `@Volatile` 加私有初始化锁完成安全发布, `instance` getter 也会在空值时进入同一把锁等待正在进行的初始化完成。
 

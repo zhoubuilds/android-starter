@@ -3,9 +3,9 @@ package com.whisper.habitat.runtime
 import com.whisper.habitat.runtime.registry.HabitatDaoProvider
 import java.lang.reflect.Field
 import java.lang.reflect.Method
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.reflect.KClass
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Before
@@ -21,12 +21,12 @@ class HabitatFactoryTest {
 
     @Before
     fun setUp() {
-        resetFactoryState()
+        resetDaoBindings()
     }
 
     @After
     fun tearDown() {
-        resetFactoryState()
+        resetDaoBindings()
     }
 
     /**
@@ -47,9 +47,69 @@ class HabitatFactoryTest {
     @Test
     fun getsDaoFromInstalledProvider() {
         val dao: TestDao = TestDao()
-        installProviders(listOf(TestDaoProvider(dao)))
+        installProviders(
+            listOf(
+                TestDaoProvider(
+                    mapOf(null to { dao })
+                )
+            )
+        )
 
         assertSame(dao, HabitatFactory.get(TestDao::class))
+    }
+
+    /**
+     * 验证唯一显式绑定支持类型安全的限定和非限定获取, 且工厂只在获取时执行.
+     */
+    @Test
+    fun getsSingleQualifiedDaoLazilyThroughTypedApis() {
+        val dao: TestDao = TestDao()
+        var factoryCallCount: Int = 0
+        installProviders(
+            listOf(
+                TestDaoProvider(
+                    mapOf(
+                        ACCOUNT_QUALIFIER to {
+                            factoryCallCount += 1
+                            dao
+                        }
+                    )
+                )
+            )
+        )
+
+        assertEquals(0, factoryCallCount)
+        val unqualifiedDao: TestDao? = HabitatFactory.get<TestDao>()
+        val qualifiedDao: TestDao? = HabitatFactory.get(TestDao::class, ACCOUNT_QUALIFIER)
+        val reifiedQualifiedDao: TestDao? = HabitatFactory.get<TestDao>(ACCOUNT_QUALIFIER)
+
+        assertSame(dao, unqualifiedDao)
+        assertSame(dao, qualifiedDao)
+        assertSame(dao, reifiedQualifiedDao)
+        assertEquals(3, factoryCallCount)
+    }
+
+    /**
+     * 验证多个绑定下的限定获取只执行并返回精确匹配的工厂.
+     */
+    @Test
+    fun getsMatchingQualifiedDaoFromMultipleBindings() {
+        val accountDao: TestDao = TestDao()
+        val archiveDao: TestDao = TestDao()
+        installProviders(
+            listOf(
+                TestDaoProvider(
+                    mapOf(
+                        ACCOUNT_QUALIFIER to { accountDao },
+                        ARCHIVE_QUALIFIER to { archiveDao },
+                    )
+                )
+            )
+        )
+
+        val actualDao: TestDao? = HabitatFactory.get<TestDao>(ARCHIVE_QUALIFIER)
+
+        assertSame(archiveDao, actualDao)
     }
 
     private fun installProviders(providers: List<HabitatDaoProvider>) {
@@ -61,21 +121,28 @@ class HabitatFactoryTest {
         method.invoke(HabitatFactory, providers)
     }
 
-    private fun resetFactoryState() {
-        val field: Field = HabitatFactory::class.java.getDeclaredField("stateReference")
+    private fun resetDaoBindings() {
+        val field: Field = HabitatFactory::class.java.getDeclaredField("daoBindings")
         field.isAccessible = true
-        val reference: AtomicReference<*> = field.get(HabitatFactory) as AtomicReference<*>
-        reference.set(null)
+        field.set(HabitatFactory, null)
     }
 
     private class TestDaoProvider(
-        private val dao: TestDao,
+        factories: Map<String?, () -> Any>,
     ) : HabitatDaoProvider {
 
-        override val daoFactories: Map<KClass<*>, () -> Any> = mapOf(
-            TestDao::class to { dao }
+        override val daoFactories: Map<KClass<*>, Map<String?, () -> Any>> = mapOf(
+            TestDao::class to factories
         )
     }
 
     private class TestDao
+
+    private companion object {
+
+        private const val ACCOUNT_QUALIFIER: String = "user.account"
+
+        private const val ARCHIVE_QUALIFIER: String = "user.archive"
+
+    }
 }

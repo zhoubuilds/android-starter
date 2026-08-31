@@ -69,7 +69,7 @@ class HabitatCompilerFunctionalTest {
 
         val providerSource: String = generatedProviderFile(projectDir, "AppDatabaseHabitatDaoProvider").readText()
         val registrySource: String = generatedRegistryFile(projectDir).readText()
-        assertTrue(providerSource.contains("UserDao::class to { AppDatabase.instance.userDao() }"))
+        assertTrue(providerSource.contains("null to { AppDatabase.instance.userDao() }"))
         assertTrue(registrySource.contains("AppDatabaseHabitatDaoProvider()"))
     }
 
@@ -111,7 +111,7 @@ class HabitatCompilerFunctionalTest {
         runBuild(projectDir)
 
         val providerSource: String = generatedProviderFile(projectDir, "AppDatabaseHabitatDaoProvider").readText()
-        assertTrue(providerSource.contains("UserDao::class to { AppDatabase.instance().userDao() }"))
+        assertTrue(providerSource.contains("null to { AppDatabase.instance().userDao() }"))
     }
 
     /**
@@ -133,7 +133,7 @@ class HabitatCompilerFunctionalTest {
         runBuild(projectDir)
 
         val providerSource: String = generatedProviderFile(projectDir, "AppDatabaseHabitatDaoProvider").readText()
-        assertTrue(providerSource.contains("UserDao::class to { AppDatabase.instance.userDao() }"))
+        assertTrue(providerSource.contains("null to { AppDatabase.instance.userDao() }"))
     }
 
     /**
@@ -448,8 +448,8 @@ class HabitatCompilerFunctionalTest {
         runBuild(projectDir)
 
         val providerSource: String = generatedProviderFile(projectDir, "AppDatabaseHabitatDaoProvider").readText()
-        assertTrue(providerSource.contains("UserDao::class to { AppDatabase.instance.userDao() }"))
-        assertTrue(providerSource.contains("OrderDao::class to { AppDatabase.instance.orderDao() }"))
+        assertTrue(providerSource.contains("null to { AppDatabase.instance.userDao() }"))
+        assertTrue(providerSource.contains("null to { AppDatabase.instance.orderDao() }"))
     }
 
     /**
@@ -503,7 +503,7 @@ class HabitatCompilerFunctionalTest {
         runBuild(projectDir)
 
         val providerFile: File = generatedProviderFile(projectDir, "AppDatabaseHabitatDaoProvider")
-        assertTrue(providerFile.readText().contains("UserDao::class to { AppDatabase.instance.userDao() }"))
+        assertTrue(providerFile.readText().contains("null to { AppDatabase.instance.userDao() }"))
 
         writeFixtureSource(
             projectDir = projectDir,
@@ -532,8 +532,8 @@ class HabitatCompilerFunctionalTest {
         runBuild(projectDir)
 
         val updatedProviderSource: String = providerFile.readText()
-        assertTrue(updatedProviderSource.contains("UserDao::class to { AppDatabase.instance.userDao() }"))
-        assertTrue(updatedProviderSource.contains("OrderDao::class to { AppDatabase.instance.orderDao() }"))
+        assertTrue(updatedProviderSource.contains("null to { AppDatabase.instance.userDao() }"))
+        assertTrue(updatedProviderSource.contains("null to { AppDatabase.instance.orderDao() }"))
     }
 
     /**
@@ -585,7 +585,7 @@ class HabitatCompilerFunctionalTest {
     }
 
     /**
-     * 验证继承的 Dao accessor 仍参与跨数据库重复归属校验.
+     * 验证继承的 Dao accessor 仍参与多绑定显式限定校验.
      */
     @Test
     fun rejectsDuplicateInheritedDaoRegistrations() {
@@ -638,7 +638,7 @@ class HabitatCompilerFunctionalTest {
 
         val result: BuildResult = runBuildAndFail(projectDir)
 
-        assertTrue(result.output.contains("Dao com.example.database.UserDao is registered in multiple Habitat databases."))
+        assertTrue(result.output.contains("Dao com.example.database.UserDao has multiple Habitat accessors."))
         assertFalse(generatedRegistryFile(projectDir).exists())
     }
 
@@ -694,10 +694,10 @@ class HabitatCompilerFunctionalTest {
     }
 
     /**
-     * 验证同一个 Dao 不能注册到多个 Habitat 数据库.
+     * 验证同一个 Dao 注册到多个数据库时不能省略绑定注解.
      */
     @Test
-    fun rejectsDuplicateDaoRegistrations() {
+    fun rejectsUnqualifiedDuplicateDaoRegistrations() {
         val projectDir: File = createProject(
             source = """
                 package com.example.database
@@ -758,8 +758,9 @@ class HabitatCompilerFunctionalTest {
 
         val result: BuildResult = runBuildAndFail(projectDir)
         val conflictMessage: String =
-            "Dao com.example.database.UserDao is registered in multiple Habitat databases. Conflicting databases: " +
-                "com.example.database.AppDatabase, com.example.database.LogDatabase."
+            "Dao com.example.database.UserDao has multiple Habitat accessors. Every accessor must declare " +
+                "@HabitatDaoBinding with a unique qualifier. Conflicting accessors: " +
+                "com.example.database.AppDatabase.userDao, com.example.database.LogDatabase.userDao."
 
         assertEquals(2, Regex(Regex.escape(conflictMessage)).findAll(result.output).count())
         assertTrue(result.output.contains("AppDatabase.kt:"))
@@ -768,10 +769,151 @@ class HabitatCompilerFunctionalTest {
     }
 
     /**
-     * 验证重复 Entity 会列出并定位全部冲突数据库.
+     * 验证同一个 Dao 可以通过不同限定符绑定到多个 Habitat 数据库.
      */
     @Test
-    fun reportsAllDatabasesForDuplicateEntityDeclarations() {
+    fun generatesQualifiedDuplicateDaoRegistrations() {
+        val projectDir: File = createProject(
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDaoBinding
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @Dao
+                interface UserDao
+
+                class UserEntity
+                class LogEntity
+
+                @HabitatDatabase
+                @Database(entities = [UserEntity::class], version = 1)
+                abstract class AppDatabase : RoomDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: AppDatabase
+                            get() = error("No test instance.")
+                    }
+
+                    @HabitatDaoBinding("user.account")
+                    abstract fun userDao(): UserDao
+                }
+            """.trimIndent()
+        )
+        writeFixtureSource(
+            projectDir = projectDir,
+            relativePath = "src/main/kotlin/com/example/database/LogDatabase.kt",
+            source = """
+                package com.example.database
+
+                import androidx.room.Database
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDaoBinding
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @HabitatDatabase
+                @Database(entities = [LogEntity::class], version = 1)
+                abstract class LogDatabase : RoomDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: LogDatabase
+                            get() = error("No test instance.")
+                    }
+
+                    @HabitatDaoBinding("user.archive")
+                    abstract fun userDao(): UserDao
+                }
+            """.trimIndent()
+        )
+
+        runBuild(projectDir)
+
+        val appProvider: String = generatedProviderFile(
+            projectDir,
+            "AppDatabaseHabitatDaoProvider",
+        ).readText()
+        val logProvider: String = generatedProviderFile(
+            projectDir,
+            "LogDatabaseHabitatDaoProvider",
+        ).readText()
+        assertTrue(appProvider.contains("\"user.account\" to { AppDatabase.instance.userDao() }"))
+        assertTrue(logProvider.contains("\"user.archive\" to { LogDatabase.instance.userDao() }"))
+    }
+
+    /**
+     * 验证多绑定 Dao 不能混用显式和省略的绑定注解.
+     */
+    @Test
+    fun rejectsMixedQualifiedAndUnqualifiedDaoRegistrations() {
+        val projectDir: File = createProject(
+            source = duplicateDaoProjectSource(
+                appBinding = "@HabitatDaoBinding(\"user.account\")",
+                logBinding = "",
+            )
+        )
+
+        val result: BuildResult = runBuildAndFail(projectDir)
+
+        assertTrue(result.output.contains("Dao com.example.database.UserDao has multiple Habitat accessors."))
+        assertTrue(result.output.contains("Every accessor must declare @HabitatDaoBinding with a unique qualifier."))
+        assertFalse(generatedRegistryFile(projectDir).exists())
+    }
+
+    /**
+     * 验证同一个 Dao 的限定符不能重复.
+     */
+    @Test
+    fun rejectsDuplicateDaoQualifiers() {
+        val projectDir: File = createProject(
+            source = duplicateDaoProjectSource(
+                appBinding = "@HabitatDaoBinding(\"user.account\")",
+                logBinding = "@HabitatDaoBinding(\"user.account\")",
+            )
+        )
+
+        val result: BuildResult = runBuildAndFail(projectDir)
+
+        assertTrue(
+            result.output.contains(
+                "Dao com.example.database.UserDao uses duplicate Habitat qualifier 'user.account'."
+            )
+        )
+        assertFalse(generatedRegistryFile(projectDir).exists())
+    }
+
+    /**
+     * 验证绑定限定符不能为空白字符串.
+     */
+    @Test
+    fun rejectsBlankDaoQualifier() {
+        val projectDir: File = createValidationProject(
+            daoAccessor = """
+                @HabitatDaoBinding("   ")
+                abstract fun userDao(): UserDao
+            """.trimIndent(),
+            additionalImports = "import com.whisper.habitat.runtime.annotation.HabitatDaoBinding",
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage = "@HabitatDaoBinding qualifier must not be blank.",
+        )
+    }
+
+    /**
+     * 验证同一个 Entity 可以由多个 Habitat 数据库交给 Room 管理.
+     */
+    @Test
+    fun allowsEntityInMultipleHabitatDatabases() {
         val projectDir: File = createProject(
             source = """
                 package com.example.database
@@ -832,15 +974,11 @@ class HabitatCompilerFunctionalTest {
             """.trimIndent()
         )
 
-        val result: BuildResult = runBuildAndFail(projectDir)
-        val conflictMessage: String =
-            "Entity com.example.database.SharedEntity is declared in multiple Habitat databases. " +
-                "Conflicting databases: com.example.database.AppDatabase, com.example.database.LogDatabase."
+        runBuild(projectDir)
 
-        assertEquals(2, Regex(Regex.escape(conflictMessage)).findAll(result.output).count())
-        assertTrue(result.output.contains("AppDatabase.kt:"))
-        assertTrue(result.output.contains("LogDatabase.kt:"))
-        assertFalse(generatedRegistryFile(projectDir).exists())
+        assertTrue(generatedRegistryFile(projectDir).exists())
+        assertTrue(generatedProviderFile(projectDir, "AppDatabaseHabitatDaoProvider").exists())
+        assertTrue(generatedProviderFile(projectDir, "LogDatabaseHabitatDaoProvider").exists())
     }
 
     /**
@@ -913,6 +1051,7 @@ class HabitatCompilerFunctionalTest {
 
     private fun createValidationProject(
         additionalDeclarations: String = "",
+        additionalImports: String = "",
         daoDeclaration: String = "interface UserDao",
         databaseDeclaration: String = "abstract class AppDatabase",
         companionDeclaration: String = "companion object",
@@ -932,6 +1071,7 @@ class HabitatCompilerFunctionalTest {
                 import androidx.room.RoomDatabase
                 import com.whisper.habitat.runtime.annotation.HabitatDatabase
                 import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+                $additionalImports
 
                 @Dao
                 $daoDeclaration
@@ -953,6 +1093,58 @@ class HabitatCompilerFunctionalTest {
                 }
             """.trimIndent()
         )
+    }
+
+    private fun duplicateDaoProjectSource(
+        appBinding: String,
+        logBinding: String,
+    ): String {
+        return """
+            package com.example.database
+
+            import androidx.room.Dao
+            import androidx.room.Database
+            import androidx.room.RoomDatabase
+            import com.whisper.habitat.runtime.annotation.HabitatDaoBinding
+            import com.whisper.habitat.runtime.annotation.HabitatDatabase
+            import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+            @Dao
+            interface UserDao
+
+            class UserEntity
+            class LogEntity
+
+            @HabitatDatabase
+            @Database(entities = [UserEntity::class], version = 1)
+            abstract class AppDatabase : RoomDatabase() {
+
+                companion object {
+
+                    @HabitatDatabaseInstance
+                    val instance: AppDatabase
+                        get() = error("No test instance.")
+                }
+
+                $appBinding
+                abstract fun userDao(): UserDao
+            }
+
+            @HabitatDatabase
+            @Database(entities = [LogEntity::class], version = 1)
+            abstract class LogDatabase : RoomDatabase() {
+
+                companion object {
+
+                    @HabitatDatabaseInstance
+                    val instance: LogDatabase
+                        get() = error("No test instance.")
+                }
+
+                $logBinding
+                abstract fun userDao(): UserDao
+            }
+        """.trimIndent()
     }
 
     private fun assertValidationFailure(
@@ -1089,6 +1281,17 @@ class HabitatCompilerFunctionalTest {
         )
         writeFixtureSource(
             projectDir = projectDir,
+            relativePath = "src/main/kotlin/com/whisper/habitat/runtime/annotation/HabitatDaoBinding.kt",
+            source = """
+                package com.whisper.habitat.runtime.annotation
+
+                @Target(AnnotationTarget.FUNCTION)
+                @Retention(AnnotationRetention.BINARY)
+                annotation class HabitatDaoBinding(val value: String)
+            """.trimIndent()
+        )
+        writeFixtureSource(
+            projectDir = projectDir,
             relativePath = "src/main/kotlin/com/whisper/habitat/runtime/registry/HabitatDaoProvider.kt",
             source = """
                 package com.whisper.habitat.runtime.registry
@@ -1096,7 +1299,7 @@ class HabitatCompilerFunctionalTest {
                 import kotlin.reflect.KClass
 
                 interface HabitatDaoProvider {
-                    val daoFactories: Map<KClass<*>, () -> Any>
+                    val daoFactories: Map<KClass<*>, Map<String?, () -> Any>>
                 }
             """.trimIndent()
         )

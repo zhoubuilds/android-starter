@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                                  |
 |-----------------|---------|-------------------------------------------|
+| 2026-08-31      | whisper | 简化 Dao binding 快照发布实现             |
+| 2026-08-31      | whisper | 支持 Dao qualifier 多数据库绑定和类型安全获取 |
 | 2026-08-31      | whisper | 清理过时技术债和过程记录                  |
 | 2026-08-31      | whisper | 补齐 Android、Manifest、R8 和并发集成测试 |
 | 2026-08-31      | whisper | 消除级联误报并补全重复归属定位            |
@@ -125,7 +127,7 @@ Resolver
   -> 查找 @HabitatDatabase
   -> 读取 habitat.registryPackage
   -> validate() 当前轮可用声明
-  -> 解析 RoomDatabase、实例入口、直接/继承 Dao 方法和 Entity
+  -> 解析 RoomDatabase、实例入口、直接/继承 Dao 方法及 qualifier
   -> 累计 HabitatDatabaseModel
   -> 返回 deferred symbols
   -> finish() 检查最终 deferred 和重复声明
@@ -166,16 +168,20 @@ Dao 方法:
 * 可以由数据库直接声明, 也可以从数据库父类或接口继承。
 * 子类 override 继承 accessor 时只使用最派生声明, 不重复生成 Dao 工厂。
 * 继承函数通过最终数据库类型解析, 支持父类类型参数绑定到具体 Dao 返回类型。
+* accessor 可以通过 `@HabitatDaoBinding` 声明非空白 qualifier。
+* `@HabitatDaoBinding` 使用 BINARY retention, 使继承自编译依赖的 accessor 仍能保留绑定信息。
+* 同一个 Dao 只有一个 accessor 时, `@HabitatDaoBinding` 可以省略。
+* 同一个 Dao 有多个 accessor 时, 每个 accessor 都必须显式标记 `@HabitatDaoBinding`, 不能混用显式和省略形式。
+* 同一个 Dao 内的 qualifier 必须唯一; 不同 Dao 类型可以复用同一个 qualifier。
 
 全局校验:
 
 * Provider 全限定名不能重复。
-* 同一个 Dao 不能被多个 Habitat 数据库注册。
-* 同一个 Entity 不能被多个 Habitat 数据库声明。
+* 同一个 Dao 的多 accessor 绑定必须全部显式限定且 qualifier 唯一。
 
 实例入口解析明确区分“有效”“缺失”和“无效”。缺失入口时报告数据库配置错误; 入口存在但声明形态无效时只保留原始
-symbol 上的根因, 不追加“缺少入口”的级联误报。Provider、Dao 或 Entity 重复归属时, 冲突数据库按全限定名排序,
-错误分别绑定到每个数据库声明并列出全部参与者。
+symbol 上的根因, 不追加“缺少入口”的级联误报。Provider 冲突和 Dao binding 冲突会绑定到对应数据库或 accessor 并列出
+全部参与者。Entity 可以由多个数据库声明, 其 schema 和 Dao 查询合法性完全交给 Room 编译器。
 
 ### 3.4 生成代码
 
@@ -190,15 +196,25 @@ symbol 上的根因, 不追加“缺少入口”的级联误报。Provider、Dao
 Provider 使用 lambda 延迟读取数据库实例:
 
 ```kotlin
-override val daoFactories: Map<KClass<*>, () -> Any> = mapOf(
-    UserDao::class to { AppDataBase.instance.userDao() },
+override val daoFactories: Map<KClass<*>, Map<String?, () -> Any>> = mapOf(
+    UserDao::class to mapOf(
+        null to { AppDataBase.instance.userDao() },
+    ),
+)
+```
+
+显式绑定生成字符串 key:
+
+```kotlin
+UserDao::class to mapOf(
+    "user.account" to { AppDataBase.instance.userDao() },
 )
 ```
 
 如果实例入口是函数, 生成形态为:
 
 ```kotlin
-UserDao::class to { AppDataBase.instance().userDao() }
+null to { AppDataBase.instance().userDao() }
 ```
 
 空数据库场景也会生成空 Registry, 并输出 warning:
@@ -209,8 +225,8 @@ No Habitat database was found. Generated empty Habitat registry.
 
 ### 3.5 增量依赖
 
-Provider 关联 database source、Dao accessor source 和 Dao source。Registry 关联 database source、Dao accessor source、
-Dao source 和 Entity source。空 Registry 使用 `Dependencies.ALL_FILES`, 确保未来新增 `@HabitatDatabase` 时不会遗漏。
+Provider 关联 database source、Dao accessor source 和 Dao source。Registry 关联 database source、Dao accessor source 和
+Dao source。空 Registry 使用 `Dependencies.ALL_FILES`, 确保未来新增 `@HabitatDatabase` 时不会遗漏。
 
 ## 4. Runtime
 
@@ -220,6 +236,7 @@ Dao source 和 Entity source。空 Registry 使用 `Dependencies.ALL_FILES`, 确
 habitat/habitat-runtime/src/main/java/com/whisper/habitat/runtime/
 |- HabitatFactory.kt
 |- annotation/
+|  |- HabitatDaoBinding.kt
 |  |- HabitatDatabase.kt
 |  `- HabitatDatabaseInstance.kt
 |- registry/
@@ -234,7 +251,7 @@ habitat/habitat-runtime/src/main/java/com/whisper/habitat/runtime/
 | 包或文件                     | 职责                                      |
 |--------------------------|-----------------------------------------|
 | `HabitatFactory`         | 初始化 Registry, 安装 Dao 工厂, 按类型获取 Dao      |
-| `annotation`             | 提供 KSP 使用的 SOURCE 注解                    |
+| `annotation`             | 提供 KSP 使用的数据库、实例入口和 Dao binding 注解   |
 | `registry`               | 生成代码与 runtime 之间的公开协议                   |
 | `ManifestRegistryLoader` | 从 Application Manifest metadata 反射加载注册表 |
 | `LogcatErrorHandler`     | 通过 Android Logcat 输出可恢复问题               |
@@ -248,11 +265,17 @@ habitat/habitat-runtime/src/main/java/com/whisper/habitat/runtime/
   -> 反射创建 GeneratedHabitatRegistry
   -> registry.providers()
   -> provider.daoFactories
-  -> 过滤重复 Dao
-  -> AtomicReference 发布 FactoryState
+  -> 合并 Dao 类型和 qualifier 工厂
+  -> 过滤重复或非法运行时绑定
+  -> @Volatile 可空只读 Map 发布 Dao binding 快照
 ```
 
-`FactoryState` 发布后不再修改。`get()` 在 state 为空时进入同一把初始化锁等待正在进行的初始化完成; 如果最终仍为空, 表示调用方未初始化, 直接抛异常。
+Dao binding 快照只保存 `() -> Any` 工厂并在发布后保持不变, 安装阶段不会调用数据库实例入口或固化 Dao 对象。`get()` 在快照
+为空时进入同一把初始化锁等待正在进行的初始化完成; 如果最终仍为空, 表示调用方未初始化, 直接抛异常。`@Volatile` 保证
+快照及其发布前完成的 Map 内容对读取线程可见; 发布后只执行并发读取, 不修改外层或内层 Map。
+
+非限定获取在目标 Dao 只有一个绑定时执行该工厂, 多于一个时 warning 并返回 `null`。限定获取只执行完全匹配
+`(Dao 类型, qualifier)` 的工厂。两个公开重载及其 reified 版本都通过 `KClass<T>` 保留返回值 `T?` 的类型安全。
 
 ### 4.3 可恢复失败
 
@@ -264,6 +287,9 @@ habitat/habitat-runtime/src/main/java/com/whisper/habitat/runtime/
 * Registry providers 读取失败。
 * Provider factories 读取失败。
 * Dao 未注册。
+* qualifier 为空、缺失或与请求 Dao 不匹配。
+* 非限定获取遇到多个 Dao binding。
+* 运行时 Provider 出现重复 qualifier 或混合限定/非限定绑定。
 * Dao 工厂执行失败。
 * Dao 工厂返回类型不匹配或 cast 失败。
 
@@ -301,6 +327,7 @@ Registry 通过 Manifest 字符串反射加载, 因此类名、public 无参构�
 | 2.9 | P3 | 支持 KSP 多 round 和 final deferred error  |
 | 2.10 | P1 | 支持继承 Dao accessor 收集、override 去重和重复归属校验 |
 | 2.11 | P2 | 补全生成代码可访问性和调用形态前置校验           |
+| 2.12 | P1 | 支持同一 Dao 通过 qualifier 绑定多个数据库       |
 
 ## 7. 验证基线
 
@@ -335,12 +362,12 @@ Habitat 已补充 dedicated test 目录:
 
 * `habitat-gradle-plugin/src/test`: 覆盖 Manifest 任务、插件模块类型白名单、装配模块唯一性服务, 以及真实 AGP/KSP 下的
   application/library 接线、外部 AAR metadata 合并冲突和 release R8 consumer rule。
-* `habitat/habitat-runtime/src/test`: 覆盖 `HabitatFactory` 未初始化使用错误、已安装 Provider 的 Dao 获取、初始化与 `get()`
-  的并发交错, 以及 metadata 缺失、类不存在、类型不匹配、构造失败、Registry/Provider 读取失败时记录 warning 并安装
-  空 Dao 注册表的降级行为。
+* `habitat/habitat-runtime/src/test`: 覆盖 `HabitatFactory` 未初始化使用错误、唯一/限定/多绑定 Dao 获取、工厂延迟执行、初始化与
+  `get()` 的并发交错, 以及 metadata 缺失、类不存在、类型不匹配、构造失败、Registry/Provider 读取失败时记录 warning
+  并安装空 Dao 注册表的降级行为。
 * `habitat/habitat-compiler/src/test`: 使用真实 compiler JAR 和 KSP Gradle 插件覆盖 Provider / Registry 生成、function
-  实例入口、nullable 实例入口拒绝、直接/继承 Dao 生成、override 去重、继承 accessor 增量更新、重复 Dao 拒绝, 以及
-  生成代码可访问性、不支持调用形态的前置校验、实例入口非级联诊断和重复归属源码定位。
+  实例入口、nullable 实例入口拒绝、直接/继承 Dao 生成、override 去重、继承 accessor 增量更新、Dao qualifier 多库生成及
+  缺失/空白/重复校验, 以及生成代码可访问性、不支持调用形态的前置校验和实例入口非级联诊断。
 
 后续建议继续补充:
 
@@ -350,7 +377,7 @@ Habitat 已补充 dedicated test 目录:
 
 当前受保护类型:
 
-* Runtime 公开契约: `HabitatFactory`、`HabitatDatabase`、`HabitatDatabaseInstance`、
+* Runtime 公开契约: `HabitatFactory`、`HabitatDaoBinding`、`HabitatDatabase`、`HabitatDatabaseInstance`、
   `HabitatDaoProvider`、`HabitatRegistry`。
 * Runtime 加载协议: `ManifestRegistryLoader`。
 * Compiler 协议: `HabitatProcessorProvider`、`HabitatSymbolProcessor`。
