@@ -35,3 +35,6 @@ service-account*.json
 .DS_Store
 *.hprof
 *.log
+
+# Temporary work documents
+*.tmp.md
