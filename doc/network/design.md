@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-08-28 | whisper | 默认禁用 cleartext 网络流量 |
+| 2026-08-28 | whisper | 明确 Endpoint 改写后的 Host Header 契约 |
 | 2026-08-27 | whisper | 明确网络组件 keep rule 归属 |
 | 2026-08-26 | whisper | 明确 API 注解边界与通用拦截器基础实现 |
 | 2026-08-26 | whisper | 简化 ApiFactory 安装快照与重复安装恢复 |
@@ -112,6 +114,9 @@ Architecture 提供两类不包含应用值的请求改写机制:
 * `EndpointRoutingInterceptor` 由子类为当前请求解析目标 Endpoint。默认只替换 scheme、host 和 port,
   保留原 path、query 和 fragment。
 
+Endpoint 改写导致 origin 的 scheme、host 或 port 变化时, 拦截器移除请求中显式设置的 `Host` Header, 由 OkHttp
+根据最终 URL 重新生成. 如果只调整 path、query 或 fragment 而 origin 不变, 则保留已有的显式 `Host` Header.
+
 两者都不读取 BuildConfig、flavor、登录态或真实域名。Header 和 Endpoint 值由 app 的具体子类提供;
 目标 Endpoint 含特殊 path 前缀时, 项目必须覆写 `buildTargetUrl()` 明确路径组合契约。
 
@@ -147,7 +152,8 @@ Starter 默认只有一个 `API_HOST`，不内置租户、Profile 或动态路�
 但业务 API 不得借此绕过公共安全配置。确实需要完全独立网络栈的 SDK、埋点或鉴权刷新链路, 应使用专用工厂或 client,
 不经过业务 `ApiFactory`。
 
-模板的本地回退地址是 HTTP，因此 app 示例安全配置暂时允许 cleartext；该策略不在 Architecture 中。生产项目切换 HTTPS 后应在 app 中关闭 cleartext。
+模板回退地址使用 HTTPS 占位值, app 示例安全配置默认禁止 cleartext; 该策略不在 Architecture 中. 实际项目确需访问
+本地 HTTP 服务时, 应由 app 增加只覆盖必要域名和构建环境的受限例外, 不全局放开明文流量.
 
 ## 7. 并发与缓存
 

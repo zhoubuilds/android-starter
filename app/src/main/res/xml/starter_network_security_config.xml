@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- The starter fallback host is HTTP. Production apps should use HTTPS and disable cleartext. -->
-    <base-config cleartextTrafficPermitted="true">
+    <!-- Cleartext traffic is disabled by default. Add scoped exceptions only when required. -->
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

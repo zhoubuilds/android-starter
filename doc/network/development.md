@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-08-28 | whisper | 默认禁用 cleartext 网络流量 |
 | 2026-08-27 | whisper | 调整网络组件 keep rule 归属 |
 | 2026-08-26 | whisper | 同步 API 注解约束与 Architecture 拦截器实现 |
 | 2026-08-26 | whisper | 简化 ApiFactory 安装快照并移除代际状态 |
@@ -143,7 +144,7 @@ keep rule 调整必须使用启用 R8 的 application 变体验证最终合并�
 * Architecture 不得读取 app BuildConfig 或写入真实域名。
 * Foundation 不得解释环境 flavor，也不得内置业务鉴权。
 * app 的 `API_HOST` 必须是合法 HTTP(S) URL；Manager 会补齐 path 末尾的 `/`。
-* 示例为本地 HTTP 回退保留 cleartext；生产项目使用 HTTPS 后应在 app 安全配置中关闭。
+* 示例使用 HTTPS 占位回退并默认禁用 cleartext; 实际项目需要本地 HTTP 时由 app 增加范围受限的例外.
 * 不得加入信任所有证书、主机名或占位签名实现。
 * API 注解中不要从 `*-api` 模块反向引用 `*-impl` 类型。
 * 可选拦截器使用 API 注解增量声明, 不放入默认配置后再为部分 API 设计排除规则。

@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-08-28 | whisper | 默认禁用 cleartext 网络流量 |
 | 2026-08-27 | whisper | 说明网络组件 keep rule 归属 |
 | 2026-08-26 | whisper | 同步 API 注解约束与 Architecture 拦截器接入 |
 | 2026-08-26 | whisper | 明确重复安装的最后快照恢复语义 |
@@ -21,7 +22,8 @@ buildConfig.API_HOST = "https://api.example.com/"
 
 模板没有 product flavor 时只需要这一份回退配置。实际项目启用环境变体后，可以让 Prism 为 app 的不同 variant 生成不同 `API_HOST`，下层模块仍无需感知变体。
 
-示例回退地址是本地 HTTP，因此 app 的示例网络安全配置允许 cleartext。生产项目应改用 HTTPS，并在 `starter_network_security_config.xml` 中关闭 cleartext。
+示例回退地址使用不可访问的 HTTPS 占位值, app 的示例网络安全配置默认禁止 cleartext. 实际项目确需访问本地 HTTP
+服务时, 应在 `starter_network_security_config.xml` 中增加只覆盖必要域名的受限例外, 不将 base config 改为全局允许.
 
 ## 2. 安装组件管理器
 
