@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-08-28      | whisper | 明确 Architecture UI 绑定不变量  |
 | 2026-08-27      | whisper | 拆分单轮与多轮 Business 进度语义  |
 | 2026-08-27      | whisper | 明确 BusinessException 身份语义   |
 | 2026-08-27      | whisper | 收窄网络 consumer rules 职责      |
@@ -107,6 +108,14 @@ Owner 可以组合两种能力, UI 绑定位置则继续依赖两个窄契约。
 `protected abstract` 回调完成渲染并自行持有所需依赖; 公开 `bind()` 不允许覆写, 以保护重复绑定和生命周期不变量。
 `ArchitectureViewModel` 实现只读 `ArchitectureUiOwner` 契约, 为常规 ViewModel 提供便捷组合。业务进度和错误处理协议由 Architecture 定义,
 具体实现由 `foundation` 的 `BusinessViewModel` 提供。成功 Meta 处理属于按需能力。
+
+`ArchitectureUiComponent.bind()` 遵守以下生命周期和聚合契约:
+
+* 只在 `Lifecycle.State.STARTED` 及以上收集; 离开 STARTED 时停止, 再次进入时恢复当前状态.
+* 同一个仍活跃的 `LifecycleOwner` 重复绑定保持幂等; 活跃期间绑定另一个 Owner 明确失败.
+* 旧 Owner 销毁并结束绑定任务后允许绑定新 Owner, 以支持 Fragment View 重建.
+* 没有操作数量来源时发送总数 `0`; 多个来源按当前值求和.
+* 没有通知来源时不发送通知; 多个通知来源全部合并消费, 不承诺跨来源的全局顺序.
 
 ### 3.3 Network foundation
 
