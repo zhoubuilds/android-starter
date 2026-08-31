@@ -4,6 +4,7 @@
 
 | 修订时间（CST）        | 修订人     | 修订说明                         |
 |------------------|---------|------------------------------|
+| 2026-08-31       | whisper | 调整 Registry Manifest metadata 的 name/value 协议 |
 | 2026-07-23 18:33 | whisper | 归并设计目标、候选方案、方案对比、最终选择及未选方案原因 |
 
 本文记录 Aster 的设计目标、候选方案、最终选择和主要取舍。当前行为以源码为准；本文用于解释“为什么这样设计”，不作为接入步骤或源码目录索引。
@@ -125,6 +126,13 @@ flowchart LR
 * `<androidNamespace>.aster.generated.AsterGeneratedRegistry`。
 * 指向该类的 Manifest `<meta-data>`。
 
+Registry metadata 使用注册器全限定类名作为 `android:name`，使用 `com.whisper.aster.registry` 作为固定
+`android:value`。Manifest Merger 以 `android:name` 标识 metadata 条目，因此类名可以让不同模块独立合并；固定 value
+只负责标记该条目属于 Aster，避免在 name 和 value 中重复保存类名。
+
+固定发现标记不携带协议版本。当前 plugin、compiler 和 runtime 要求使用同一发布版本，尚不存在需要 Runtime 同时解析的多套
+metadata 格式；如果未来允许不同版本产物独立演进，应单独设计兼容读取和版本协商，而不是提前把版本号写入发现标记。
+
 最终 APK 的 Manifest Merger 自动收集 app 和实际依赖 AAR 的 metadata。Runtime 读取最终 `ApplicationInfo.metaData`，按类名精确反射并安装所有 Registry。
 
 ### 5.1 选择该方案的原因
@@ -188,7 +196,7 @@ Aster 按责任边界处理错误：
 * 能在 KSP 或 Gradle 阶段确认的问题直接中断构建。
 * 生命周期、注册冲突和已注册目标结构损坏抛出异常。
 * 动态名称格式错误或目标未找到记录 error 并返回安全值。
-* Manifest 保留前缀被误用记录 warning 并忽略候选项。
+* Manifest 固定标记对应的类名无效时记录 warning 并忽略候选项。
 * Android、业务实现和 Launcher 抛出的异常不吞掉。
 * `Error`、`LinkageError` 和系统级故障不转换为普通失败。
 

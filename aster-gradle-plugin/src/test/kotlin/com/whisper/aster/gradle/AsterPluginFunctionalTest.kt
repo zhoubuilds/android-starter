@@ -24,8 +24,8 @@ class AsterPluginFunctionalTest {
     val temporaryFolder: TemporaryFolder = TemporaryFolder()
 
     /**
-     * 验证 application 和 library Variant 都能生成 Manifest, 且 metadata name
-     * 和 KSP 最终包名保持一致.
+     * 验证 application 和 library Variant 都能生成 Manifest, 且 Registry 类名、
+     * metadata 固定标记和 KSP 最终包名保持一致.
      */
     @Test
     fun registersApplicationAndLibraryVariants() {
@@ -294,7 +294,7 @@ $kspAssertionTask
     }
 
     /**
-     * 验证生成的 Manifest 同时包含 metadata name 和 Registry 全限定类名.
+     * 验证生成的 Manifest 使用 Registry 全限定类名作为 name 和固定标记作为 value.
      *
      * @param projectDir 临时工程根目录.
      * @param moduleName 模块名称.
@@ -312,8 +312,8 @@ $kspAssertionTask
         val manifest: String = manifestFile.readText()
         val qualifiedName: String = "$registryPackage.AsterGeneratedRegistry"
         assertTrue(manifestFile.isFile)
-        assertTrue(manifest.contains("android:name=\"$REGISTRY_METADATA_PREFIX$qualifiedName\""))
-        assertTrue(manifest.contains("android:value=\"$qualifiedName\""))
+        assertTrue(manifest.contains("android:name=\"$qualifiedName\""))
+        assertTrue(manifest.contains("android:value=\"$REGISTRY_METADATA_MARKER\""))
     }
 
     /**
@@ -437,7 +437,6 @@ $kspAssertionTask
     }
 
     private companion object {
-        private const val REGISTRY_METADATA_PREFIX: String =
-            "com.whisper.aster.runtime.registry."
+        private const val REGISTRY_METADATA_MARKER: String = "com.whisper.aster.registry"
     }
 }

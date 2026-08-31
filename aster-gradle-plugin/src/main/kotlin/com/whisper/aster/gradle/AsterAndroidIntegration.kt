@@ -150,15 +150,12 @@ internal class AsterAndroidIntegration {
                 val qualifiedName: Provider<String> = namespace.map { value: String ->
                     "${registryPackage(value)}.$GENERATED_CLASS_NAME"
                 }
-                val metadataName: Provider<String> = qualifiedName.map { value: String ->
-                    "$REGISTRY_METADATA_PREFIX$value"
-                }
                 val manifestOutput: Provider<RegularFile> = project.layout.buildDirectory.file(
                     "generated/aster/$variantName/manifest/AndroidManifest.xml"
                 )
 
-                registryMetadataName.set(metadataName)
                 registryQualifiedName.set(qualifiedName)
+                registryMetadataMarker.set(REGISTRY_METADATA_MARKER)
                 manifestFile.set(manifestOutput)
             }
 
@@ -202,10 +199,9 @@ internal class AsterAndroidIntegration {
         private const val TESTED_AGP_VERSION: String = "9.2.1"
 
         /**
-         * Registry Manifest metadata key 的固定前缀.
+         * Registry Manifest metadata 的固定发现标记.
          */
-        private const val REGISTRY_METADATA_PREFIX: String =
-            "com.whisper.aster.runtime.registry."
+        private const val REGISTRY_METADATA_MARKER: String = "com.whisper.aster.registry"
 
         /**
          * 每个模块生成的 Registry 类名.

@@ -4,6 +4,7 @@
 
 | 修订时间（CST）  | 修订人  | 修订说明                                                                                   |
 |------------------|---------|--------------------------------------------------------------------------------------------|
+| 2026-08-31       | whisper | 反转 Registry Manifest metadata 并采用固定发现标记                                          |
 | 2026-08-20       | whisper | 标记稳定契约与关键协议的 Aegis 保护范围                                                     |
 | 2026-08-20       | whisper | 迁移 Aegis 修改保护标记                                                                     |
 | 2026-07-24 18:40 | whisper | 同步当前 AGP 9.2.1、Gradle 9.6.1、Kotlin 2.4.10、KSP 2.3.10、API 37 和 JVM 17 验证基线      |
@@ -106,8 +107,8 @@ AsterPlugin.apply
 
 ```xml
 <meta-data
-    android:name="com.whisper.aster.runtime.registry.<registry-qualified-name>"
-    android:value="<registry-qualified-name>" />
+    android:name="<registry-qualified-name>"
+    android:value="com.whisper.aster.registry" />
 ```
 
 library 的生成 Manifest 随 AAR 发布，application 的生成 Manifest 进入 APK。插件不修改 `src/main/AndroidManifest.xml`。
@@ -236,8 +237,8 @@ aster/aster-runtime/src/main/java/com/whisper/aster/
 ```text
 Aster.initialize(application)
   -> ManifestRegistryLoader 读取 ApplicationInfo.metaData
-  -> 筛选 com.whisper.aster.runtime.registry. 前缀
-  -> Class.forName(name, initialize = false)
+  -> 按 value 筛选 com.whisper.aster.registry 固定标记
+  -> 读取 metadata name 并执行 Class.forName(name, initialize = false)
   -> 实例化 AsterRegistryInstaller
   -> installer.install(RegistrationSession)
   -> 检查全局路由和能力冲突
@@ -287,7 +288,8 @@ Capability 初始化期间禁止解析其它 Capability。Runtime 不检测递�
 | KSP Registry 包参数  | `aster.registryPackage`                                    | plugin、compiler         |
 | 生成包名              | `<androidNamespace>.aster.generated`                        | plugin、compiler         |
 | 生成类名              | `AsterGeneratedRegistry`                                   | plugin、compiler、R8 规则语义 |
-| metadata 前缀       | `com.whisper.aster.runtime.registry.`                       | plugin、runtime          |
+| metadata name      | `<registry-qualified-name>`                                | plugin、runtime、R8 规则语义 |
+| metadata 固定标记    | `com.whisper.aster.registry`                               | plugin、runtime          |
 | Installer 接口      | `com.whisper.aster.runtime.registry.AsterRegistryInstaller` | compiler、runtime、R8     |
 | Registrar 接口      | `com.whisper.aster.runtime.registry.AsterRegistrar`         | compiler、runtime、R8     |
 
@@ -323,7 +325,7 @@ Capability 初始化期间禁止解析其它 Capability。Runtime 不检测递�
 
 非法动态名称、路由未找到、能力未找到和 Activity Result 携带 `NEW_TASK` 会记录英文 error，并返回 `null`、`false` 或无效 Postcard。
 
-Manifest 保留前缀对应的 metadata 值无效、class 不存在或类型不匹配时记录英文 warning 并忽略。
+Manifest 固定标记对应的 metadata name 为空、class 不存在或类型不匹配时记录英文 warning 并忽略。
 
 ## 7. R8 契约
 
@@ -468,7 +470,8 @@ AGP 8.x 没有默认 built-in Kotlin，验证 fixture 必须显式应用 `org.je
 
 ### 10.4 协议未版本化
 
-外部 AAR 可能由旧 compiler 生成，而宿主使用新 runtime。当前没有 metadata 协议版本或依赖平台强制对齐，发布前应定义版本兼容策略。
+固定发现标记 `com.whisper.aster.registry` 不承载协议版本。当前要求 plugin、compiler 和 runtime 使用同一发布版本；如果发布后需要让
+旧 AAR 与新宿主独立组合，应先定义兼容读取周期、版本协商和依赖平台约束，不能把固定发现标记本身视为兼容性证明。
 
 ### 10.5 compiler 单 JAR 分发
 

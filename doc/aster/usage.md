@@ -4,6 +4,7 @@
 
 | 修订时间（CST）  | 修订人    | 修订说明                                                                                  |
 |------------------|-----------|-------------------------------------------------------------------------------------------|
+| 2026-08-31       | whisper   | 同步 Registry Manifest metadata 固定发现标记                                               |
 | 2026-07-29       | whisper   | 补充路由跨模块暴露边界                                                                    |
 | 2026-07-24 18:40 | whisper   | 同步当前已验证依赖基线为 AGP 9.2.1、Gradle 9.6.1、Kotlin 2.4.10、KSP 2.3.10、API 37 和 JVM 17 |
 | 2026-07-23 19:35 | whisper   | 补充 R8/ProGuard consumer rules、手动配置场景及 release 验证方法                          |
@@ -420,7 +421,7 @@ id("com.whisper.aster")
 典型日志：
 
 ```text
-Ignoring manifest metadata value '...' because the referenced class could not be found
+Ignoring manifest metadata name '...' marked with 'com.whisper.aster.registry' because the referenced class could not be found
 ```
 
 按顺序检查：

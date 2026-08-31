@@ -25,11 +25,10 @@ class ManifestRegistryLoaderTest {
         val warningCauses: MutableList<Throwable?> = mutableListOf()
         val metadataEntries: Map<String, Any?> = mapOf(
             "unrelated.metadata" to "missing.UnrelatedClass",
-            "$REGISTRY_METADATA_PREFIX.null" to null,
-            "$REGISTRY_METADATA_PREFIX.number" to 1,
-            "$REGISTRY_METADATA_PREFIX.blank" to " ",
-            "$REGISTRY_METADATA_PREFIX.missing" to "missing.RegistryInstaller",
-            "$REGISTRY_METADATA_PREFIX.wrongType" to String::class.java.name
+            "legacy.RegistryInstaller" to "com.whisper.aster.runtime.registry.legacy",
+            "" to REGISTRY_METADATA_MARKER,
+            "missing.RegistryInstaller" to REGISTRY_METADATA_MARKER,
+            String::class.java.name to REGISTRY_METADATA_MARKER
         )
 
         val installers: List<AsterRegistryInstaller> = ManifestRegistryLoader.load(
@@ -42,18 +41,18 @@ class ManifestRegistryLoaderTest {
         )
 
         assertTrue(installers.isEmpty())
-        assertEquals(5, warningMessages.size)
-        assertTrue(warningMessages.all { it.contains("reserved for Aster registries") })
+        assertEquals(3, warningMessages.size)
+        assertTrue(warningMessages.all { it.contains(REGISTRY_METADATA_MARKER) })
         assertTrue(warningCauses.any { it is ClassNotFoundException })
     }
 
     /**
-     * metadata name 只需要保留前缀, 不需要与 Registry 类名对应.
+     * metadata value 匹配固定标记时, name 作为 Registry 类名加载.
      */
     @Test
-    fun reservedMetadataNameLoadsIndependentRegistryValue() {
+    fun registryMetadataMarkerLoadsRegistryNamedByKey() {
         val metadataEntries: Map<String, Any?> = mapOf(
-            "${REGISTRY_METADATA_PREFIX}custom.entry" to TestRegistryInstaller::class.java.name
+            TestRegistryInstaller::class.java.name to REGISTRY_METADATA_MARKER
         )
 
         val installers: List<AsterRegistryInstaller> = ManifestRegistryLoader.load(
@@ -67,14 +66,13 @@ class ManifestRegistryLoaderTest {
     }
 
     /**
-     * 多个合法 Registry 按类名稳定排序, 重复 value 只实例化一次.
+     * 多个合法 Registry 按 metadata name 稳定排序.
      */
     @Test
-    fun validRegistryValuesAreSortedAndDeduplicated() {
+    fun validRegistryNamesAreSorted() {
         val metadataEntries: Map<String, Any?> = mapOf(
-            "${REGISTRY_METADATA_PREFIX}zeta" to ZetaRegistryInstaller::class.java.name,
-            "${REGISTRY_METADATA_PREFIX}alpha" to AlphaRegistryInstaller::class.java.name,
-            "${REGISTRY_METADATA_PREFIX}duplicate" to ZetaRegistryInstaller::class.java.name
+            ZetaRegistryInstaller::class.java.name to REGISTRY_METADATA_MARKER,
+            AlphaRegistryInstaller::class.java.name to REGISTRY_METADATA_MARKER
         )
 
         val installers: List<AsterRegistryInstaller> = ManifestRegistryLoader.load(
@@ -95,8 +93,7 @@ class ManifestRegistryLoaderTest {
     @Test
     fun confirmedRegistryConstructionFailureIsFatal() {
         val metadataEntries: Map<String, Any?> = mapOf(
-            "${REGISTRY_METADATA_PREFIX}throwing" to
-                ThrowingRegistryInstaller::class.java.name
+            ThrowingRegistryInstaller::class.java.name to REGISTRY_METADATA_MARKER
         )
 
         val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
@@ -149,8 +146,8 @@ class ManifestRegistryLoaderTest {
     private companion object {
 
         /**
-         * Registry Manifest metadata key 的固定前缀.
+         * Registry Manifest metadata 的固定发现标记.
          */
-        private const val REGISTRY_METADATA_PREFIX: String = "com.whisper.aster.runtime.registry."
+        private const val REGISTRY_METADATA_MARKER: String = "com.whisper.aster.registry"
     }
 }

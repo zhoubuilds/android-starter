@@ -28,13 +28,10 @@ class GenerateAsterManifestTaskTest {
             .build()
         val manifestFile = temporaryFolder.newFile("AndroidManifest.xml")
         val task = project.tasks.register<GenerateAsterManifestTask>("generateManifest") {
-            registryMetadataName.set(
-                "com.whisper.aster.runtime.registry." +
-                    "com.example.user.aster.generated.AsterGeneratedRegistry"
-            )
             registryQualifiedName.set(
                 "com.example.user.aster.generated.AsterGeneratedRegistry"
             )
+            registryMetadataMarker.set("com.whisper.aster.registry")
             this.manifestFile.set(manifestFile)
         }.get()
 
@@ -43,13 +40,12 @@ class GenerateAsterManifestTaskTest {
         val manifest = manifestFile.readText()
         assertTrue(
             manifest.contains(
-                "com.whisper.aster.runtime.registry." +
-                    "com.example.user.aster.generated.AsterGeneratedRegistry"
+                "android:name=\"com.example.user.aster.generated.AsterGeneratedRegistry\""
             )
         )
         assertTrue(
             manifest.contains(
-                "com.example.user.aster.generated.AsterGeneratedRegistry"
+                "android:value=\"com.whisper.aster.registry\""
             )
         )
     }

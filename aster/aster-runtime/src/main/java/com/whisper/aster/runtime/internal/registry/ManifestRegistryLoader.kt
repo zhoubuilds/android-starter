@@ -12,7 +12,8 @@ import com.whisper.aster.runtime.registry.AsterRegistryInstaller
  *
  * 负责读取 Registry metadata、整理注册器类名并反射创建符合协议的安装器实例.
  *
- * @aegis 保护 Manifest metadata 前缀, 类名取值, 排序去重和加载失败边界.
+ * @aegis 保护 Manifest metadata 标记, 类名取值, 排序去重和加载失败边界.
+ * @aegis-audit 2026-08-31 | whisper | 经授权将固定标记作为 value, Registry 类名改由 name 提供.
  *
  * @author whisper
  * @since 2026/07/22
@@ -20,9 +21,9 @@ import com.whisper.aster.runtime.registry.AsterRegistryInstaller
 internal object ManifestRegistryLoader {
 
     /**
-     * Registry Manifest metadata key 的固定前缀.
+     * Registry Manifest metadata 的固定发现标记.
      */
-    private const val REGISTRY_METADATA_PREFIX: String = "com.whisper.aster.runtime.registry."
+    private const val REGISTRY_METADATA_MARKER: String = "com.whisper.aster.registry"
 
     /**
      * 加载当前应用中全部 Aster 模块注册器.
@@ -44,7 +45,7 @@ internal object ManifestRegistryLoader {
     /**
      * 从 Manifest metadata 候选项中加载注册器.
      *
-     * metadata name 只用于匹配保留前缀, value 独立作为候选注册器类名校验.
+     * metadata value 用于匹配固定发现标记, name 作为候选注册器类名校验.
      *
      * @param metadataEntries Manifest metadata 条目.
      * @param classLoader 当前应用的 ClassLoader.
@@ -57,8 +58,11 @@ internal object ManifestRegistryLoader {
         classLoader: ClassLoader,
         warning: (message: String, cause: Throwable?) -> Unit
     ): List<AsterRegistryInstaller> {
-        val registryMetadataNames: List<String> = metadataEntries.keys
-            .filter { it.startsWith(REGISTRY_METADATA_PREFIX) }
+        val registryMetadataNames: List<String> = metadataEntries.entries
+            .filter { entry: Map.Entry<String, Any?> ->
+                entry.value == REGISTRY_METADATA_MARKER
+            }
+            .map { entry: Map.Entry<String, Any?> -> entry.key }
             .sorted()
         if (registryMetadataNames.isEmpty()) {
             warning(
@@ -69,14 +73,11 @@ internal object ManifestRegistryLoader {
             return emptyList()
         }
 
-        val registryClassNames: List<String> = registryMetadataNames.mapNotNull {
-            val value: Any? = metadataEntries[it]
-            val className: String? = value as? String
-            if (className.isNullOrBlank()) {
+        val registryClassNames: List<String> = registryMetadataNames.mapNotNull { className ->
+            if (className.isBlank()) {
                 warning(
-                    "Ignoring manifest metadata '$it' because its value must be a non-blank " +
-                        "String containing an Aster registry class name. The metadata prefix " +
-                        "'$REGISTRY_METADATA_PREFIX' is reserved for Aster registries.",
+                    "Ignoring manifest metadata marked with '$REGISTRY_METADATA_MARKER' because " +
+                        "its name must contain a non-blank Aster registry class name.",
                     null
                 )
                 null
@@ -110,9 +111,8 @@ internal object ManifestRegistryLoader {
             Class.forName(className, false, classLoader)
         } catch (exception: ClassNotFoundException) {
             warning(
-                "Ignoring manifest metadata value '$className' because the referenced class " +
-                    "could not be found. The metadata prefix '$REGISTRY_METADATA_PREFIX' is " +
-                    "reserved for Aster registries.",
+                "Ignoring manifest metadata name '$className' marked with " +
+                    "'$REGISTRY_METADATA_MARKER' because the referenced class could not be found.",
                 exception
             )
             return null
@@ -120,9 +120,9 @@ internal object ManifestRegistryLoader {
 
         if (!AsterRegistryInstaller::class.java.isAssignableFrom(registryClass)) {
             warning(
-                "Ignoring manifest metadata value '$className' because it does not implement " +
-                    "${AsterRegistryInstaller::class.java.name}. The metadata prefix " +
-                    "'$REGISTRY_METADATA_PREFIX' is reserved for Aster registries.",
+                "Ignoring manifest metadata name '$className' marked with " +
+                    "'$REGISTRY_METADATA_MARKER' because it does not implement " +
+                    "${AsterRegistryInstaller::class.java.name}.",
                 null
             )
             return null
@@ -146,7 +146,6 @@ internal object ManifestRegistryLoader {
             return emptyMap()
         }
         return metadata.keySet()
-            .filter { it.startsWith(REGISTRY_METADATA_PREFIX) }
             .associateWith { metadata.get(it) }
     }
 

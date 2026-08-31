@@ -15,6 +15,7 @@ import org.gradle.api.tasks.TaskAction
  * 或 AAR 实际包含的所有模块 Registry.
  *
  * @aegis 保护任务输入/输出契约和生成 Manifest metadata 的 XML 协议.
+ * @aegis-audit 2026-08-31 | whisper | 经授权将 Registry 类名作为 metadata name, 固定标记作为 value.
  *
  * @author whisper
  * @since 2026/07/21
@@ -22,16 +23,16 @@ import org.gradle.api.tasks.TaskAction
 abstract class GenerateAsterManifestTask : DefaultTask() {
 
     /**
-     * Registry 在最终 ApplicationInfo.metaData 中使用的索引名称.
-     */
-    @get:Input
-    abstract val registryMetadataName: Property<String>
-
-    /**
      * 当前模块 Registry 的全限定类名.
      */
     @get:Input
     abstract val registryQualifiedName: Property<String>
+
+    /**
+     * Registry 在最终 ApplicationInfo.metaData 中使用的固定发现标记.
+     */
+    @get:Input
+    abstract val registryMetadataMarker: Property<String>
 
     /**
      * 生成的 Manifest 文件.
@@ -52,8 +53,8 @@ abstract class GenerateAsterManifestTask : DefaultTask() {
             <manifest xmlns:android="http://schemas.android.com/apk/res/android">
                 <application>
                     <meta-data
-                        android:name="${registryMetadataName.get().escapeXmlAttribute()}"
-                        android:value="${registryQualifiedName.get().escapeXmlAttribute()}" />
+                        android:name="${registryQualifiedName.get().escapeXmlAttribute()}"
+                        android:value="${registryMetadataMarker.get().escapeXmlAttribute()}" />
                 </application>
             </manifest>
             """.trimIndent(),
