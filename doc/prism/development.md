@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                              |
 |-----------------|---------|---------------------------------------|
+| 2026-09-01      | whisper | 拆分 Prism 职责并迁移至 buildlogic 包 |
 | 2026-08-31      | whisper | 调整 BuildConfig 辅助任务名称         |
 | 2026-08-31      | whisper | 建立 Prism 实现, 维护和验证说明       |
 
@@ -17,25 +18,36 @@ build-logic/
 |- settings.gradle.kts
 |- build.gradle.kts
 `- src/
-   |- main/kotlin/com/whisper/prism/gradle/
+   |- main/kotlin/com/whisper/buildlogic/prism/
    |  |- PrismPlugin.kt
+   |  |- PrismConfigLoader.kt
+   |  |- PrismConfigParser.kt
+   |  |- PrismConfig.kt
+   |  |- PrismAndroidConfigurator.kt
    |  |- PrismAppConfigExtension.kt
    |  `- PrismBuildConfigTaskRegistrar.kt
-   `- test/kotlin/com/whisper/prism/gradle/
+   `- test/kotlin/com/whisper/buildlogic/prism/
+      |- PrismConfigParserTest.kt
       |- PrismPluginFunctionalTest.kt
       `- FakeAndroidApplicationPlugin.kt
 ```
 
-| 文件                                | 职责                                                        |
-|-------------------------------------|-------------------------------------------------------------|
-| `PrismPlugin.kt`                    | 选择和解析配置, 校验契约, 配置 Android DSL                  |
-| `PrismAppConfigExtension.kt`        | 提供类型安全的 `prismAppConfig.get<T>(name)`                |
-| `PrismBuildConfigTaskRegistrar.kt`  | 按最终 Android 构建变体挂接 BuildConfig 聚合任务             |
-| `PrismPluginFunctionalTest.kt`      | 使用 Gradle TestKit 验证配置, 诊断和任务依赖                |
-| `FakeAndroidApplicationPlugin.kt`   | 为功能测试提供最小 Android DSL 和 Variant 行为              |
+| 文件                                | 职责                                                         |
+|-------------------------------------|--------------------------------------------------------------|
+| `PrismPlugin.kt`                    | 编排配置加载, AGP 配置, 扩展冻结和任务注册                   |
+| `PrismConfigLoader.kt`              | 选择根工程配置文件, 读取文本并输出缺省配置提示               |
+| `PrismConfigParser.kt`              | 将 TOML 转换为配置模型并报告语法, 结构, 类型和引用错误       |
+| `PrismConfig.kt`                    | 保存解析完成的应用, 变体, 环境和 Android 字段配置模型        |
+| `PrismAndroidConfigurator.kt`       | 将配置模型写入 application 或 library 的公开 AGP DSL         |
+| `PrismAppConfigExtension.kt`        | 提供类型安全的 `prismAppConfig.get<T>(name)`                 |
+| `PrismBuildConfigTaskRegistrar.kt`  | 按最终 Android 构建变体挂接 BuildConfig 聚合任务              |
+| `PrismConfigParserTest.kt`          | 不加载 AGP, 直接验证 TOML 解析, 模型映射和结构化诊断         |
+| `PrismPluginFunctionalTest.kt`      | 使用 Gradle TestKit 验证文件选择, 插件集成和任务依赖         |
+| `FakeAndroidApplicationPlugin.kt`   | 为功能测试提供最小 Android DSL 和 Variant 行为               |
 
-`build-logic` 使用 `kotlin-dsl`, 以 `compileOnly` 依赖 AGP 实现, 通过 `org.tomlj` 解析 TOML. 插件坐标为
-`com.whisper.prism`.
+`build-logic` 是工程内构建工具包, 使用 `com.whisper.buildlogic` 包根; Prism 位于其 `prism` 子包. 后续构建工具使用同级子包,
+不进入 Prism 命名空间. 模块使用 `kotlin-dsl`, 以 `compileOnly` 依赖 AGP 实现, 通过 `org.tomlj` 解析 TOML. 插件 ID 为
+`com.whisper.prism`, 不随 Kotlin 实现包迁移而改变.
 
 ## 2. 插件执行流程
 
@@ -44,18 +56,19 @@ PrismPlugin.apply
   |- 创建 prismAppConfig 扩展
   |- 注册 generatePrismBuildConfigSources 聚合任务
   |- 等待 com.android.application 或 com.android.library
-  |    |- 选择并解析 app config TOML
+  |    |- PrismConfigLoader 选择并读取 app config TOML
+  |    |- PrismConfigParser 解析并校验为 AppConfig
   |    |- 冻结 exports
-  |    |- 写入 defaultConfig
-  |    |- 有 environments 时创建 env 维度和 product flavors
+  |    |- PrismAndroidConfigurator 写入 defaultConfig
+  |    |- PrismAndroidConfigurator 按需创建 env 维度和 product flavors
   |    `- 使用 Android Components 挂接各 Variant 的 BuildConfig 任务
   `- afterEvaluate
        |- 未找到 Android 插件时失败
        `- 警告手动补充的 env flavors
 ```
 
-application 和 library 分支必须保持相同的配置语义. 两者使用不同 AGP 扩展类型, 但最终都委托给相同的解析模型和
-`VariantDimension.applyVariantConfig()`.
+application 和 library 分支必须保持相同的配置语义. 两者使用不同 AGP 扩展类型, 但最终都委托给相同的 `AppConfig` 和
+`PrismAndroidConfigurator`. `PrismConfigParser` 不得引用 AGP 类型, `PrismAndroidConfigurator` 不得读取 TOML 或重新实现解析校验.
 
 ## 3. 稳定契约
 
@@ -112,7 +125,7 @@ application 和 library 分支必须保持相同的配置语义. 两者使用不
 
 | 变更                         | 必须同步                                                       |
 |------------------------------|----------------------------------------------------------------|
-| TOML 分组, 字段或值类型      | 解析器, 错误诊断, 功能测试, `usage.md`                         |
+| TOML 分组, 字段或值类型      | 解析器, 错误诊断, 解析器测试, 功能测试, `usage.md`             |
 | 插件 ID 或扩展 API           | 插件声明, 示例 app, 退出步骤, 根 README                        |
 | `env` 维度或环境名称规则     | application/library 分支, 组合变体测试, 设计和使用文档         |
 | BuildConfig 任务挂接         | 注册器, feature 开关测试, 多维度变体测试                       |
@@ -123,6 +136,9 @@ Prism 是公共模板的可选能力. 新增字段前应确认它属于通用 An
 固化到插件实现.
 
 ## 7. 验证
+
+解析器单元测试不加载 AGP, 当前覆盖 TOML 字面量和引用到 `AppConfig` 的映射, 环境名称, BuildConfig 字段名, 引用错误以及
+语法错误的位置诊断.
 
 插件功能测试使用 Gradle TestKit, 当前覆盖:
 

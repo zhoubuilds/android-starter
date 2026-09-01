@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                                |
 |-----------------|---------|-----------------------------------------|
+| 2026-09-01      | whisper | 明确 build-logic 包归属和 Prism 实现分层 |
 | 2026-08-31      | whisper | 调整 BuildConfig 辅助任务名称           |
 | 2026-08-31      | whisper | 建立 Prism 设计目标, 边界和主要取舍     |
 
@@ -49,6 +50,21 @@ flowchart LR
 
 同一次 Gradle 构建只选择一份配置文件. 所有应用 Prism 的模块从根工程解析同一路径, 避免同一构建中的模块使用不同应用配置.
 显式路径不存在时不回退, 防止因为文件名错误而悄悄使用另一套配置.
+
+### 3.1 实现分层
+
+`build-logic` 定位为工程内构建工具包, Prism 只是其中一个独立工具. 因此构建逻辑以 `com.whisper.buildlogic` 作为包根,
+Prism 实现统一位于 `com.whisper.buildlogic.prism`; 后续其它构建工具应使用各自的同级子包. Kotlin 实现包不属于插件接入契约,
+插件 ID 仍固定为 `com.whisper.prism`.
+
+Prism 内部保持以下单向处理边界:
+
+```text
+Gradle 属性和文件 -> TOML 解析 -> AppConfig -> Android DSL
+```
+
+配置加载只负责文件选择和读取, 解析器只负责 TOML 到配置模型的转换与校验, Android 配置器只消费已解析模型. TOML 解析代码
+不依赖 AGP 类型, 因而可以直接进行 JVM 单元测试; Android DSL 适配不读取原始 TOML, 避免配置规则在两层重复实现.
 
 ## 4. 分层配置模型
 

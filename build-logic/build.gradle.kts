@@ -16,7 +16,7 @@ gradlePlugin {
     plugins {
         register("prism") {
             id = "com.whisper.prism"
-            implementationClass = "com.whisper.prism.gradle.PrismPlugin"
+            implementationClass = "com.whisper.buildlogic.prism.PrismPlugin"
         }
     }
 }

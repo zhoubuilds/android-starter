@@ -1,4 +1,4 @@
-package com.whisper.prism.gradle
+package com.whisper.buildlogic.prism
 
 import com.android.build.api.dsl.ApplicationBuildFeatures
 import com.android.build.api.dsl.ApplicationDefaultConfig

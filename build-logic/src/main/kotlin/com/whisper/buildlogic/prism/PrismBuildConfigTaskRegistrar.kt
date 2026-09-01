@@ -1,4 +1,4 @@
-package com.whisper.prism.gradle
+package com.whisper.buildlogic.prism
 
 import com.android.build.api.variant.AndroidComponentsExtension
 import com.android.build.api.variant.Variant

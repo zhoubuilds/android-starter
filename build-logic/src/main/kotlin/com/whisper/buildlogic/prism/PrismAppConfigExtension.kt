@@ -1,4 +1,4 @@
-package com.whisper.prism.gradle
+package com.whisper.buildlogic.prism
 
 import org.gradle.api.GradleException
 import org.gradle.api.provider.MapProperty
