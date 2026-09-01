@@ -8,6 +8,7 @@ package com.whisper.habitat.runtime.registry
  *
  * @aegis 保护生成 Registry 与 Runtime 之间的 Provider 列表 ABI.
  * @aegis-audit 2026-09-01 | whisper | 经授权明确唯一生成入口和静态 Provider 列表边界.
+ * @aegis-audit 2026-09-01 | whisper | 经授权明确空 Provider 列表与 Registry ABI 失败的不同处理语义.
  *
  * @author whisper
  * @since 2026/07/27
@@ -16,6 +17,8 @@ interface HabitatRegistry {
 
     /**
      * 返回所有数据库 Dao Provider.
+     *
+     * 空列表是合法的空注册表. 方法执行或链接失败表示生成 ABI 损坏, Runtime 初始化会直接失败.
      *
      * @return 数据库 Dao Provider 列表.
      */

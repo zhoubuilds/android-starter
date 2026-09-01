@@ -3,11 +3,11 @@ package com.whisper.habitat.runtime
 import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import com.whisper.habitat.runtime.registry.HabitatDaoProvider
 import com.whisper.habitat.runtime.registry.HabitatRegistry
-import java.io.IOException
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.concurrent.CancellationException
@@ -35,7 +35,7 @@ import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowPackageManager
 
 /**
- * 验证 Habitat Registry Manifest 加载的运行时降级边界.
+ * 验证 Habitat Registry Manifest 加载的降级和完整性失败边界.
  *
  * @author whisper
  * @since 2026/08/31
@@ -74,7 +74,24 @@ class HabitatFactoryRegistryLoadingTest {
     }
 
     /**
-     * 验证 Registry 类缺失时记录 warning, 完成初始化并安装空 Dao 注册表.
+     * 验证 Manifest metadata 无法读取时中断初始化并保留 PackageManager 原始异常.
+     */
+    @Test
+    fun initializeWhenRegistryMetadataCannotBeReadThrows() {
+        val application: Application = MetadataFailingApplication()
+
+        val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
+            HabitatFactory.initialize(application)
+        }
+
+        assertTrue(exception.message.orEmpty().contains(METADATA_FAILURE_PACKAGE_NAME))
+        assertTrue(exception.message.orEmpty().contains(REGISTRY_METADATA_NAME))
+        assertTrue(exception.cause is IllegalStateException)
+        assertEquals("PackageManager is unavailable.", exception.cause?.message)
+    }
+
+    /**
+     * 验证 Registry 类缺失时提示 compiler 配置并安装空 Dao 注册表.
      */
     @Test
     fun initializeWhenRegistryClassIsMissingWarnsAndInstallsEmptyRegistry() {
@@ -83,77 +100,139 @@ class HabitatFactoryRegistryLoadingTest {
 
         HabitatFactory.initialize(application)
 
-        val registryWarning: ShadowLog.LogItem = ShadowLog.getLogsForTag(LOG_TAG)
-            .single { item: ShadowLog.LogItem ->
-                item.msg.contains(MISSING_REGISTRY_CLASS_NAME)
-            }
-        assertEquals(Log.WARN, registryWarning.type)
-        assertTrue(registryWarning.throwable is ClassNotFoundException)
+        val warning: ShadowLog.LogItem = warningContaining("Generated Habitat Registry class was not found")
+        assertEquals(Log.WARN, warning.type)
+        assertTrue(warning.msg.contains(MISSING_REGISTRY_CLASS_NAME))
+        assertTrue(warning.msg.contains(REGISTRY_METADATA_NAME))
+        assertTrue(warning.msg.contains("habitat-compiler"))
+        assertTrue(warning.throwable is ClassNotFoundException)
         assertNull(HabitatFactory.get<TestDao>())
     }
 
     /**
-     * 验证 metadata 指向非 Registry 类型时记录 warning 并安装空 Dao 注册表.
+     * 验证 metadata 指向非 Registry 类型时中断初始化并报告期望 ABI.
      */
     @Test
-    fun initializeWhenRegistryTypeIsInvalidWarnsAndInstallsEmptyRegistry() {
+    fun initializeWhenRegistryTypeIsInvalidThrows() {
         val application: Application = RuntimeEnvironment.getApplication()
         setRegistryClassMetadata(application, NotRegistry::class.java.name)
 
-        HabitatFactory.initialize(application)
+        val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
+            HabitatFactory.initialize(application)
+        }
 
-        val registryWarning: ShadowLog.LogItem = warningContaining("does not implement")
-        assertEquals(Log.WARN, registryWarning.type)
-        assertTrue(registryWarning.throwable is ClassCastException)
-        assertNull(HabitatFactory.get<TestDao>())
+        assertTrue(exception.message.orEmpty().contains(NotRegistry::class.java.name))
+        assertTrue(exception.message.orEmpty().contains(HabitatRegistry::class.java.name))
+        assertTrue(exception.cause is ClassCastException)
     }
 
     /**
-     * 验证 Registry 缺少无参构造时记录 warning 并安装空 Dao 注册表.
+     * 验证 Registry 缺少无参构造时中断初始化并保留反射原因.
      */
     @Test
-    fun initializeWhenRegistryConstructionFailsWarnsAndInstallsEmptyRegistry() {
+    fun initializeWhenRegistryConstructionFailsThrows() {
         val application: Application = RuntimeEnvironment.getApplication()
         setRegistryClassMetadata(application, RegistryWithoutNoArgConstructor::class.java.name)
 
-        HabitatFactory.initialize(application)
+        val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
+            HabitatFactory.initialize(application)
+        }
 
-        val registryWarning: ShadowLog.LogItem = warningContaining("registry could not be created")
-        assertEquals(Log.WARN, registryWarning.type)
-        assertTrue(registryWarning.throwable is ReflectiveOperationException)
-        assertNull(HabitatFactory.get<TestDao>())
+        assertTrue(exception.message.orEmpty().contains(RegistryWithoutNoArgConstructor::class.java.name))
+        assertTrue(exception.cause is ReflectiveOperationException)
     }
 
     /**
-     * 验证 Registry providers 读取失败时记录 warning 并安装空 Dao 注册表.
+     * 验证 Registry providers 读取失败时中断初始化并报告 Registry.
      */
     @Test
-    fun initializeWhenRegistryProvidersFailWarnsAndInstallsEmptyRegistry() {
+    fun initializeWhenRegistryProvidersFailThrows() {
         val application: Application = RuntimeEnvironment.getApplication()
         setRegistryClassMetadata(application, ThrowingRegistry::class.java.name)
 
+        val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
+            HabitatFactory.initialize(application)
+        }
+
+        assertTrue(exception.message.orEmpty().contains(checkNotNull(ThrowingRegistry::class.qualifiedName)))
+        assertTrue(exception.cause is IllegalStateException)
+    }
+
+    /**
+     * 验证 Provider factories 读取失败时中断初始化并报告 Provider.
+     */
+    @Test
+    fun initializeWhenProviderFactoriesFailThrows() {
+        val application: Application = RuntimeEnvironment.getApplication()
+        setRegistryClassMetadata(application, ThrowingProviderRegistry::class.java.name)
+
+        val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
+            HabitatFactory.initialize(application)
+        }
+
+        assertTrue(exception.message.orEmpty().contains(checkNotNull(ThrowingProvider::class.qualifiedName)))
+        assertTrue(exception.cause is IllegalStateException)
+    }
+
+    /**
+     * 验证 metadata 已声明但 Registry 类名空白时中断初始化.
+     */
+    @Test
+    fun initializeWhenRegistryMetadataValueIsBlankThrows() {
+        val application: Application = RuntimeEnvironment.getApplication()
+        setRegistryClassMetadata(application, " ")
+
+        val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
+            HabitatFactory.initialize(application)
+        }
+
+        assertTrue(exception.message.orEmpty().contains(REGISTRY_METADATA_NAME))
+        assertTrue(exception.message.orEmpty().contains("non-blank"))
+    }
+
+    /**
+     * 验证合法 Registry 没有 Provider 时仍可安装空 Dao 注册表.
+     */
+    @Test
+    fun initializeWhenRegistryHasNoProvidersInstallsEmptyRegistry() {
+        val application: Application = RuntimeEnvironment.getApplication()
+        setRegistryClassMetadata(application, EmptyRegistry::class.java.name)
+
         HabitatFactory.initialize(application)
 
-        val registryWarning: ShadowLog.LogItem = warningContaining("providers could not be loaded")
-        assertEquals(Log.WARN, registryWarning.type)
-        assertTrue(registryWarning.throwable is IllegalStateException)
         assertNull(HabitatFactory.get<TestDao>())
     }
 
     /**
-     * 验证 Provider factories 读取失败时记录 warning 并安装空 Dao 注册表.
+     * 验证 Registry providers 链接失败时中断初始化并保留原始 cause.
      */
     @Test
-    fun initializeWhenProviderFactoriesFailWarnsAndInstallsEmptyRegistry() {
+    fun initializeWhenRegistryProvidersCannotBeLinkedThrows() {
         val application: Application = RuntimeEnvironment.getApplication()
-        setRegistryClassMetadata(application, ThrowingProviderRegistry::class.java.name)
+        setRegistryClassMetadata(application, LinkageThrowingRegistry::class.java.name)
 
-        HabitatFactory.initialize(application)
+        val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
+            HabitatFactory.initialize(application)
+        }
 
-        val providerWarning: ShadowLog.LogItem = warningContaining("factories could not be loaded")
-        assertEquals(Log.WARN, providerWarning.type)
-        assertTrue(providerWarning.throwable is IllegalStateException)
-        assertNull(HabitatFactory.get<TestDao>())
+        assertTrue(exception.message.orEmpty().contains(checkNotNull(LinkageThrowingRegistry::class.qualifiedName)))
+        assertTrue(exception.cause is LinkageError)
+    }
+
+    /**
+     * 验证 Provider bindings 链接失败时中断初始化并保留原始 cause.
+     */
+    @Test
+    fun initializeWhenProviderBindingsCannotBeLinkedThrows() {
+        val application: Application = RuntimeEnvironment.getApplication()
+        setRegistryClassMetadata(application, LinkageThrowingProviderRegistry::class.java.name)
+
+        val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
+            HabitatFactory.initialize(application)
+        }
+
+        assertTrue(exception.message.orEmpty().contains(checkNotNull(LinkageThrowingProvider::class.qualifiedName)))
+        assertTrue(exception.cause is LinkageError)
     }
 
     /**
@@ -205,49 +284,6 @@ class HabitatFactoryRegistryLoadingTest {
         val warning: ShadowLog.LogItem = warningContaining("Dao binding not found")
         assertTrue(warning.msg.contains(checkNotNull(TestDao::class.qualifiedName)))
         assertTrue(warning.msg.contains(ARCHIVE_QUALIFIER))
-    }
-
-    /**
-     * 验证限定工厂返回错误类型时记录 warning 并返回 null.
-     */
-    @Test
-    fun getWithQualifierWhenFactoryReturnsWrongTypeWarnsAndReturnsNull() {
-        installProviders(
-            listOf(
-                TestDaoProvider(
-                    mapOf(ACCOUNT_QUALIFIER to { OtherDao() })
-                )
-            )
-        )
-
-        assertNull(HabitatFactory.get<TestDao>(ACCOUNT_QUALIFIER))
-
-        val warning: ShadowLog.LogItem = warningContaining("Dao type mismatch")
-        assertTrue(warning.msg.contains(checkNotNull(TestDao::class.qualifiedName)))
-        assertTrue(warning.msg.contains(checkNotNull(OtherDao::class.qualifiedName)))
-        assertTrue(warning.msg.contains(ACCOUNT_QUALIFIER))
-    }
-
-    /**
-     * 验证 Dao 工厂抛出普通受检异常时记录 warning 并返回 null.
-     */
-    @Test
-    fun getWhenFactoryThrowsCheckedExceptionWarnsAndReturnsNull() {
-        installProviders(
-            listOf(
-                TestDaoProvider(
-                    mapOf(
-                        null to { throw IOException("Dao storage is unavailable.") }
-                    )
-                )
-            )
-        )
-
-        assertNull(HabitatFactory.get<TestDao>())
-
-        val warning: ShadowLog.LogItem = warningContaining("Dao factory failed")
-        assertEquals(Log.WARN, warning.type)
-        assertTrue(warning.throwable is IOException)
     }
 
     /**
@@ -360,6 +396,15 @@ class HabitatFactoryRegistryLoadingTest {
 
     class NotRegistry
 
+    private class MetadataFailingApplication : Application() {
+
+        override fun getPackageName(): String = METADATA_FAILURE_PACKAGE_NAME
+
+        override fun getPackageManager(): PackageManager {
+            error("PackageManager is unavailable.")
+        }
+    }
+
     class RegistryWithoutNoArgConstructor(
         @Suppress("UNUSED_PARAMETER") marker: String,
     ) : HabitatRegistry {
@@ -374,9 +419,26 @@ class HabitatFactoryRegistryLoadingTest {
         }
     }
 
+    class EmptyRegistry : HabitatRegistry {
+
+        override fun providers(): List<HabitatDaoProvider> = emptyList()
+    }
+
+    class LinkageThrowingRegistry : HabitatRegistry {
+
+        override fun providers(): List<HabitatDaoProvider> {
+            throw NoClassDefFoundError("MissingHabitatProvider")
+        }
+    }
+
     class ThrowingProviderRegistry : HabitatRegistry {
 
         override fun providers(): List<HabitatDaoProvider> = listOf(ThrowingProvider())
+    }
+
+    class LinkageThrowingProviderRegistry : HabitatRegistry {
+
+        override fun providers(): List<HabitatDaoProvider> = listOf(LinkageThrowingProvider())
     }
 
     class BlockingRegistry : HabitatRegistry {
@@ -415,6 +477,12 @@ class HabitatFactoryRegistryLoadingTest {
             get() = error("Provider factories failed.")
     }
 
+    private class LinkageThrowingProvider : HabitatDaoProvider {
+
+        override val daoFactories: Map<KClass<*>, Map<String?, () -> Any>>
+            get() = throw NoClassDefFoundError("MissingDaoFactory")
+    }
+
     private class TestDaoProvider(
         factories: Map<String?, () -> Any>,
     ) : HabitatDaoProvider {
@@ -429,8 +497,6 @@ class HabitatFactoryRegistryLoadingTest {
     }
 
     class TestDao
-
-    class OtherDao
 
     private companion object {
 
@@ -448,5 +514,7 @@ class HabitatFactoryRegistryLoadingTest {
 
         private const val MISSING_REGISTRY_CLASS_NAME: String =
             "com.example.habitat.MissingHabitatRegistry"
+
+        private const val METADATA_FAILURE_PACKAGE_NAME: String = "com.example.metadata.failure"
     }
 }

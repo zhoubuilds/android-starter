@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                                  |
 |-----------------|---------|-------------------------------------------|
+| 2026-09-01      | whisper | 允许 Registry 类缺失时提示并降级         |
+| 2026-09-01      | whisper | 运行时完整性错误改为 fail fast           |
 | 2026-09-01      | whisper | 明确同签名继承 accessor 的 Room 校验边界 |
 | 2026-09-01      | whisper | 修复 Dao 工厂吞掉取消异常的问题          |
 | 2026-09-01      | whisper | 补全编译依赖父 accessor 的 qualifier 校验 |
@@ -276,7 +278,7 @@ habitat/habitat-runtime/src/main/java/com/whisper/habitat/runtime/
   -> registry.providers()
   -> provider.daoFactories
   -> 合并 Dao 类型和 qualifier 工厂
-  -> 过滤重复或非法运行时绑定
+  -> 校验运行时 binding 完整性
   -> @Volatile 可空只读 Map 发布 Dao binding 快照
 ```
 
@@ -288,24 +290,38 @@ Dao binding 快照只保存 `() -> Any` 工厂并在发布后保持不变, 安�
 非限定获取在目标 Dao 只有一个绑定时执行该工厂, 多于一个时 warning 并返回 `null`。限定获取只执行完全匹配
 `(Dao 类型, qualifier)` 的工厂。两个公开重载及其 reified 版本都通过 `KClass<T>` 保留返回值 `T?` 的类型安全。
 
-### 4.3 可恢复失败
+### 4.3 查找失败与完整性失败
 
-以下问题会记录 Logcat warning 并使用安全降级:
+以下情况属于受支持的空注册表或查找未命中, 会记录 Logcat warning 并使用安全降级:
 
 * Manifest metadata 缺失。
-* metadata 指向类不存在、类加载失败或类型不符合 `HabitatRegistry`。
-* Registry 构造失败。
-* Registry providers 读取失败。
-* Provider factories 读取失败。
+* metadata 指向的 Registry 类不存在; warning 会提示检查当前 Variant 的 `habitat-compiler` 配置。
 * Dao 未注册。
-* qualifier 为空、缺失或与请求 Dao 不匹配。
+* qualifier 缺失或与请求 Dao 不匹配。
 * 非限定获取遇到多个 Dao binding。
-* 运行时 Provider 出现重复 qualifier 或混合限定/非限定绑定。
+
+合法 Registry 返回空 Provider 列表时会安装空 binding 快照, 不视为完整性错误。以下问题表示调用错误或基础设施完整性损坏,
+必须直接失败:
+
+* 查询 qualifier 为空白时抛出 `IllegalArgumentException`。
+* Manifest metadata 读取失败, 或 metadata 已声明但 Registry 类名无效。
+* Registry 类已找到但链接失败、类型不符合 `HabitatRegistry` 或无法构造。
+* Registry providers 或 Provider bindings 读取、链接失败。
+* 运行时 Provider 出现空白 qualifier、重复 qualifier 或混合限定/非限定 binding。
 * Dao 工厂抛出 `CancellationException` 之外的 `Exception`, 或发生 `LinkageError`。
 * Dao 工厂返回类型不匹配或 cast 失败。
 
-Dao 工厂抛出的 `CancellationException` 必须原样传播, 不能记录为普通失败或转换为 `null`; JVM `Error` 等不可恢复错误同样不属于
-安全降级范围, 继续向调用方传播。
+除空白查询 qualifier 外, 上述完整性问题统一抛出包含对应 Registry、Provider、Dao、qualifier 上下文的 `IllegalStateException`,
+并保留原始异常或 `LinkageError` 作为 cause。初始化失败时不发布 binding 快照, 后续显式调用 `initialize()` 可以重新尝试加载。
+Dao 工厂抛出的 `CancellationException` 必须原样传播, 不能包装或转换为 `null`; 其它 JVM `Error` 除明确包装的 `LinkageError` 外
+继续向调用方传播。
+
+空白注解 qualifier、同一 Dao 多 accessor 混用显式与省略 binding、qualifier 重复均由 KSP 直接报错。Runtime 保留相同约束的
+校验只用于防御损坏的生成 ABI 或 compiler / runtime 版本不兼容, 不替代编译期诊断。
+
+Registry class not found 无法在 Runtime 区分未接入 compiler 与 R8 / 打包错误, 因此属于例外的 warning 降级路径。warning 必须
+保留 Registry 类名、metadata name、`habitat-compiler` 配置提示和 `ClassNotFoundException`; 需要自动注册的应用应在集成测试和
+release 验证中检查该 warning。
 
 使用错误仍直接抛异常:
 
@@ -377,8 +393,8 @@ Habitat 已补充 dedicated test 目录:
 * `habitat-gradle-plugin/src/test`: 覆盖 Manifest 任务、插件模块类型白名单、装配模块唯一性服务, 以及真实 AGP/KSP 下的
   application/library 接线、外部 AAR metadata 合并冲突和 release R8 consumer rule。
 * `habitat/habitat-runtime/src/test`: 覆盖 `HabitatFactory` 未初始化使用错误、唯一/限定/多绑定 Dao 获取、工厂延迟执行、初始化与
-  `get()` 的并发交错, 以及 metadata 缺失、类不存在、类型不匹配、构造失败、Registry/Provider 读取失败时记录 warning
-  并安装空 Dao 注册表的降级行为。
+  `get()` 的并发交错, metadata 缺失、Registry 类缺失和空 Registry 降级, 以及 metadata、Registry、Provider、binding 和
+  Dao 工厂完整性失败时的异常上下文、原始 cause 与未发布快照行为。
 * `habitat/habitat-compiler/src/test`: 使用真实 compiler JAR 和 KSP Gradle 插件覆盖 Provider / Registry 生成、function
   实例入口、nullable 实例入口拒绝、直接/继承 Dao 生成、override 去重、继承 accessor 增量更新、Dao qualifier 多库生成及
   缺失/空白/重复/误用校验、编译依赖父 accessor qualifier override 校验, 以及生成代码可访问性、不支持调用形态的前置校验和

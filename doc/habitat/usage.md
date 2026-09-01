@@ -4,6 +4,8 @@
 
 | 修订时间（CST）  | 修订人     | 修订说明                  |
 |------------|---------|-----------------------|
+| 2026-09-01 | whisper | 允许未接入 compiler 时安装空注册表 |
+| 2026-09-01 | whisper | 明确查找未命中与基础设施失败边界 |
 | 2026-09-01 | whisper | 补充双父接口 Dao accessor 的 Room 约束 |
 | 2026-09-01 | whisper | 明确 Dao 工厂取消异常传播边界 |
 | 2026-09-01 | whisper | 明确父 accessor qualifier 的 override 校验 |
@@ -109,9 +111,10 @@ dependencies {
 }
 ```
 
-当前插件只检查 KSP Gradle 插件是否存在, 不会强制或自动添加 `habitat-compiler` 依赖。未接入 compiler 不会导致构建失败;
-Runtime 找不到生成 Registry 时会记录 warning, 并安装空 Dao 注册表。这是受支持的容错结果, 不是自动注册 Dao 时的推荐配置。
-需要自动注册 Dao 时, 最终装配模块仍必须为每个生产 Variant 接入 processor。
+当前插件只检查 KSP Gradle 插件是否存在, 不会强制或自动添加 `habitat-compiler` 依赖。未接入 compiler 不会导致构建或
+`HabitatFactory.initialize()` 失败; Runtime 在 metadata 或其指向的 Registry 类缺失时记录 warning 并安装空 Dao 注册表。
+Registry 类缺失的 warning 会提示检查当前 Variant 的 processor 配置。需要自动注册 Dao 时, 最终装配模块仍必须为每个生产
+Variant 接入 processor, 并在集成测试或 release 验证中确认没有该 warning。
 
 ## 5. 声明数据库
 
@@ -321,7 +324,10 @@ class StarterApplication : Application() {
 * 在任何 `HabitatFactory.get()` 之前调用 `HabitatFactory.initialize(application)`。
 * 在 Habitat Dao 工厂真正执行前完成数据库初始化。
 * 同一进程只需要初始化一次。
-* 第一次初始化完成后 binding 快照不可追加或替换; Registry 缺失或损坏时安装的空快照也不会通过再次调用自动重试。
+* 第一次初始化完成后 binding 快照不可追加或替换; Manifest metadata 或 Registry 类缺失时安装的空快照不会通过再次调用
+  自动重试。
+* 已找到 Registry 但无法链接、校验或构造, Provider 无法加载或 binding 无效时初始化直接失败且不发布快照, 修复原因后可以
+  显式重试。
 
 `HabitatFactory.initialize()` 只安装延迟工厂, 不会初始化或读取数据库实例, 因此数据库可以先于 Habitat 初始化, 也可以在 Habitat
 初始化后、第一次 Dao 获取前完成初始化。当前 `HabitatFactory.get()` 和推荐数据库实例写法都能等待各自正在进行的初始化发布完成;
@@ -361,9 +367,10 @@ val userDao: UserDao? = HabitatFactory.get<UserDao>(UserStorage.ACCOUNT)
 * 目标 Dao 只有一个绑定时, 非限定获取返回该唯一绑定, 无论 accessor 是否显式标记。
 * 目标 Dao 有多个绑定时, 非限定获取记录 warning 并返回 `null`, 不会任意选择数据库。
 * Dao 未注册时返回 `null`。
-* qualifier 为空、未注册或不属于请求的 Dao 类型时返回 `null`。
-* Dao 工厂抛出普通 `Exception` 或发生链接错误时返回 `null`; `CancellationException` 会原样传播, JVM `Error` 等不可恢复错误也不会被吞掉。
-* Dao 工厂返回类型不匹配时返回 `null`。
+* qualifier 未注册或不属于请求的 Dao 类型时返回 `null`; 空白 qualifier 抛出 `IllegalArgumentException`。
+* Dao 工厂抛出普通 `Exception`、发生链接错误或返回类型不匹配时抛出带 Dao 和 qualifier 上下文的
+  `IllegalStateException`, 原始错误保留为 cause。
+* Dao 工厂抛出的 `CancellationException` 原样传播; 其它 JVM `Error` 除明确包装的 `LinkageError` 外不会被吞掉。
 
 Provider 和 `HabitatFactory` 保存的是延迟工厂函数。安装 Registry 时不会访问数据库实例或缓存 Dao; 只有成功命中绑定后才会
 调用对应数据库 accessor。每次 `get()` 都会调用一次工厂; Dao 是否复用由 RoomDatabase accessor 自身决定。
@@ -432,7 +439,9 @@ release 开启 R8 后至少检查:
 
 ### 10.6 运行时 Registry class not found
 
-Runtime 会记录 warning 并安装空 Dao 注册表。需要自动注册 Dao 时检查:
+Manifest 完全没有 `com.whisper.habitat.registry` metadata, 或 metadata 指向的 Registry 类不存在时, Runtime 会记录 warning
+并安装空 Dao 注册表。类不存在的 warning 包含 Registry 类名、metadata name、`habitat-compiler` 配置提示和
+`ClassNotFoundException`。需要自动注册 Dao 时检查:
 
 * 装配模块是否为当前 Variant 接入 `habitat-compiler`。
 * merged Manifest 中是否存在 `com.whisper.habitat.registry`。

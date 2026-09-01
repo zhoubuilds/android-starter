@@ -14,11 +14,13 @@ import kotlin.reflect.KClass
  * 业务模块通过 Dao 类型获取 Dao 实例, 不感知 Dao 最终归属的 RoomDatabase. HabitatFactory 只安装编译期生成的静态
  * Dao binding, 不负责创建 RoomDatabase、缓存 Dao 或在动态模块安装后追加 binding.
  *
- * @aegis 保护初始化发布, 按类型获取 Dao, 未初始化失败和可恢复加载失败语义.
+ * @aegis 保护初始化发布, 按类型获取 Dao, 未初始化失败和运行时错误处理语义.
  * @aegis-audit 2026-08-31 | whisper | 经授权支持限定 Dao 获取、唯一绑定回退和多绑定歧义降级.
  * @aegis-audit 2026-08-31 | whisper | 经授权使用 @Volatile 可空只读 Map 发布 Dao binding 快照.
  * @aegis-audit 2026-09-01 | whisper | 经授权覆盖全部 Exception 工厂失败并明确静态注册与初始化边界.
  * @aegis-audit 2026-09-01 | whisper | 经授权确保 Dao 工厂的 CancellationException 原样传播.
+ * @aegis-audit 2026-09-01 | whisper | 经授权区分合法查找未命中与 Registry、Provider、Dao 工厂完整性失败.
+ * @aegis-audit 2026-09-01 | whisper | 经授权允许 Registry 类缺失时提示 compiler 配置并安装空 binding 快照.
  *
  * @author whisper
  * @since 2026/07/27
@@ -39,10 +41,12 @@ object HabitatFactory {
     /**
      * 初始化 Habitat 运行时.
      *
-     * 每个进程只安装第一次完成加载的 binding 快照, 后续调用保持幂等. Registry 缺失或损坏时会安装空快照, 后续调用也不会
-     * 自动重试. 本方法只安装延迟工厂, 不访问或初始化 RoomDatabase; 调用方需要在第一次成功命中 [get] 前准备好数据库实例.
+     * 每个进程只安装第一次完成加载的 binding 快照, 后续调用保持幂等. Manifest metadata 或其指向的 Registry 类缺失时安装
+     * 空快照, 后续调用不会自动重试; 已找到 Registry 的链接、类型、构造或 binding 完整性校验失败时不发布快照并直接抛出
+     * 异常. 本方法只安装延迟工厂, 不访问或初始化 RoomDatabase; 调用方需要在第一次成功命中 [get] 前准备好数据库实例.
      *
      * @param application 当前进程的 Application.
+     * @exception IllegalStateException Registry、Provider 或 Dao binding 完整性校验失败时抛出.
      */
     fun initialize(application: Application) {
         if (daoBindings != null) {
@@ -64,9 +68,9 @@ object HabitatFactory {
      * binding. 数据库实例必须在工厂执行前可用.
      *
      * @param daoClass Dao 类型.
-     * @return Dao 实例; 未注册、多绑定歧义、工厂失败或返回类型不匹配时返回 `null`.
+     * @return Dao 实例; 未注册或多绑定歧义时返回 `null`.
      * @exception CancellationException Dao 工厂通过取消异常终止时原样抛出.
-     * @exception IllegalStateException 尚未调用 [initialize] 时抛出.
+     * @exception IllegalStateException 尚未调用 [initialize]、Dao 工厂执行失败或返回类型不匹配时抛出.
      */
     fun <T : Any> get(daoClass: KClass<T>): T? {
         val daoBindings: Map<KClass<*>, Map<String?, () -> Any>> = requireInitializedBindings()
@@ -100,21 +104,19 @@ object HabitatFactory {
      *
      * @param daoClass Dao 类型.
      * @param qualifier 非空白的稳定 Dao 限定符.
-     * @return Dao 实例; qualifier 非法或不匹配、工厂失败或返回类型不匹配时返回 `null`.
+     * @return Dao 实例; Dao 或 qualifier 不匹配时返回 `null`.
+     * @exception IllegalArgumentException qualifier 为空白时抛出.
      * @exception CancellationException Dao 工厂通过取消异常终止时原样抛出.
-     * @exception IllegalStateException 尚未调用 [initialize] 时抛出.
+     * @exception IllegalStateException 尚未调用 [initialize]、Dao 工厂执行失败或返回类型不匹配时抛出.
      */
     fun <T : Any> get(
         daoClass: KClass<T>,
         qualifier: String,
     ): T? {
-        val daoBindings: Map<KClass<*>, Map<String?, () -> Any>> = requireInitializedBindings()
-        if (qualifier.isBlank()) {
-            LogcatErrorHandler.warning(
-                "Dao qualifier must not be blank: dao=${daoClass.displayName()}."
-            )
-            return null
+        require(qualifier.isNotBlank()) {
+            "Dao qualifier must not be blank: dao=${daoClass.displayName()}."
         }
+        val daoBindings: Map<KClass<*>, Map<String?, () -> Any>> = requireInitializedBindings()
         val bindings: Map<String?, () -> Any> = daoBindings[daoClass] ?: run {
             LogcatErrorHandler.warning("Dao not found: ${daoClass.qualifiedName}.")
             return null
@@ -137,41 +139,37 @@ object HabitatFactory {
         daoClass: KClass<T>,
         qualifier: String?,
         daoFactory: () -> Any,
-    ): T? {
+    ): T {
         val dao: Any = try {
             daoFactory()
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
-            LogcatErrorHandler.warning(
+            throw IllegalStateException(
                 "Dao factory failed: dao=${daoClass.displayName()}, qualifier=${qualifier.displayValue()}.",
                 exception,
             )
-            return null
         } catch (error: LinkageError) {
-            LogcatErrorHandler.warning(
+            throw IllegalStateException(
                 "Dao factory could not be linked: dao=${daoClass.displayName()}, " +
                     "qualifier=${qualifier.displayValue()}.",
                 error,
             )
-            return null
         }
         if (!daoClass.java.isInstance(dao)) {
-            LogcatErrorHandler.warning(
+            throw IllegalStateException(
                 "Dao type mismatch: expected=${daoClass.displayName()}, actual=${dao::class.displayName()}, " +
                     "qualifier=${qualifier.displayValue()}."
             )
-            return null
         }
         return try {
             daoClass.java.cast(dao)
         } catch (exception: ClassCastException) {
-            LogcatErrorHandler.warning(
+            throw IllegalStateException(
                 "Dao cast failed: expected=${daoClass.displayName()}, actual=${dao::class.displayName()}, " +
                     "qualifier=${qualifier.displayValue()}.",
                 exception,
             )
-            null
         }
     }
 
@@ -180,9 +178,9 @@ object HabitatFactory {
      *
      * 行为边界与 [get] 的 `KClass` 重载一致.
      *
-     * @return Dao 实例, 无法获取时返回 `null`.
+     * @return Dao 实例, 未注册或多绑定歧义时返回 `null`.
      * @exception CancellationException Dao 工厂通过取消异常终止时原样抛出.
-     * @exception IllegalStateException 尚未调用 [initialize] 时抛出.
+     * @exception IllegalStateException 尚未调用 [initialize]、Dao 工厂执行失败或返回类型不匹配时抛出.
      */
     inline fun <reified T : Any> get(): T? {
         return get(T::class)
@@ -194,9 +192,10 @@ object HabitatFactory {
      * 行为边界与 [get] 的 `KClass` 和 qualifier 重载一致.
      *
      * @param qualifier 非空白的稳定 Dao 限定符.
-     * @return Dao 实例, 无法获取时返回 `null`.
+     * @return Dao 实例, Dao 或 qualifier 不匹配时返回 `null`.
+     * @exception IllegalArgumentException qualifier 为空白时抛出.
      * @exception CancellationException Dao 工厂通过取消异常终止时原样抛出.
-     * @exception IllegalStateException 尚未调用 [initialize] 时抛出.
+     * @exception IllegalStateException 尚未调用 [initialize]、Dao 工厂执行失败或返回类型不匹配时抛出.
      */
     inline fun <reified T : Any> get(qualifier: String): T? {
         return get(T::class, qualifier)
@@ -231,132 +230,107 @@ object HabitatFactory {
     }
 
     private fun loadGeneratedRegistries(application: Application): List<HabitatRegistry> {
-        return try {
-            ManifestRegistryLoader.load(
-                application = application,
-                warning = LogcatErrorHandler::warning,
-            )
-        } catch (exception: RuntimeException) {
-            LogcatErrorHandler.warning(
-                "Failed to load generated Habitat registries. An empty Dao registry will be installed.",
-                exception,
-            )
-            emptyList()
-        } catch (error: LinkageError) {
-            LogcatErrorHandler.warning(
-                "Generated Habitat registries could not be linked. An empty Dao registry will be installed.",
-                error,
-            )
-            emptyList()
-        }
+        return ManifestRegistryLoader.load(
+            application = application,
+            warning = LogcatErrorHandler::warning,
+        )
     }
 
     private fun loadRegistryProviders(registry: HabitatRegistry): List<HabitatDaoProvider> {
         return try {
             registry.providers()
         } catch (exception: RuntimeException) {
-            LogcatErrorHandler.warning(
-                "Ignoring Habitat registry because its providers could not be loaded: " +
-                    "${registry::class.qualifiedName}.",
+            throw IllegalStateException(
+                "Failed to load Habitat Registry providers: registry=${registry::class.displayName()}.",
                 exception,
             )
-            emptyList()
         } catch (error: LinkageError) {
-            LogcatErrorHandler.warning(
-                "Ignoring Habitat registry because its providers could not be linked: " +
-                    "${registry::class.qualifiedName}.",
+            throw IllegalStateException(
+                "Failed to link Habitat Registry providers: registry=${registry::class.displayName()}.",
                 error,
             )
-            emptyList()
         }
     }
 
     private fun installProviders(providers: List<HabitatDaoProvider>) {
-        val groupedFactoryMaps: Map<KClass<*>, List<Map<String?, () -> Any>>> = providers
+        val groupedBindings: Map<KClass<*>, List<ProviderDaoBinding>> = providers
             .flatMap { provider: HabitatDaoProvider ->
-                loadProviderFactories(provider)
+                loadProviderBindings(provider)
             }
-            .groupBy(
-                keySelector = { entry: Map.Entry<KClass<*>, Map<String?, () -> Any>> -> entry.key },
-                valueTransform = { entry: Map.Entry<KClass<*>, Map<String?, () -> Any>> -> entry.value },
-            )
-        val installedBindings: Map<KClass<*>, Map<String?, () -> Any>> = groupedFactoryMaps
-            .mapNotNull { entry: Map.Entry<KClass<*>, List<Map<String?, () -> Any>>> ->
-                val bindings: Map<String?, () -> Any> = mergeDaoBindings(
+            .groupBy { binding: ProviderDaoBinding -> binding.daoClass }
+        val installedBindings: Map<KClass<*>, Map<String?, () -> Any>> = groupedBindings
+            .mapValues { entry: Map.Entry<KClass<*>, List<ProviderDaoBinding>> ->
+                mergeDaoBindings(
                     daoClass = entry.key,
-                    factoryMaps = entry.value,
+                    bindings = entry.value,
                 )
-                if (bindings.isEmpty()) {
-                    null
-                } else {
-                    entry.key to bindings
-                }
             }
-            .toMap()
         daoBindings = installedBindings
     }
 
     private fun mergeDaoBindings(
         daoClass: KClass<*>,
-        factoryMaps: List<Map<String?, () -> Any>>,
+        bindings: List<ProviderDaoBinding>,
     ): Map<String?, () -> Any> {
-        val validEntries: List<Map.Entry<String?, () -> Any>> = factoryMaps
-            .flatMap { factories: Map<String?, () -> Any> -> factories.entries }
-            .filter { entry: Map.Entry<String?, () -> Any> ->
-                val isValid: Boolean = entry.key?.isNotBlank() != false
-                if (!isValid) {
-                    LogcatErrorHandler.warning(
-                        "Ignoring Dao binding with a blank qualifier: dao=${daoClass.displayName()}."
-                    )
-                }
-                isValid
-            }
-        val groupedBindings: Map<String?, List<() -> Any>> = validEntries.groupBy(
-            keySelector = { entry: Map.Entry<String?, () -> Any> -> entry.key },
-            valueTransform = { entry: Map.Entry<String?, () -> Any> -> entry.value },
-        )
-        groupedBindings
-            .filterValues { factories: List<() -> Any> -> factories.size > 1 }
-            .keys
-            .forEach { qualifier: String? ->
-                LogcatErrorHandler.warning(
-                    "Dao binding registered multiple times and will be ignored: " +
-                        "dao=${daoClass.displayName()}, qualifier=${qualifier.displayValue()}."
-                )
-            }
-        val bindings: Map<String?, () -> Any> = groupedBindings
-            .filterValues { factories: List<() -> Any> -> factories.size == 1 }
-            .mapValues { entry: Map.Entry<String?, List<() -> Any>> -> entry.value.single() }
-        if (bindings.size > 1 && bindings.containsKey(null)) {
-            LogcatErrorHandler.warning(
-                "Dao has mixed qualified and unqualified bindings and will be ignored: " +
-                    "dao=${daoClass.displayName()}, qualifiers=${bindings.keys.displayQualifiers()}."
-            )
-            return emptyMap()
+        val blankBindings: List<ProviderDaoBinding> = bindings.filter { binding: ProviderDaoBinding ->
+            binding.qualifier?.isBlank() == true
         }
-        return bindings
+        check(blankBindings.isEmpty()) {
+            "Dao binding qualifier must not be blank: dao=${daoClass.displayName()}, " +
+                "providers=${blankBindings.providerNames()}."
+        }
+        val groupedBindings: Map<String?, List<ProviderDaoBinding>> = bindings.groupBy { binding ->
+            binding.qualifier
+        }
+        val duplicateBindings: Map.Entry<String?, List<ProviderDaoBinding>>? = groupedBindings.entries
+            .firstOrNull { entry: Map.Entry<String?, List<ProviderDaoBinding>> -> entry.value.size > 1 }
+        check(duplicateBindings == null) {
+            "Dao binding registered multiple times: dao=${daoClass.displayName()}, " +
+                "qualifier=${duplicateBindings?.key.displayValue()}, " +
+                "providers=${duplicateBindings?.value.orEmpty().providerNames()}."
+        }
+        check(groupedBindings.size <= 1 || !groupedBindings.containsKey(null)) {
+            "Dao has mixed qualified and unqualified bindings: dao=${daoClass.displayName()}, " +
+                "qualifiers=${groupedBindings.keys.displayQualifiers()}, providers=${bindings.providerNames()}."
+        }
+        return groupedBindings.mapValues { entry: Map.Entry<String?, List<ProviderDaoBinding>> ->
+            entry.value.single().daoFactory
+        }
     }
 
-    private fun loadProviderFactories(
+    private fun loadProviderBindings(
         provider: HabitatDaoProvider,
-    ): Set<Map.Entry<KClass<*>, Map<String?, () -> Any>>> {
+    ): List<ProviderDaoBinding> {
+        val providerName: String = provider::class.displayName()
         return try {
-            provider.daoFactories.entries
+            provider.daoFactories.flatMap { entry: Map.Entry<KClass<*>, Map<String?, () -> Any>> ->
+                entry.value.map { factoryEntry: Map.Entry<String?, () -> Any> ->
+                    ProviderDaoBinding(
+                        daoClass = entry.key,
+                        qualifier = factoryEntry.key,
+                        daoFactory = factoryEntry.value,
+                        providerName = providerName,
+                    )
+                }
+            }
         } catch (exception: RuntimeException) {
-            LogcatErrorHandler.warning(
-                "Ignoring Habitat Dao provider because its factories could not be loaded: " +
-                    "${provider::class.qualifiedName}.",
+            throw IllegalStateException(
+                "Failed to load Habitat Dao Provider bindings: provider=$providerName.",
                 exception,
             )
-            emptySet()
         } catch (error: LinkageError) {
-            LogcatErrorHandler.warning(
-                "Ignoring Habitat Dao provider because its factories could not be linked: " +
-                    "${provider::class.qualifiedName}.",
+            throw IllegalStateException(
+                "Failed to link Habitat Dao Provider bindings: provider=$providerName.",
                 error,
             )
-            emptySet()
         }
+    }
+
+    private fun List<ProviderDaoBinding>.providerNames(): String {
+        return map { binding: ProviderDaoBinding -> binding.providerName }
+            .distinct()
+            .sorted()
+            .joinToString(prefix = "[", postfix = "]")
     }
 
     private fun KClass<*>.displayName(): String {
@@ -373,4 +347,11 @@ object HabitatFactory {
                 qualifier.displayValue()
             }
     }
+
+    private data class ProviderDaoBinding(
+        val daoClass: KClass<*>,
+        val qualifier: String?,
+        val daoFactory: () -> Any,
+        val providerName: String,
+    )
 }

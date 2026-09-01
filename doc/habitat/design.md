@@ -4,6 +4,8 @@
 
 | 修订时间（CST）  | 修订人     | 修订说明                  |
 |------------|---------|-----------------------|
+| 2026-09-01 | whisper | 允许 Registry 类缺失时降级为空注册表 |
+| 2026-09-01 | whisper | 区分合法查找未命中与运行时完整性失败 |
 | 2026-09-01 | whisper | 明确 Dao 工厂取消异常传播边界 |
 | 2026-09-01 | whisper | 明确静态注册、生成 ABI 和唯一装配边界 |
 | 2026-08-31 | whisper | 简化 Dao binding 快照发布实现 |
@@ -148,11 +150,20 @@ Habitat 按责任边界处理错误:
 * KSP 可确认的问题直接输出 error 并停止生成 Provider / Registry。
 * Gradle 插件配置错误直接中断构建。
 * `HabitatFactory.get()` 在 `initialize()` 前调用属于使用错误, 直接抛异常。
-* Manifest 缺失、Registry 反射失败、Provider 加载失败、Dao 或 qualifier 找不到、多绑定歧义、Dao 工厂抛出普通 `Exception`、
-  链接失败和类型不匹配记录 Logcat warning 并返回安全值。
-* Dao 工厂抛出的 `CancellationException` 原样传播; JVM `Error` 等不可恢复错误同样继续传播, 不作为普通查找失败吞掉。
+* Manifest metadata 完全缺失或其指向的 Registry 类不存在表示可能未接入自动注册, 记录 Logcat warning 并安装空注册表;
+  class not found warning 会提示检查当前 Variant 的 `habitat-compiler` 配置。合法 Registry 不包含 Provider 同样允许安装空注册表。
+* Dao 未注册、qualifier 未匹配或多绑定下省略 qualifier 属于查找未命中或歧义, 记录 Logcat warning 并返回 `null`。
+* 空白查询 qualifier 属于调用错误, 直接抛出 `IllegalArgumentException`。
+* metadata 已声明但值无效、已找到 Registry 但无法链接、校验或构造、Provider 无法加载、运行时 binding 违反生成约束、
+  Dao 工厂失败或返回类型错误属于基础设施完整性失败, 抛出包含 Registry、Provider、Dao 或 qualifier 上下文的
+  `IllegalStateException` 并保留原始 cause。
+* Dao 工厂抛出的 `CancellationException` 原样传播; 其它 JVM `Error` 除明确包装的 `LinkageError` 外继续传播。
 
-运行时默认避免因为生成物或注册表损坏导致业务崩溃, 但不掩盖明确的使用错误。
+能够由 KSP 确认的 binding 声明错误必须在编译期失败。Runtime 对同一约束的校验只作为生成 ABI 损坏或版本不兼容时的最后防线,
+不能通过忽略非法 binding 将基础设施错误伪装成普通查找失败。
+
+Registry 类不存在同时可能由未接入 compiler、错误 Variant 配置或 R8 / 打包错误引起。为了保留无 compiler 的合法用法, Runtime
+无法仅按 class not found 区分这些来源, 因此统一 warning 并降级; 需要自动注册 Dao 的接入方必须把该 warning 视为配置故障。
 
 ## 7. 并发设计
 
