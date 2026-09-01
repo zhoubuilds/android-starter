@@ -2,7 +2,6 @@ package com.whisper.aster.runtime
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
 import com.whisper.aster.runtime.internal.CapabilityNameValidator
 import com.whisper.aster.runtime.internal.LogcatErrorHandler
 import com.whisper.aster.runtime.internal.RoutePathValidator
@@ -19,6 +18,7 @@ import com.whisper.aster.runtime.registry.AsterRegistryInstaller
  *
  * @aegis 保护公开 API, 初始化发布, 路由查询和能力解析的行为语义.
  * @aegis-audit 2026-09-01 | whisper | 经授权收敛名称类型安全解析和类型唯一解析契约.
+ * @aegis-audit 2026-09-01 | whisper | 经授权在内部演进阶段移除冗余 context 公开属性.
  *
  * @author whisper
  * @since 2026/07/22
@@ -37,14 +37,6 @@ object Aster {
      */
     val application: Application
         get() = requireState().application
-
-    /**
-     * 当前进程可长期持有的 Application Context.
-     *
-     * @exception IllegalStateException 在调用 [initialize] 前访问时抛出.
-     */
-    val context: Context
-        get() = application.applicationContext
 
     fun initialize(application: Application) {
         if (handleRepeatedInitialization(application)) {
