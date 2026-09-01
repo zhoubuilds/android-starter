@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-09-01 | whisper | ApiFactory 改为严格单次安装 |
 | 2026-08-28 | whisper | 默认禁用 cleartext 网络流量 |
 | 2026-08-28 | whisper | 明确 Endpoint 改写后的 Host Header 契约 |
 | 2026-08-27 | whisper | 明确网络组件 keep rule 归属 |
@@ -157,9 +158,10 @@ Starter 默认只有一个 `API_HOST`，不内置租户、Profile 或动态路�
 
 ## 7. 并发与缓存
 
-`ApiFactory` 通过 `Installation` 快照原子绑定 `NetworkComponentManager` 与该次安装专属的 API 缓存，并串行化 API
-首次创建。正常运行只安装一次；发生连续重复安装时, 最后一次原子写入的快照生效。调用方已经持有或正在创建的旧 API 允许继续使用旧快照,
-但不会写入最新安装的缓存。重复安装只提供尽力恢复, 不构成运行期环境切换能力。
+`ApiFactory` 通过 `Installation` 快照原子绑定 `NetworkComponentManager` 与唯一的 API 缓存, 并串行化 API
+首次创建. 首次 `install()` 通过 CAS 原子发布安装快照; 每个进程生命周期内只允许成功安装一次.
+任何顺序或并发的重复调用都会立即抛出 `IllegalStateException`, 已安装的组件管理器和缓存保持不变.
+重复安装不是错误恢复或运行期环境切换入口. Android 多进程的每个进程持有独立单例, 需在各自的组合根中完成一次安装.
 
 构建期回调不得：
 

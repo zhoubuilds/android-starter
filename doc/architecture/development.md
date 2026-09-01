@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                         |
 |-----------------|---------|----------------------------------|
+| 2026-09-01      | whisper | 收敛 ApiFactory 为严格单次安装   |
 | 2026-08-31      | whisper | 区分项目规范与智能体保护规则     |
 | 2026-08-28      | whisper | 补齐 ApiFactory 并发测试并清理依赖 |
 | 2026-08-27      | whisper | 拆分单轮与多轮 Business 进度入口 |
@@ -140,7 +141,7 @@ Java target: 17
 
 * `BusinessFlowExtensionsTest`: 业务状态 Flow 转换、单轮收集进度、多轮状态进度、并发收集隔离和进度回调异常保留。
 * `BusinessExceptionTest`: 业务异常实例身份及其在 `Business.Failure` 中的相等语义。
-* `ApiFactoryTest`: 网络声明解析、执行顺序、重复声明拦截、缓存发布、并发创建、安装竞争和失败重试。
+* `ApiFactoryTest`: 网络声明解析、执行顺序、重复声明拦截、严格单次安装、并发安装/创建、缓存发布和失败重试。
 * `RequestHeadersInterceptorTest`: Header 运行期读取、覆盖和重复请求语义。
 * `EndpointRoutingInterceptorTest`: Endpoint origin 替换与请求 URL 保留语义。
 * `ArchitectureUiOwnerTest`: Architecture UI 状态和 Effect 更新。

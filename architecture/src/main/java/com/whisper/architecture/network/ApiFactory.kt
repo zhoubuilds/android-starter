@@ -14,7 +14,6 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
-import java.util.logging.Logger
 import kotlin.reflect.KClass
 
 /**
@@ -23,16 +22,15 @@ import kotlin.reflect.KClass
  * API 实例以接口类型作为缓存键. 架构层只读取接口上的网络组件声明并保持构建顺序,
  * 域名、序列化、安全策略和组件生命周期由 app 安装的 [NetworkComponentManager] 决定.
  *
- * @aegis 保护安装/创建 API 契约, 组件执行顺序, 缓存发布和并发恢复语义.
+ * @aegis 保护严格单次安装/创建 API 契约, 组件执行顺序, 缓存发布和并发语义.
  * @aegis-audit 2026-08-26 | whisper | 移除未使用的代际编号, 使用原子安装快照保留最后配置.
  * @aegis-audit 2026-08-26 | whisper | 重命名网络声明注解以区分精确语义和组件契约.
+ * @aegis-audit 2026-09-01 | whisper | 经授权将安装契约收敛为严格单次初始化, 重复安装立即失败.
  *
  * @author whisper
  * @since 2026/07/06
  */
 object ApiFactory {
-
-    private val logger: Logger = Logger.getLogger(ApiFactory::class.java.name)
 
     private val installationReference: AtomicReference<Installation?> = AtomicReference(null)
 
@@ -46,22 +44,22 @@ object ApiFactory {
     /**
      * 安装应用层网络组件管理器.
      *
-     * 该方法应只在应用启动阶段调用一次. 重复安装不是受支持的运行模式；发生误用时会原子替换为最后一次安装及其独立缓存,
-     * 但已经被调用方持有或正在创建的旧 API 实例不会失效.
+     * 该方法必须在应用启动阶段且首次调用 [create] 前调用一次.
+     * 首次安装会原子发布组件管理器及其 API 缓存.
+     * 任何顺序或并发的重复安装都会立即失败, 且不会替换已安装的组件管理器或缓存.
      *
      * @param componentManager 应用层网络组件管理器.
+     * @throws IllegalStateException 当 ApiFactory 已经完成安装.
      */
     fun install(componentManager: NetworkComponentManager) {
-        val previousInstallation: Installation? = installationReference.getAndSet(
+        val installed: Boolean = installationReference.compareAndSet(
+            null,
             Installation(
                 componentManager = componentManager,
-            )
+            ),
         )
-        if (previousInstallation != null) {
-            logger.warning(
-                "ApiFactory.install() was called more than once. The latest component manager " +
-                    "and a new API cache were atomically installed as a best-effort recovery."
-            )
+        check(installed) {
+            "ApiFactory has already been initialized."
         }
     }
 

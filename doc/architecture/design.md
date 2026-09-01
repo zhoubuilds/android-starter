@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-01      | whisper | 明确 ApiFactory 严格单次安装契约    |
 | 2026-08-28      | whisper | 明确 Architecture UI 绑定不变量  |
 | 2026-08-27      | whisper | 拆分单轮与多轮 Business 进度语义  |
 | 2026-08-27      | whisper | 明确 BusinessException 身份语义   |
@@ -128,6 +129,9 @@ API 接口注解
     -> OkHttpClientFactory
     -> Retrofit
 ```
+
+每个进程的 `ApiFactory` 只允许成功安装一个 `NetworkComponentManager`. 任何顺序或并发的重复安装都会立即失败,
+不替换已发布的组件管理器或 API 缓存.
 
 架构层读取 API 接口上的声明并保持执行顺序。`RequestHeadersInterceptor` 和
 `EndpointRoutingInterceptor` 只提供公共 Header 注入与 Endpoint 改写算法, 不持有真实 Header、域名、网关或环境值。

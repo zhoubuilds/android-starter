@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-09-01 | whisper | 明确 ApiFactory 重复安装失败约束 |
 | 2026-08-28 | whisper | 默认禁用 cleartext 网络流量 |
 | 2026-08-27 | whisper | 调整网络组件 keep rule 归属 |
 | 2026-08-26 | whisper | 同步 API 注解约束与 Architecture 拦截器实现 |
@@ -153,4 +154,5 @@ keep rule 调整必须使用启用 R8 的 application 变体验证最终合并�
 * `UseRetrofitCustomizer` 必须由 app 显式映射并审查, 不得绕过已安装的证书、鉴权和公共拦截器。
 * 同一 Retrofit API 内出现不同网络组合时拆分接口, 不引入方法级排除或覆盖逻辑。
 * 新增请求 Header 前检查服务端契约和隐私合规要求。
-* `ApiFactory.install()` 正常情况下只调用一次；重复安装的最后快照只用于尽力恢复, 不得作为环境切换协议。
+* `ApiFactory.install()` 在每个进程内只能成功调用一次; 重复安装必须立即抛出 `IllegalStateException`,
+  不得替换已安装的组件管理器或 API 缓存, 也不得作为错误恢复或环境切换协议.

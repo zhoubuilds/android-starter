@@ -12,7 +12,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Response
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -101,23 +100,24 @@ class ApiFactoryTest {
             )
         )
         assertTrue(events.isEmpty())
+    }
 
-        val supersededEvents: MutableList<String> = mutableListOf()
-        val latestEvents: MutableList<String> = mutableListOf()
-        ApiFactory.install(TestComponentManager(supersededEvents))
-        ApiFactory.install(TestComponentManager(latestEvents))
+    @Test
+    fun repeatedInstallFailsAndKeepsFirstInstallation() {
+        val firstManager: CountingComponentManager = CountingComponentManager()
+        val rejectedManager: CountingComponentManager = CountingComponentManager()
+        ApiFactory.install(firstManager)
+        val firstApi: CachedApi = ApiFactory.create(CachedApi::class)
 
-        val latestDefaultApi: DefaultApi = ApiFactory.create(DefaultApi::class)
+        val duplicateInstallException: IllegalStateException =
+            assertThrows(IllegalStateException::class.java) {
+                ApiFactory.install(rejectedManager)
+            }
 
-        assertNotSame(cachedDefaultApi, latestDefaultApi)
-        assertTrue(supersededEvents.isEmpty())
-        assertEquals(
-            listOf(
-                "configureDefaultOkHttp",
-                "configureDefaultRetrofit:0:0",
-            ),
-            latestEvents,
-        )
+        assertEquals(EXPECTED_DUPLICATE_INSTALL_FAILURE, duplicateInstallException.message)
+        assertSame(firstApi, ApiFactory.create(CachedApi::class))
+        assertEquals(1, firstManager.buildCount.get())
+        assertEquals(0, rejectedManager.buildCount.get())
     }
 
     @Test
@@ -180,41 +180,88 @@ class ApiFactoryTest {
     }
 
     @Test
-    fun installDuringCreateKeepsInstallationCachesIndependent() {
-        val supersededBuildEntered: CountDownLatch = CountDownLatch(1)
-        val allowSupersededBuild: CountDownLatch = CountDownLatch(1)
-        val supersededManager: CountingComponentManager = CountingComponentManager { _: Int ->
-            supersededBuildEntered.countDown()
-            check(allowSupersededBuild.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                "Timed out waiting to continue the superseded API build."
-            }
-        }
-        val latestManager: CountingComponentManager = CountingComponentManager()
-        val executor: ExecutorService = Executors.newFixedThreadPool(2)
-        ApiFactory.install(supersededManager)
+    fun concurrentInstallPublishesOneInstallationAndFailsOthers() {
+        val installerCount: Int = 8
+        val installersReady: CountDownLatch = CountDownLatch(installerCount)
+        val startInstallers: CountDownLatch = CountDownLatch(1)
+        val componentManagers: List<CountingComponentManager> =
+            List(installerCount) { CountingComponentManager() }
+        val executor: ExecutorService = Executors.newFixedThreadPool(installerCount)
 
         try {
-            val supersededApiFuture: Future<InstallationRaceApi> = executor.submit<InstallationRaceApi> {
-                ApiFactory.create(InstallationRaceApi::class)
+            val installFutures: List<Future<Throwable?>> = componentManagers.map { componentManager ->
+                executor.submit<Throwable?> {
+                    installersReady.countDown()
+                    check(startInstallers.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                        "Timed out waiting to start concurrent installation."
+                    }
+                    runCatching {
+                        ApiFactory.install(componentManager)
+                    }.exceptionOrNull()
+                }
             }
-            assertTrue(supersededBuildEntered.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+            assertTrue(installersReady.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
 
-            ApiFactory.install(latestManager)
-            val latestApiFuture: Future<InstallationRaceApi> = executor.submit<InstallationRaceApi> {
-                ApiFactory.create(InstallationRaceApi::class)
+            startInstallers.countDown()
+            val installFailures: List<Throwable> = installFutures.mapNotNull { future: Future<Throwable?> ->
+                future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
             }
-            allowSupersededBuild.countDown()
 
-            val supersededApi: InstallationRaceApi =
-                supersededApiFuture.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            val latestApi: InstallationRaceApi = latestApiFuture.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            assertEquals(installerCount - 1, installFailures.size)
+            installFailures.forEach { failure: Throwable ->
+                assertTrue(failure is IllegalStateException)
+                assertEquals(EXPECTED_DUPLICATE_INSTALL_FAILURE, failure.message)
+            }
 
-            assertNotSame(supersededApi, latestApi)
-            assertSame(latestApi, ApiFactory.create(InstallationRaceApi::class))
-            assertEquals(1, supersededManager.buildCount.get())
-            assertEquals(1, latestManager.buildCount.get())
+            assertNotNull(ApiFactory.create(ConcurrentInstallApi::class))
+            assertEquals(1, componentManagers.sumOf { manager: CountingComponentManager ->
+                manager.buildCount.get()
+            })
         } finally {
-            allowSupersededBuild.countDown()
+            startInstallers.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun installDuringCreateFailsAndKeepsFirstInstallation() {
+        val firstBuildEntered: CountDownLatch = CountDownLatch(1)
+        val allowFirstBuild: CountDownLatch = CountDownLatch(1)
+        val firstManager: CountingComponentManager = CountingComponentManager { _: Int ->
+            firstBuildEntered.countDown()
+            check(allowFirstBuild.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                "Timed out waiting to continue the first API build."
+            }
+        }
+        val rejectedManager: CountingComponentManager = CountingComponentManager()
+        val executor: ExecutorService = Executors.newFixedThreadPool(2)
+        ApiFactory.install(firstManager)
+
+        try {
+            val firstApiFuture: Future<InstallationRaceApi> = executor.submit<InstallationRaceApi> {
+                ApiFactory.create(InstallationRaceApi::class)
+            }
+            assertTrue(firstBuildEntered.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+
+            val duplicateInstallException: IllegalStateException =
+                assertThrows(IllegalStateException::class.java) {
+                    ApiFactory.install(rejectedManager)
+                }
+            val cachedApiFuture: Future<InstallationRaceApi> = executor.submit<InstallationRaceApi> {
+                ApiFactory.create(InstallationRaceApi::class)
+            }
+            allowFirstBuild.countDown()
+
+            val firstApi: InstallationRaceApi = firstApiFuture.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            val cachedApi: InstallationRaceApi = cachedApiFuture.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+
+            assertEquals(EXPECTED_DUPLICATE_INSTALL_FAILURE, duplicateInstallException.message)
+            assertSame(firstApi, cachedApi)
+            assertSame(firstApi, ApiFactory.create(InstallationRaceApi::class))
+            assertEquals(1, firstManager.buildCount.get())
+            assertEquals(0, rejectedManager.buildCount.get())
+        } finally {
+            allowFirstBuild.countDown()
             executor.shutdownNow()
         }
     }
@@ -254,6 +301,8 @@ class ApiFactoryTest {
     private interface CachedApi
 
     private interface ConcurrentApi
+
+    private interface ConcurrentInstallApi
 
     private interface InstallationRaceApi
 
@@ -394,5 +443,6 @@ class ApiFactoryTest {
 
         const val TIMEOUT_SECONDS: Long = 5L
         const val EXPECTED_BUILD_FAILURE: String = "Expected API build failure."
+        const val EXPECTED_DUPLICATE_INSTALL_FAILURE: String = "ApiFactory has already been initialized."
     }
 }

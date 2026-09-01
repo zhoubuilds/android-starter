@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                              |
 |-----------------|---------|---------------------------------------|
+| 2026-09-01      | whisper | 强调 ApiFactory 每进程单次安装        |
 | 2026-08-27      | whisper | 区分单轮与多轮 Business 进度用法      |
 | 2026-08-27      | whisper | 说明 BusinessException 类型语义       |
 | 2026-08-26      | whisper | 说明 Architecture UI 组件渲染边界     |
@@ -150,6 +151,9 @@ override fun boundNoticeUiEffects(): Iterable<NoticeUiEffect> =
 ```kotlin
 ApiFactory.install(StarterNetworkComponentManager())
 ```
+
+每个进程必须在首次创建 API 前完成且仅完成一次安装. 重复调用会立即抛出 `IllegalStateException`,
+不会替换首次安装的组件管理器或 API 缓存.
 
 业务侧通过:
 

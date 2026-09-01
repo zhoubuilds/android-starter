@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-09-01 | whisper | 强调 ApiFactory 每进程严格单次安装 |
 | 2026-08-28 | whisper | 默认禁用 cleartext 网络流量 |
 | 2026-08-27 | whisper | 说明网络组件 keep rule 归属 |
 | 2026-08-26 | whisper | 同步 API 注解约束与 Architecture 拦截器接入 |
@@ -40,8 +41,9 @@ ApiFactory.install(
 )
 ```
 
-必须在首次调用 `ApiFactory.create()` 前安装。重复安装不是受支持的常规操作；发生误用时最后一次安装会替换组件管理器和 API 缓存作为尽力恢复,
-已经获取或正在创建的旧 API 不会失效。因此不得使用重复安装切换运行期环境。
+必须在首次调用 `ApiFactory.create()` 前安装, 且每个进程生命周期内只能成功调用一次. 任何顺序或并发的重复调用都会立即抛出
+`IllegalStateException`; 首次安装的组件管理器和 API 缓存保持不变. 不得使用重复安装恢复错误或切换运行期环境.
+Android 多进程中每个进程都有独立的 `ApiFactory`, 需在各自的 Application 组合根中完成一次安装.
 
 ## 3. 声明 API
 
