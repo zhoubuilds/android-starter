@@ -3,6 +3,7 @@ package com.whisper.quill
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -44,6 +45,36 @@ class QuillTest {
 
         assertFalse(Quill.addWriter(writer))
         assertEquals(1, Quill.writerCount)
+    }
+
+    @Test
+    fun addWriter_whenDistinctInstancesAreEqual_addsBoth() {
+        val firstWriter: EqualWriter = EqualWriter()
+        val secondWriter: EqualWriter = EqualWriter()
+        assertNotSame(firstWriter, secondWriter)
+        assertEquals(firstWriter, secondWriter)
+
+        assertTrue(Quill.addWriter(firstWriter))
+        assertTrue(Quill.addWriter(secondWriter))
+
+        assertEquals(2, Quill.writerCount)
+        assertEquals(1, Quill.d { "message" })
+        assertEquals(1, firstWriter.writeCount)
+        assertEquals(1, secondWriter.writeCount)
+    }
+
+    @Test
+    fun removeWriter_whenEqualInstanceWasNotAdded_keepsRegisteredInstance() {
+        val registeredWriter: EqualWriter = EqualWriter()
+        val equalWriter: EqualWriter = EqualWriter()
+        Quill.addWriter(registeredWriter)
+
+        assertFalse(Quill.removeWriter(equalWriter))
+
+        assertEquals(1, Quill.writerCount)
+        assertEquals(1, Quill.d { "message" })
+        assertEquals(1, registeredWriter.writeCount)
+        assertEquals(0, equalWriter.writeCount)
     }
 
     @Test
@@ -285,6 +316,29 @@ class QuillTest {
             }
             records.add(Record(level, tag, throwable, message))
             return writeResult
+        }
+    }
+
+    private class EqualWriter : QuillWriter {
+
+        var writeCount: Int = 0
+
+        override fun write(
+            level: QuillLevel,
+            tag: String?,
+            throwable: Throwable?,
+            message: String,
+        ): Int {
+            writeCount += 1
+            return 1
+        }
+
+        override fun equals(other: Any?): Boolean {
+            return other is EqualWriter
+        }
+
+        override fun hashCode(): Int {
+            return 0
         }
     }
 

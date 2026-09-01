@@ -9,6 +9,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * 对外提供 lazy message API, 只有存在可处理当前日志的写入器时才会执行消息构建函数.
  *
  * @aegis 保护公开日志 API, lazy message, Writer 隔离和错误不穿透业务的语义.
+ * @aegis-audit 2026-09-01 | whisper | 按授权将 Writer 注册与移除改为实例身份语义.
  *
  * @author whisper
  * @since 2026/07/28
@@ -16,12 +17,20 @@ import java.util.concurrent.CopyOnWriteArrayList
 object Quill {
 
     private val writers: CopyOnWriteArrayList<QuillWriter> = CopyOnWriteArrayList()
+    private val writerLock: Any = Any()
 
     val writerCount: Int
         get() = writers.size
 
     fun addWriter(writer: QuillWriter): Boolean {
-        val added: Boolean = writers.addIfAbsent(writer)
+        val added: Boolean = synchronized(writerLock) {
+            if (writers.any { registeredWriter: QuillWriter -> registeredWriter === writer }) {
+                false
+            } else {
+                writers.add(writer)
+                true
+            }
+        }
         if (!added) {
             warning("Quill writer has already been added.")
         }
@@ -29,7 +38,17 @@ object Quill {
     }
 
     fun removeWriter(writer: QuillWriter): Boolean {
-        val removed: Boolean = writers.remove(writer)
+        val removed: Boolean = synchronized(writerLock) {
+            val writerIndex: Int = writers.indexOfFirst { registeredWriter: QuillWriter ->
+                registeredWriter === writer
+            }
+            if (writerIndex < 0) {
+                false
+            } else {
+                writers.removeAt(writerIndex)
+                true
+            }
+        }
         if (!removed) {
             warning("Quill writer was not added.")
         }
@@ -37,7 +56,9 @@ object Quill {
     }
 
     fun clearWriters() {
-        writers.clear()
+        synchronized(writerLock) {
+            writers.clear()
+        }
     }
 
     fun isLoggable(level: QuillLevel, tag: String? = null): Boolean {
