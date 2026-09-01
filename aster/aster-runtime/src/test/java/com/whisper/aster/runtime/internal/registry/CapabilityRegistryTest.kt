@@ -132,29 +132,109 @@ class CapabilityRegistryTest {
     }
 
     /**
-     * 单个类型查询返回按能力名排序的第一个实现和完整匹配数量.
+     * 按名称和契约类型查询会返回类型匹配的实现.
      */
     @Test
-    fun singleTypeResolutionReturnsFirstImplementationAndMatchCount() {
+    fun typedNameResolutionReturnsMatchingImplementation() {
         val registry: CapabilityRegistry = createRegistry(
+            CapabilityDescriptor(
+                name = "test.typed",
+                implClass = SingletonTestCapability::class.java,
+                singleton = true
+            )
+        )
+
+        val capability: TestContract? = registry.resolve("test.typed", TestContract::class.java)
+
+        assertEquals(SingletonTestCapability::class.java, capability?.javaClass)
+    }
+
+    /**
+     * 按名称和契约类型查询在类型失配时于实例化前报告详细错误.
+     */
+    @Test
+    fun typedNameResolutionFailsBeforeInstantiatingMismatchedImplementation() {
+        val registry: CapabilityRegistry = createRegistry(
+            CapabilityDescriptor(
+                name = "test.mismatch",
+                implClass = UnmatchedConstructorCapability::class.java,
+                singleton = true
+            )
+        )
+
+        val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
+            registry.resolve("test.mismatch", TestContract::class.java)
+        }
+
+        assertEquals(
+            "Capability type mismatch for name 'test.mismatch': requested type " +
+                "'${TestContract::class.java.name}', but registered implementation type is " +
+                "'${UnmatchedConstructorCapability::class.java.name}'. Check the capability name " +
+                "constant and requested contract, or use Aster.resolveCapability(name) only when " +
+                "dynamic type handling is intentional.",
+            exception.message
+        )
+    }
+
+    /**
+     * 按名称和契约类型查询在名称未注册时返回 null.
+     */
+    @Test
+    fun typedNameResolutionReturnsNullWhenNameIsMissing() {
+        val registry: CapabilityRegistry = createRegistry()
+
+        val capability: TestContract? = registry.resolve("test.missing", TestContract::class.java)
+
+        assertNull(capability)
+    }
+
+    /**
+     * 单个类型查询只有一个匹配实现时返回该实例.
+     */
+    @Test
+    fun singleTypeResolutionReturnsOnlyImplementation() {
+        val registry: CapabilityRegistry = createRegistry(
+            CapabilityDescriptor(
+                name = "test.only",
+                implClass = SingletonTestCapability::class.java,
+                singleton = true
+            )
+        )
+
+        val capability: TestContract? = registry.resolveSingle(TestContract::class.java)
+
+        assertEquals(SingletonTestCapability::class.java, capability?.javaClass)
+    }
+
+    /**
+     * 单个类型查询匹配多个实现时在实例化前报告完整歧义信息.
+     */
+    @Test
+    fun singleTypeResolutionFailsBeforeInstantiatingAmbiguousImplementations() {
+        val registry: CapabilityRegistry = createRegistry(
+            CapabilityDescriptor(
+                name = "test.alpha",
+                implClass = AmbiguousTestCapability::class.java,
+                singleton = true
+            ),
             CapabilityDescriptor(
                 name = "test.zeta",
                 implClass = SingletonTestCapability::class.java,
                 singleton = true
-            ),
-            CapabilityDescriptor(
-                name = "test.alpha",
-                implClass = TransientTestCapability::class.java,
-                singleton = false
             )
         )
 
-        val resolution: CapabilityRegistry.Resolution<TestContract> =
-            registry.resolveFirst(TestContract::class.java)
+        val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
+            registry.resolveSingle(TestContract::class.java)
+        }
 
-        assertEquals(2, resolution.implementationCount)
-        assertEquals("test.alpha", resolution.selectedName)
-        assertEquals(TransientTestCapability::class.java, resolution.capability?.javaClass)
+        assertEquals(
+            "Ambiguous capability resolution for type '${TestContract::class.java.name}': " +
+                "expected at most one implementation but found 2. Matching capability names " +
+                "ordered by name: ['test.alpha', 'test.zeta']. Use the type-safe named resolve " +
+                "API to select one explicitly, or use resolveAll to retrieve all implementations.",
+            exception.message
+        )
     }
 
     /**
@@ -170,12 +250,9 @@ class CapabilityRegistryTest {
             )
         )
 
-        val resolution: CapabilityRegistry.Resolution<TestContract> =
-            registry.resolveFirst(TestContract::class.java)
+        val capability: TestContract? = registry.resolveSingle(TestContract::class.java)
 
-        assertNull(resolution.capability)
-        assertEquals(0, resolution.implementationCount)
-        assertNull(resolution.selectedName)
+        assertNull(capability)
     }
 
     /**
@@ -278,6 +355,18 @@ class CapabilityRegistryTest {
      * 能力契约用于验证同一接口支持多个实现.
      */
     interface TestContract : Capability
+
+    /**
+     * 歧义查询中不应被实例化的能力实现.
+     */
+    class AmbiguousTestCapability : TestContract {
+
+        init {
+            throw AssertionError("Ambiguous capability must not be instantiated.")
+        }
+
+        override fun initialize(application: Application) = Unit
+    }
 
     /**
      * 测试单例能力实现.

@@ -4,6 +4,7 @@
 
 | 修订时间（CST）  | 修订人  | 修订说明                                                                                   |
 |------------------|---------|--------------------------------------------------------------------------------------------|
+| 2026-09-01       | whisper | 收敛名称类型安全解析和类型唯一解析契约                                               |
 | 2026-08-31       | whisper | 反转 Registry Manifest metadata 并采用固定发现标记                                          |
 | 2026-08-20       | whisper | 标记稳定契约与关键协议的 Aegis 保护范围                                                     |
 | 2026-08-20       | whisper | 迁移 Aegis 修改保护标记                                                                     |
@@ -274,7 +275,15 @@ Android 启动、权限和 Launcher 生命周期异常原样传播。
 
 单例能力在 descriptor monitor 内构造和初始化，完整成功后写入 `ConcurrentHashMap`。非单例能力每次查询都重新创建。
 
-类型查询先按实现 class 做 `isAssignableFrom` 匹配，再按能力名排序。`resolve(type)` 只实例化第一个匹配项；`resolveAll(type)` 实例化全部匹配项。
+`resolve<T>(name)` 先按能力名精确查找, 再使用 descriptor 的实现 class 做 `isAssignableFrom` 校验.
+名称未注册或格式非法时返回 `null`; 类型不匹配时于实例化前抛出 `IllegalStateException`. 异常包含能力名,
+请求类型, 已注册实现类型以及检查名称常量和请求契约的建议. Java 调用方使用 `resolve(name, type)` 完成相同查询.
+`resolveCapability(name)` 保留动态 `Capability` 返回值, 仅用于调用方明确自行执行 `as?` 等动态类型处理的场景.
+
+类型查询先按实现 class 做 `isAssignableFrom` 匹配, 再按能力名排序. `resolve(type)` 在没有匹配时返回 `null`,
+在只有一个匹配时实例化并返回该实现, 在存在多个匹配时于实例化任何能力前抛出 `IllegalStateException`.
+异常包含请求类型, 匹配数量, 按名称排序的全部候选名称及显式选择建议. `resolveAll(type)` 仍实例化并返回全部匹配项.
+能力名排序不构成单个解析的优先级.
 
 Capability 初始化期间禁止解析其它 Capability。Runtime 不检测递归或跨线程循环，违反约束可能导致递归溢出或锁顺序死锁。
 
@@ -447,7 +456,7 @@ AGP 8.x 没有默认 built-in Kotlin，验证 fixture 必须显式应用 `org.je
 
 * plugin 测试覆盖 DSL、segment 服务和 Manifest 任务，但当前 AGP/KSP host 是 Fake 实现。
 * compiler TestKit 覆盖真实 KSP、多轮处理、Kotlin/Java 构造函数和增量变更。
-* runtime 单元测试覆盖注册会话、反射边界、能力实例策略和目标校验。
+* runtime 单元测试覆盖注册会话、反射边界、能力实例策略、类型唯一解析和目标校验。
 * app instrumentation 覆盖最终 Manifest 注册、导航参数和 Android 启动边界。
 
 发布前还需要保留真实 AGP/KSP fixture、外部 AAR fixture、Variant fallback 和 minified release 验证。

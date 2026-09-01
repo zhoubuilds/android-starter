@@ -4,6 +4,7 @@
 
 | 修订时间（CST）  | 修订人    | 修订说明                                                                                  |
 |------------------|-----------|-------------------------------------------------------------------------------------------|
+| 2026-09-01       | whisper   | 收敛名称类型安全解析、动态解析和类型唯一解析契约                                    |
 | 2026-08-31       | whisper   | 同步 Registry Manifest metadata 固定发现标记                                               |
 | 2026-07-29       | whisper   | 补充路由跨模块暴露边界                                                                    |
 | 2026-07-24 18:40 | whisper   | 同步当前已验证依赖基线为 AGP 9.2.1、Gradle 9.6.1、Kotlin 2.4.10、KSP 2.3.10、API 37 和 JVM 17 |
@@ -331,21 +332,45 @@ class UserSessionCapabilityImpl : UserSessionCapability {
 
 ```kotlin
 val capability: UserSessionCapability? =
-    Aster.resolve(UserCapabilities.SESSION) as? UserSessionCapability
+    Aster.resolve<UserSessionCapability>(UserCapabilities.SESSION)
 ```
 
-名称未注册或格式非法时返回 `null`。
+名称未注册或格式非法时返回 `null`. 名称已注册但实现类型与请求类型不匹配时, Aster 会在实例化前抛出
+`IllegalStateException`. 异常信息包含请求的能力名、请求类型、实际注册的实现类型, 以及检查能力名常量和请求契约的建议.
 
-### 7.4 按类型获取第一个实现
+Java 调用方使用显式类型参数重载:
+
+```java
+UserSessionCapability capability = Aster.INSTANCE.resolve(
+    UserCapabilities.SESSION,
+    UserSessionCapability.class
+);
+```
+
+该重载与 Kotlin 的 `resolve<T>(name)` 具有相同的返回值和异常语义.
+
+### 7.4 按名称动态获取
+
+```kotlin
+val capability: UserSessionCapability? =
+    Aster.resolveCapability(UserCapabilities.SESSION) as? UserSessionCapability
+```
+
+`resolveCapability(name)` 不校验业务契约类型, 返回 `Capability?`. 仅在调用方明确需要动态类型处理时使用;
+名称未注册或格式非法时返回 `null`.
+
+### 7.5 按类型获取唯一实现
 
 ```kotlin
 val capability: UserSessionCapability? =
     Aster.resolve(UserSessionCapability::class.java)
 ```
 
-如果存在多个实现，Aster 按能力名字典序返回第一个，并记录 warning。只有明确接受这种选择规则时才使用该 API。
+没有匹配实现时返回 `null`; 只有一个匹配时返回该实例. 如果存在多个实现, Aster 会在实例化任何候选能力前抛出
+`IllegalStateException`. 异常信息会列出请求类型, 匹配数量和按名称排序的全部候选名称; 调用方应改用
+`resolve<T>(name)` 精确选择, 或使用 `resolveAll<T>()` 显式处理多实现.
 
-### 7.5 按类型获取全部实现
+### 7.6 按类型获取全部实现
 
 ```kotlin
 val capabilities: List<UserSessionCapability> =
@@ -354,11 +379,13 @@ val capabilities: List<UserSessionCapability> =
 
 返回结果按能力名字典序排序。没有实现时返回空列表。
 
-### 7.6 单例语义
+### 7.7 异常与单例语义
 
 * `singleton = true`：第一次解析时构造并初始化，成功后按能力名缓存。
 * `singleton = false`：每次解析都创建并初始化新实例。
-* 构造或初始化失败时异常原样向上传播，失败实例不会缓存。
+* 所有解析 API 都要求已经调用 `Aster.initialize()`; 否则抛出 `IllegalStateException`.
+* 已注册目标违反公开 class、具体 class、无参构造或 `Capability` 契约时抛出 `IllegalStateException`.
+* Capability 构造或初始化失败时异常原样向上传播, 失败实例不会缓存.
 
 ## 8. 错误和返回值
 
@@ -368,7 +395,9 @@ val capabilities: List<UserSessionCapability> =
 | 路由路径格式非法 | 记录 error，返回不可导航 Postcard |
 | 路由未注册 | `createIntent()` 返回 `null`，导航返回 `false` |
 | 能力名格式非法或未注册 | 记录 error，返回 `null` 或 `false` |
+| 名称类型安全查询发现类型不匹配 | 在实例化前抛出包含能力名、请求类型、实际类型和检查建议的 `IllegalStateException` |
 | 类型查询没有实现 | 单个查询返回 `null`，全部查询返回空列表 |
+| 类型单个查询存在多个实现 | 在实例化前抛出包含全部候选名称的 `IllegalStateException` |
 | Activity Result 携带 `NEW_TASK` | 记录 error，返回 `false` |
 | Registry 路由或能力冲突 | 初始化失败并抛异常 |
 | Activity 未在 Manifest 声明 | Android 启动异常原样传播 |

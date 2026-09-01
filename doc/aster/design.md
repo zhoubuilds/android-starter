@@ -4,6 +4,7 @@
 
 | 修订时间（CST）        | 修订人     | 修订说明                         |
 |------------------|---------|------------------------------|
+| 2026-09-01       | whisper | 收敛名称类型安全解析、动态解析和类型唯一解析契约 |
 | 2026-08-31       | whisper | 调整 Registry Manifest metadata 的 name/value 协议 |
 | 2026-07-23 18:33 | whisper | 归并设计目标、候选方案、方案对比、最终选择及未选方案原因 |
 
@@ -70,11 +71,13 @@ user.account.session -> UserSessionCapabilityImpl
 
 * 一个能力名只能对应一个实现。
 * 一个接口可以有多个不同名称的实现。
-* `Aster.resolve(name)` 用于精确查找。
-* `Aster.resolve(type)` 返回按能力名排序后的第一个实现。
-* `Aster.resolveAll(type)` 返回按能力名排序后的全部实现。
+* `Aster.resolve<T>(name)` 按唯一能力名执行类型安全的精确查找.
+* `Aster.resolveCapability(name)` 按唯一能力名返回动态 `Capability` 类型, 由调用方自行安全转换.
+* `Aster.resolve(type)` 只返回唯一匹配的实现; 没有实现时返回 `null`, 多个实现时在实例化前失败.
+* `Aster.resolveAll<T>()` 返回按能力名排序后的全部实现.
 
-没有使用接口类型作为主键，因为接口天然允许多实现；如果强制单实现，会失去扩展点能力，如果允许覆盖，则结果会依赖加载顺序。
+没有使用接口类型作为主键, 因为接口天然允许多实现. 多实现场景由名称精确选择或通过 `resolveAll(type)`
+显式获取; 能力名排序只用于全部查询的稳定顺序和歧义诊断, 不构成隐式优先级.
 
 ### 3.3 API 与实现边界
 

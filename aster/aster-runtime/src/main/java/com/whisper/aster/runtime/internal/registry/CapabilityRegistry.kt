@@ -12,7 +12,8 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * 单例能力按能力名缓存, 非单例能力每次获取都会创建并初始化一个新实例.
  *
- * @aegis 保护单例/非单例生命周期, 按名称排序的类型解析和初始化语义.
+ * @aegis 保护单例/非单例生命周期, 类型唯一解析, 全部实现按名称排序和初始化语义.
+ * @aegis-audit 2026-09-01 | whisper | 经授权在实例化前拒绝名称类型失配和类型解析歧义.
  *
  * @author whisper
  * @since 2026/07/21
@@ -25,19 +26,6 @@ internal class CapabilityRegistry(
     private val descriptors: Map<String, CapabilityDescriptor> = descriptors.toMap()
     private val instances: MutableMap<String, Capability> = ConcurrentHashMap()
     private val typeCache: MutableMap<Class<*>, List<String>> = ConcurrentHashMap()
-
-    /**
-     * 单个能力类型解析结果.
-     *
-     * @param capability 按能力名排序后的第一个实现.
-     * @param implementationCount 符合能力契约的实现数量.
-     * @param selectedName 被选中的能力名.
-     */
-    internal data class Resolution<T : Capability>(
-        val capability: T?,
-        val implementationCount: Int,
-        val selectedName: String?
-    )
 
     fun contains(name: String): Boolean {
         return descriptors.containsKey(name)
@@ -64,15 +52,33 @@ internal class CapabilityRegistry(
         }
     }
 
-    fun <T : Capability> resolveFirst(type: Class<T>): Resolution<T> {
+    fun <T : Capability> resolve(name: String, type: Class<T>): T? {
+        val descriptor: CapabilityDescriptor = descriptors[name] ?: return null
+        val capabilityClass: Class<out Capability> = requireCapabilityClass(descriptor)
+        check(type.isAssignableFrom(capabilityClass)) {
+            "Capability type mismatch for name '$name': requested type '${type.name}', but " +
+                "registered implementation type is '${capabilityClass.name}'. Check the capability " +
+                "name constant and requested contract, or use Aster.resolveCapability(name) only " +
+                "when dynamic type handling is intentional."
+        }
+        return resolveMatched(name, type)
+    }
+
+    fun <T : Capability> resolveSingle(type: Class<T>): T? {
         val names: List<String> = matchingNames(type)
-        val selectedName: String? = names.firstOrNull()
-        val capability: T? = selectedName?.let { resolveMatched(it, type) }
-        return Resolution(
-            capability = capability,
-            implementationCount = names.size,
-            selectedName = selectedName
-        )
+        check(names.size <= 1) {
+            val formattedNames: String = names.joinToString(
+                prefix = "[",
+                postfix = "]"
+            ) { name: String -> "'$name'" }
+            "Ambiguous capability resolution for type '${type.name}': expected at most one " +
+                "implementation but found ${names.size}. Matching capability names ordered by " +
+                "name: $formattedNames. Use the type-safe named resolve API to select one " +
+                "explicitly, or use resolveAll to retrieve all implementations."
+        }
+        return names.singleOrNull()?.let { name: String ->
+            resolveMatched(name, type)
+        }
     }
 
     private fun matchingNames(type: Class<out Capability>): List<String> {

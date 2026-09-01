@@ -18,6 +18,7 @@ import com.whisper.aster.runtime.registry.AsterRegistryInstaller
  * 负责初始化模块 Registry, 构建路由请求并解析已注册的能力实现.
  *
  * @aegis 保护公开 API, 初始化发布, 路由查询和能力解析的行为语义.
+ * @aegis-audit 2026-09-01 | whisper | 经授权收敛名称类型安全解析和类型唯一解析契约.
  *
  * @author whisper
  * @since 2026/07/22
@@ -87,15 +88,17 @@ object Aster {
     }
 
     /**
-     * 按唯一能力名获取一个能力实例.
+     * 按唯一能力名获取动态类型实例.
      *
-     * 调用方可以将返回值转换为 api 模块声明的具体能力接口.
+     * 该入口不校验业务契约类型, 调用方需要自行使用安全类型转换.
+     * Capability 构造或初始化异常会原样向上传播.
      *
      * @param name 唯一能力名.
-     * @return 能力实例, 未注册时返回 null.
-     * @exception IllegalStateException Aster 尚未初始化时抛出.
+     * @return 能力实例, 名称格式非法或未注册时返回 null.
+     * @exception IllegalStateException Aster 尚未初始化或已注册目标无效时抛出.
+     * @exception Throwable Capability 构造或初始化失败时原样抛出.
      */
-    fun resolve(name: String): Capability? {
+    fun resolveCapability(name: String): Capability? {
         val state: RegistryState = requireState()
         val validationError: String? = CapabilityNameValidator.validationError(name)
         if (validationError != null) {
@@ -110,36 +113,77 @@ object Aster {
     }
 
     /**
-     * 按能力契约类型获取第一个实现.
+     * 按唯一能力名获取类型安全实例.
      *
-     * 结果按能力名排序. 如果存在多个实现, 返回第一个实现并输出警告日志.
+     * 名称已注册但实现类型与 [T] 不匹配时会在实例化前失败.
+     * 异常信息包含能力名, 请求类型, 已注册实现类型和检查建议.
+     * Capability 构造或初始化异常会原样向上传播.
+     *
+     * @param T 请求的能力契约类型.
+     * @param name 唯一能力名.
+     * @return 类型匹配的能力实例, 名称格式非法或未注册时返回 null.
+     * @exception IllegalStateException Aster 尚未初始化, 已注册目标无效或实现类型不匹配时抛出.
+     * @exception Throwable Capability 构造或初始化失败时原样抛出.
+     */
+    inline fun <reified T : Capability> resolve(name: String): T? {
+        return resolve(name, T::class.java)
+    }
+
+    /**
+     * 按唯一能力名和契约类型获取类型安全实例.
+     *
+     * 名称已注册但实现类型与 [type] 不匹配时会在实例化前失败.
+     * 异常信息包含能力名, 请求类型, 已注册实现类型和检查建议.
+     * Capability 构造或初始化异常会原样向上传播.
+     *
+     * @param name 唯一能力名.
+     * @param type 请求的能力契约类型.
+     * @return 类型匹配的能力实例, 名称格式非法或未注册时返回 null.
+     * @exception IllegalStateException Aster 尚未初始化, 已注册目标无效或实现类型不匹配时抛出.
+     * @exception Throwable Capability 构造或初始化失败时原样抛出.
+     */
+    fun <T : Capability> resolve(name: String, type: Class<T>): T? {
+        val state: RegistryState = requireState()
+        val validationError: String? = CapabilityNameValidator.validationError(name)
+        if (validationError != null) {
+            reportError(validationError)
+            return null
+        }
+        val capability: T? = state.capabilityRegistry.resolve(name, type)
+        if (capability == null) {
+            reportError("Capability not found: $name")
+        }
+        return capability
+    }
+
+    /**
+     * 按能力契约类型获取唯一实现.
+     * 存在多个匹配实现时会在实例化任何候选能力前失败.
+     * 异常信息包含请求类型, 匹配数量, 按名称排序的候选能力名和显式选择建议.
+     * Capability 构造或初始化异常会原样向上传播.
      *
      * @param type 能力契约类型.
-     * @return 第一个匹配的能力实例, 未注册时返回 null.
-     * @exception IllegalStateException Aster 尚未初始化时抛出.
+     * @return 唯一匹配的能力实例, 未注册时返回 null.
+     * @exception IllegalStateException Aster 尚未初始化, 已注册目标无效或存在多个匹配实现时
+     * 抛出.
+     * @exception Throwable Capability 构造或初始化失败时原样抛出.
      */
     fun <T : Capability> resolve(type: Class<T>): T? {
-        val resolution: CapabilityRegistry.Resolution<T> =
-            requireState().capabilityRegistry.resolveFirst(type)
-        if (resolution.implementationCount == 0) {
+        val capability: T? = requireState().capabilityRegistry.resolveSingle(type)
+        if (capability == null) {
             reportError("Capability not found for type: ${type.name}")
-        } else if (resolution.implementationCount > 1) {
-            reportWarning(
-                "Multiple capabilities found for type ${type.name}. " +
-                    "Returning the first capability ordered by name. " +
-                    "count=${resolution.implementationCount}, " +
-                    "selected=${resolution.selectedName}."
-            )
         }
-        return resolution.capability
+        return capability
     }
 
     /**
      * 按能力契约获取全部实现.
+     * Capability 构造或初始化异常会原样向上传播.
      *
      * @param T 能力契约类型.
      * @return 按能力名排序的能力实例列表.
-     * @exception IllegalStateException Aster 尚未初始化时抛出.
+     * @exception IllegalStateException Aster 尚未初始化或已注册目标无效时抛出.
+     * @exception Throwable Capability 构造或初始化失败时原样抛出.
      */
     inline fun <reified T : Capability> resolveAll(): List<T> {
         return resolveAll(T::class.java)
@@ -147,10 +191,12 @@ object Aster {
 
     /**
      * 按能力契约类型获取全部实现.
+     * Capability 构造或初始化异常会原样向上传播.
      *
      * @param type 能力契约类型.
      * @return 按能力名排序的能力实例列表.
-     * @exception IllegalStateException Aster 尚未初始化时抛出.
+     * @exception IllegalStateException Aster 尚未初始化或已注册目标无效时抛出.
+     * @exception Throwable Capability 构造或初始化失败时原样抛出.
      */
     fun <T : Capability> resolveAll(type: Class<T>): List<T> {
         return requireState().capabilityRegistry.get(type)
