@@ -9,6 +9,8 @@ import org.gradle.api.Project
  *
  * 负责选择根工程配置文件、读取文本并输出配置缺省提示. TOML 结构解析由 [PrismConfigParser] 负责.
  *
+ * @aegis 保护 `prism.appConfig.file`, 根工程默认路径, 显式路径不回退和空配置提示语义.
+ *
  * @author whisper
  * @since 2026/09/01
  */

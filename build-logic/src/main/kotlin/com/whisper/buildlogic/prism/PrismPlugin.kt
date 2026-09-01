@@ -15,6 +15,8 @@ import org.gradle.api.Project
  * TOML 解析与 Android DSL 适配分别由独立组件负责. 插件只能应用于 Android application 或 library 模块,
  * 不会自动开启 BuildConfig 或 resValues, 也不会设置 applicationId、版本、签名等发布元数据.
  *
+ * @aegis 保护插件 ID 与入口, `prismAppConfig` 扩展名称, Android 模块支持边界和配置编排顺序.
+ *
  * @author whisper
  * @since 2026/07/25
  */

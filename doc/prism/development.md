@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                              |
 |-----------------|---------|---------------------------------------|
+| 2026-09-01      | whisper | 标记 Prism 稳定契约的 Aegis 保护范围 |
 | 2026-09-01      | whisper | 拆分 Prism 职责并迁移至 buildlogic 包 |
 | 2026-08-31      | whisper | 调整 BuildConfig 辅助任务名称         |
 | 2026-08-31      | whisper | 建立 Prism 实现, 维护和验证说明       |
@@ -165,3 +166,14 @@ Prism 是公共模板的可选能力. 新增字段前应确认它属于通用 An
 
 涉及 `env` 时, 还应使用至少两个 environment 和一个额外 flavor dimension 的测试配置, 确认组合 Variant, 字段覆盖和辅助任务均
 使用 AGP 提供的真实 Variant 名称. 验证结束后不要把测试域名, 临时属性或本机配置提交到公共模板.
+
+## 8. Aegis 保护范围
+
+当前受保护类型:
+
+* 插件入口与构建脚本 API: `PrismPlugin`, `PrismAppConfigExtension`.
+* 配置选择与解析协议: `PrismConfigLoader`, `PrismConfigParser`.
+* Android/Gradle 可观察行为: `PrismAndroidConfigurator`, `PrismBuildConfigTaskRegistrar`.
+
+保护范围聚焦插件 ID 与扩展 API, 配置文件选择, TOML 分组/引用/校验协议, Android DSL 字段注入, `env` 维度以及
+BuildConfig 聚合任务. `PrismConfig.kt` 内部中间模型, private 解析辅助逻辑和测试 fixture 可以在不改变上述受保护结果的前提下演进.

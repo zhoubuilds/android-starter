@@ -10,6 +10,8 @@ import org.gradle.api.Project
  *
  * 注册 Android Studio Gradle 侧边栏中的 BuildConfig 快捷任务, 用于 clean 后预生成各变体的 BuildConfig 源码.
  *
+ * @aegis 保护聚合任务名称/分组, BuildConfig feature 开关和基于 Android Components 变体名的任务依赖.
+ *
  * @author whisper
  * @since 2026/07/25
  */

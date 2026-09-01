@@ -9,6 +9,8 @@ import kotlin.reflect.KClass
  *
  * 向模块构建脚本暴露当前应用配置文件中的 exports.
  *
+ * @aegis 保护 `prismAppConfig.get<T>(name)` API, 导出值冻结, 支持类型, Int 范围和失败诊断契约.
+ *
  * @author whisper
  * @since 2026/08/22
  */

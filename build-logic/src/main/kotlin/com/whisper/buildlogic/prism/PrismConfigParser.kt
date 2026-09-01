@@ -12,6 +12,8 @@ import org.tomlj.TomlTable
  *
  * 只负责把 TOML 文本转换为应用配置模型, 不读取 Gradle 属性, 也不访问 Android Gradle DSL.
  *
+ * @aegis 保护 TOML 分组与引用协议, 类型/名称校验, BuildConfig 字面量和结构化错误诊断.
+ *
  * @author whisper
  * @since 2026/09/01
  */

@@ -11,6 +11,8 @@ import org.gradle.api.Project
  *
  * 只负责把已解析的 [AppConfig] 写入 application 或 library 的 AGP DSL, 不读取或解析 TOML.
  *
+ * @aegis 保护 application/library 配置对等性, `env` 维度, default/flavor 字段注入和补充 flavor 警告语义.
+ *
  * @author whisper
  * @since 2026/09/01
  */
