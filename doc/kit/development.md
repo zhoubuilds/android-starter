@@ -4,6 +4,13 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-01      | whisper | 收敛重复同类富文本 Span           |
+| 2026-09-01      | whisper | 统一绝对与相对字号组合语义        |
+| 2026-09-01      | whisper | 明确点击与下划线的设置顺序        |
+| 2026-09-01      | whisper | 明确重复点击行为的覆盖规则        |
+| 2026-09-01      | whisper | 统一富文本字体组合语义            |
+| 2026-09-01      | whisper | 合并通用扩展包                    |
+| 2026-09-01      | whisper | 移除全局 Activity 生命周期跟踪    |
 | 2026-09-01      | whisper | 同步 Kit 当前源码结构和设计入口   |
 | 2026-08-27      | whisper | 迁入通用 ViewBinding 扩展         |
 | 2026-08-17      | 张梁    | 新增通用分享底部面板              |
@@ -50,9 +57,7 @@ kit/
    |- main/
    |  |- java/com/whisper/kit/
    |  |  |- KitApplicationHolder.kt
-   |  |  |- activity/
    |  |  |- extension/
-   |  |  |- function/
    |  |  |- recyclerview/
    |  |  |  |- decoration/
    |  |  |  |- holder/
@@ -68,8 +73,7 @@ kit/
    |  |- keepRules/rules.keep
    |  `- res/
    `- test/java/com/whisper/kit/
-      |- activity/
-      |- function/
+      |- extension/
       |- recyclerview/
       |  |- decoration/
       |  |- holder/
@@ -83,9 +87,7 @@ kit/
 | 包                        | 职责                                |
 |---------------------------|-------------------------------------|
 | 根包                      | Application 等模块级 Android 工具   |
-| `activity`                | 全局 Activity 生命周期跟踪工具      |
-| `extension`               | 通用 Android 与 ViewBinding 扩展    |
-| `function`                | 通用 Context 和 CharSequence 扩展   |
+| `extension`               | 通用 Android, 文本和 ViewBinding 扩展 |
 | `recyclerview.decoration` | RecyclerView item 间距和分割线工具  |
 | `recyclerview.holder`     | RecyclerView ViewHolder 通用封装    |
 | `recyclerview.listener`   | RecyclerView item 内点击分发工具    |
@@ -110,31 +112,30 @@ kit/
 | AndroidX ViewBinding  | `api(libs.androidx.viewbinding)`   | ViewHolder 公开 API 暴露 `ViewBinding` 类型 |
 | Material Components   | `implementation(libs.material)`    | 通用内容卡片内部使用 `ShapeableImageView`   |
 
-## 4. Activity 生命周期跟踪
+## 4. 通用扩展
 
-`ActivityLifecycleTracker` 是业务无关的进程级 Activity 观察工具. 应由 Application 在启动阶段调用
-`ActivityLifecycleTracker.install(application)` 完成一次安装; 重复安装同一个 Application 保持幂等.
+`extension` 提供 Context, CharSequence, Activity, Dialog 和 Fragment 等 Android 类型的通用扩展. 当前 ViewBinding 实现从
+Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查.
 
-`ActivityLifecycleTracker.topActivity` 返回最近创建、启动或恢复且仍可用的 Activity. 工具使用弱引用持有页面, Activity 正在结束、已经销毁
-或弱引用已释放时返回 null. Activity 进入 stopped 状态后仍属于当前任务栈, 因此在销毁前继续作为栈顶返回; 调用方执行 UI 操作时仍须切到主线程.
-
-## 5. 通用扩展
-
-`extension` 提供 Activity、Dialog 和 Fragment 的 ViewBinding 委托及其它通用 Android 扩展。当前 ViewBinding 实现从
-Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查。
-
-`function` 提供不依赖应用资源和业务语义的 Android 通用扩展. CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
-字体样式、指定 Typeface、下划线、删除线和点击行为. 所有扩展应作用于整段文本、保留原文本已有的 Span 并支持链式组合.
+CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
+字体样式、指定 Typeface、下划线、删除线和点击行为. 所有扩展应作用于整段文本、保留与本次设置不冲突的 Span 并支持链式组合.
+同一目标范围内重复调用同类设置时只保留最后一个对应 Span, 不堆积重复 Span; 不同文本区域的 Span 互不影响.
 `absoluteSize()` 明确接收 px; 需要遵循系统字体缩放的 sp 字号时, 调用方应传入由 sp dimension 解析得到的像素值.
-`relativeSize()` 接收相对于 TextView 基准字号的正数比例. 点击扩展只处理点击和下划线, 不隐式覆盖颜色.
+`relativeSize()` 接收正数比例. 两者同时设置时, 先以 `absoluteSize()` 为基准, 再应用相对比例, 调用顺序不影响结果;
+同一种字号设置重复调用时使用最后一次值. 点击扩展只处理点击和下划线, 不隐式覆盖颜色. 后一次
+`onClick()` 只替换与其目标范围重叠的 `ClickableSpan`, 其回调和下划线配置共同生效; 同一文本中互不相交的点击区域同时保留.
+`underline()` 与 `onClick(underline = false)` 设置同一范围时, 后调用者决定最终下划线状态, 点击回调不受影响.
+`typeface()` 与 `textStyle()` 同时生效且不受调用顺序影响. 重复设置字体时后者覆盖前者; `BOLD` 和 `ITALIC`
+同时设置时合并为 `BOLD_ITALIC`; `NORMAL` 显式重置已有字形. API 24 及以上使用同一组合算法, 但不承诺不同系统版本的
+字体 fallback, 字形栅格和像素指标完全一致. 自定义字体 Span 只用于进程内渲染, 不承诺经过 Bundle, SavedState 或 IPC 后保留.
 `TextView` 是否启用 `LinkMovementMethod` 仍由承载点击文本的组件或调用方负责.
 
-## 6. 通用 View
+## 5. 通用 View
 
 `view` 提供业务无关的 View 和交互工具。当前包含 `KitContentFeedCardViewHolder`、`KitShareSheetDialog`、
 `KitCodeInputEditText` 和 `KitRefreshLoadLayout`。
 
-### 6.1 通用内容瀑布流卡片
+### 5.1 通用内容瀑布流卡片
 
 `KitContentFeedCardViewHolder` 用于封面、标题、标签、统计文案、播放图标、时长和封面角标构成的通用内容卡片。
 组件只处理视觉绑定、封面高度和点击分发; 业务内容类型、默认标签文案、跳转目标和图片加载库由调用模块提供。
@@ -147,7 +148,7 @@ Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查�
 4. 点击回调返回 `KitContentFeedCardUi`, 调用方可通过 `payload` 持有自己的原始业务 item; `kit` 不解析该对象。
 5. 卡片颜色、圆角、间距和图标资源保持业务无关命名, 资源名遵守 `kit` 前缀。
 
-### 6.2 通用分享底部面板
+### 5.2 通用分享底部面板
 
 `KitShareSheetDialog` 用于展示底部分享入口面板。组件只处理窗口、标题、入口排列、取消按钮和点击分发; 分享渠道语义、入口文案、图标资源、
 是否可用、实际 SDK 调用、埋点和业务提示由调用模块负责。
@@ -159,7 +160,7 @@ Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查�
 3. 面板点击后默认关闭, 需要等待业务操作结果时由调用方通过 `setDismissOnActionClick(false)` 接管关闭时机。
 4. 导航栏、状态栏和 edge-to-edge 仍由宿主 Activity 负责; 分享面板只设置底部窗口展示和默认 dim 遮罩。
 
-### 6.3 分格文本输入
+### 5.3 分格文本输入
 
 `KitCodeInputEditText` 使用单个原生 `Editable` 和 `InputConnection` 承接输入, 只接管文本区域绘制。
 控件应保留粘贴、删除、TextWatcher、Autofill、无障碍和状态恢复能力, 不在多个子 EditText 之间转移焦点。
@@ -177,7 +178,7 @@ Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查�
 9. 业务布局应显式引用应用提供的组件样式; `kitCodeInputEditTextStyle` 只用于遗漏显式 style 时兜底。kit 只定义样式入口和可配置属性,
    不持有应用颜色、尺寸或 Drawable。
 
-### 6.4 刷新加载容器
+### 5.4 刷新加载容器
 
 `KitRefreshLoadLayout` 用于处理纵向内容的下拉刷新和上拉加载交互。
 
@@ -206,7 +207,7 @@ Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查�
 3. `feature/*`。
 4. `app`。
 
-## 7. RecyclerView Decoration
+## 6. RecyclerView Decoration
 
 `recyclerview.decoration` 提供 RecyclerView item 间距和分割线装饰器。该工具只处理 item offset 和分割线绘制,
 不承载业务视觉语义. 绘制边界和取舍见 [RecyclerView Decoration 边界](recyclerview-decoration-boundary.md).
@@ -221,7 +222,7 @@ Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查�
 6. 分割线绘制位置应跟随 item translation, 避免 item 动画过程中分割线和 item 视觉位置错开。
 7. 不在该工具中读取应用资源、主题色或业务尺寸。
 
-## 8. RecyclerView ViewHolder
+## 7. RecyclerView ViewHolder
 
 `recyclerview.holder` 提供 ViewBinding ViewHolder 通用封装。该工具只持有 binding, 不持有业务数据, 不处理业务点击事件。
 
@@ -232,7 +233,7 @@ Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查�
 3. 不让 ViewHolder 持有 item 数据或业务回调。
 4. 只封装 ViewBinding 和 RecyclerView ViewHolder 的通用样板代码。
 
-## 9. RecyclerView 点击分发
+## 8. RecyclerView 点击分发
 
 `recyclerview.listener` 提供 RecyclerView 级 item 内子 View 点击分发能力。该工具只处理 Android View 命中和手势通知, 不承载业务事件语义。
 
@@ -247,7 +248,7 @@ Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查�
 
 后续增加长按、双击等能力时, 优先继承内部 `OnDispatchGestureListener` 复用命中检测逻辑, 不复制坐标转换算法。
 
-## 10. 测试
+## 9. 测试
 
 修改 `kit` 后至少执行:
 

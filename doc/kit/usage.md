@@ -4,6 +4,12 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-01      | whisper | 明确重复同类 Span 的收敛规则      |
+| 2026-09-01      | whisper | 明确绝对与相对字号组合规则        |
+| 2026-09-01      | whisper | 明确点击与下划线的设置顺序        |
+| 2026-09-01      | whisper | 明确重复点击行为的覆盖规则        |
+| 2026-09-01      | whisper | 明确字体与字形组合规则            |
+| 2026-09-01      | whisper | 统一通用扩展包路径                |
 | 2026-08-27      | whisper | 迁入通用 ViewBinding 扩展         |
 | 2026-08-17      | 张梁    | 补充通用分享底部面板用法          |
 | 2026-08-14      | whisper | 明确分格输入样式显式引用方式      |
@@ -78,6 +84,8 @@ KitShareSheetDialog.Builder(context)
 
 ## 4. 富文本扩展
 
+富文本扩展位于 `com.whisper.kit.extension` 包.
+
 需要组合不同颜色和点击区域时, 可以配合 AndroidX `buildSpannedString` 使用 `color()` 和 `onClick()`:
 
 ```kotlin
@@ -93,10 +101,18 @@ val content: CharSequence = buildSpannedString {
 ```
 
 `absoluteSize(px)` 使用绝对像素字号. 如果设计字号是 sp, 应使用 `resources.getDimensionPixelSize()` 读取定义为 sp 的 dimen,
-再把结果传给该扩展, 从而保留系统字体缩放. `relativeSize(proportion)` 使用当前 `TextView` 字号的比例, 例如 `0.8f` 表示 80%.
+再把结果传给该扩展, 从而保留系统字体缩放. `relativeSize(proportion)` 使用当前 `TextView` 字号或已设置绝对字号的比例,
+例如 `0.8f` 表示 80%. 两者同时使用时固定先取绝对字号再应用相对比例, 调用顺序不影响结果; 重复设置同一种字号时使用最后一次值.
 
 其它可组合能力包括 `textStyle(Typeface.BOLD)`、`typeface(typeface)`、`underline()` 和 `strikethrough()`.
-`onClick()` 默认关闭下划线, 需要下划线时传入 `underline = true`. 该扩展不设置颜色, 应按视觉语义与 `color()` 组合使用.
+同一文本范围内重复调用同类设置时只保留最后一个对应 Span; 分别装饰不同文本片段再组合时, 各区域的 Span 同时保留.
+`typeface()` 与 `textStyle()` 的调用顺序不影响组合结果. `BOLD` 与 `ITALIC` 会合并, `NORMAL` 会重置已有字形;
+重复调用 `typeface()` 时使用最后一次传入的字体. 自定义字体 Span 面向进程内 UI 渲染, 不应用于需要通过 Bundle, SavedState
+或 IPC 保留字体的文本契约.
+`onClick()` 默认关闭下划线, 需要下划线时传入 `underline = true`. 点击范围重叠时, 后一次设置替换旧点击行为,
+并使用后一次的回调和下划线配置; 分别装饰不同文本片段再组合时, 互不相交的点击区域同时保留.
+`underline()` 与 `onClick(underline = false)` 作用于同一范围时, 后调用者决定最终是否显示下划线.
+该扩展不设置颜色, 应按视觉语义与 `color()` 组合使用.
 普通 `TextView` 承载点击文本时还需设置 `LinkMovementMethod`; 已统一处理可点击 Span 的公共组件不需要调用方重复设置.
 
 ## 5. 分格文本输入

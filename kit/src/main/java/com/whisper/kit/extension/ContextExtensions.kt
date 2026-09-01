@@ -1,4 +1,4 @@
-package com.whisper.kit.function
+package com.whisper.kit.extension
 
 import android.app.Activity
 import android.content.Context
