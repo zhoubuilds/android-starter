@@ -4,6 +4,10 @@
 
 | 修订时间（CST）  | 修订人     | 修订说明                  |
 |------------|---------|-----------------------|
+| 2026-09-01 | whisper | 补充双父接口 Dao accessor 的 Room 约束 |
+| 2026-09-01 | whisper | 明确 Dao 工厂取消异常传播边界 |
+| 2026-09-01 | whisper | 明确父 accessor qualifier 的 override 校验 |
+| 2026-09-01 | whisper | 明确静态注册、初始化、qualifier 和 Room 集成边界 |
 | 2026-08-31 | whisper | 支持 Dao qualifier 多数据库绑定和类型安全获取 |
 | 2026-08-31 | whisper | 补充编译错误定位和冲突参与者说明 |
 | 2026-08-31 | whisper | 明确生成代码可访问性和声明形态约束 |
@@ -21,6 +25,7 @@ Habitat 提供:
 * 通过 Dao 类型获取唯一 Room Dao 实例, 或通过 Dao 类型和 qualifier 精确获取实例。
 * application/library 装配模块的 Provider、Registry 和 Manifest 自动生成。
 * 多 RoomDatabase 下的 Dao qualifier 完整性和唯一性校验。
+* 在进程启动阶段一次性安装编译期已知的静态 Dao binding。
 
 Habitat 不提供:
 
@@ -28,13 +33,19 @@ Habitat 不提供:
 * 自动维护 `@Database.entities`。
 * 数据库迁移、备份、加密或清理策略。
 * 依赖注入、Repository 查找或按数据库名获取 Dao。
+* 动态 Feature 安装后的 binding 追加、Registry 重载或运行时数据库切换。
+* 手写 Registry / Provider 扩展协议。
 
-当前已验证构建基线沿用工程基线: AGP `9.2.1`、Gradle `9.6.1`、Kotlin `2.4.10`、KSP `2.3.10`、compileSdk `37`、JVM target `17`。
+当前已验证构建基线沿用工程基线: AGP `9.2.1`、Gradle `9.6.1`、Kotlin `2.4.10`、KSP `2.3.10`、
+Room `2.8.4`、compileSdk `37`、JVM target `17`。
 
 ## 2. 接入模块类型
 
 需要使用 Habitat 自动注册 Dao 时, 只有最终数据库装配模块需要应用 Habitat Gradle 插件和 KSP processor。该模块通常是 app,
 也可以是一个被 app 依赖的 Android library。
+
+library 只有在它拥有最终应用的完整数据库装配、且消费它的 app 不再声明另一个 Habitat 装配入口时才适合作为装配模块。普通
+可复用 library 和 feature 不应应用 Habitat 插件; 否则其 Manifest Registry 会与消费 app 或其它 AAR 的固定 metadata 冲突。
 
 starter 默认不在 app 中启用 Habitat。项目存在需要统一发现的 Room Dao 时, 再由唯一数据库装配模块按本文步骤显式接入。
 
@@ -175,9 +186,44 @@ abstract fun userDao(): UserDao
 * 唯一 accessor 显式标记后, 既可以带 qualifier 获取, 也可以省略 qualifier 获取。
 * 同一个 Dao 有多个 accessor 时必须全部显式标记, 混用显式和省略形式会导致 KSP error。
 * qualifier 不能为空白, 并且在同一个 Dao 类型内必须唯一。
+* qualifier 按区分大小写的原始字符串精确匹配, Habitat 不执行 trim、大小写转换或其它规范化。
+* qualifier 应是稳定、非敏感的语义常量, 不使用数据库类名、用户输入、账号标识或凭据。
 * 不同 Dao 类型可以复用同一个 qualifier。
-* Room 不允许同一个 RoomDatabase 声明多个返回同一 Dao 类型的抽象 accessor; 多绑定用于不同数据库之间的装配。
+* Room 不允许同一个 RoomDatabase 直接声明或从多个父类型继承多个返回同一 Dao 类型的抽象 accessor; 多绑定用于不同数据库之间的装配。
 * Habitat 不提供默认 binding; 多个 binding 下省略 qualifier 不会选择其中任意一个。
+* 子类 override 已标记的 accessor 时, qualifier 不会从父声明继承, 必须在最派生 accessor 上重新标记, 否则 KSP 会在该 override 声明处报错。
+
+如果两个无继承关系的父接口提供同签名 accessor, 直接同时继承会被 Room compiler 拒绝:
+
+```kotlin
+interface AccountDaoAccessor {
+
+    @HabitatDaoBinding(UserStorage.ACCOUNT)
+    fun userDao(): UserDao
+}
+
+interface ArchiveDaoAccessor {
+
+    @HabitatDaoBinding(UserStorage.ARCHIVE)
+    fun userDao(): UserDao
+}
+```
+
+最终数据库需要显式 override, 使 Room 只处理一个 accessor, 并在该最派生声明上确定 Habitat qualifier。省略其它数据库配置后,
+accessor 继承部分如下:
+
+```kotlin
+abstract class AppDatabase :
+    RoomDatabase(),
+    AccountDaoAccessor,
+    ArchiveDaoAccessor {
+
+    @HabitatDaoBinding(UserStorage.ACCOUNT)
+    abstract override fun userDao(): UserDao
+}
+```
+
+父接口上的 qualifier 不会合并或自动继承。最终 override 选择的 qualifier 是唯一有效绑定; 省略该注解会导致 Habitat KSP error。
 
 ## 6. 声明数据库实例入口
 
@@ -244,7 +290,9 @@ fun instance(): AppDataBase {
 * 函数入口不能声明参数, 不能是 `suspend`, 也不能声明类型参数。
 
 不支持的实例入口或 Dao accessor 会由 KSP 直接在原始声明处报告文件、行号和具体原因, 不会继续生成必然无法编译的
-Provider。Dao、Entity 或 Provider 重复归属时, 每个冲突数据库声明都会收到包含全部参与数据库名称的错误。
+Provider。`@HabitatDaoBinding` 未落在参与 Habitat 数据库继承层级的 Dao accessor 上、同一 Dao 的 qualifier 缺失或重复、
+Provider 生成名称冲突时, KSP 会在对应 accessor 或数据库声明处列出冲突参与者。Entity 跨数据库复用和 schema 合法性由
+Room compiler 处理。
 
 ## 7. 初始化
 
@@ -273,8 +321,11 @@ class StarterApplication : Application() {
 * 在任何 `HabitatFactory.get()` 之前调用 `HabitatFactory.initialize(application)`。
 * 在 Habitat Dao 工厂真正执行前完成数据库初始化。
 * 同一进程只需要初始化一次。
+* 第一次初始化完成后 binding 快照不可追加或替换; Registry 缺失或损坏时安装的空快照也不会通过再次调用自动重试。
 
-当前 `HabitatFactory.get()` 和推荐数据库实例写法都能等待正在进行的初始化发布完成; 但完全未初始化仍属于使用错误, 会直接抛异常。
+`HabitatFactory.initialize()` 只安装延迟工厂, 不会初始化或读取数据库实例, 因此数据库可以先于 Habitat 初始化, 也可以在 Habitat
+初始化后、第一次 Dao 获取前完成初始化。当前 `HabitatFactory.get()` 和推荐数据库实例写法都能等待各自正在进行的初始化发布完成;
+但完全未初始化仍属于使用错误, 会直接抛异常。
 
 ## 8. 获取 Dao
 
@@ -311,11 +362,11 @@ val userDao: UserDao? = HabitatFactory.get<UserDao>(UserStorage.ACCOUNT)
 * 目标 Dao 有多个绑定时, 非限定获取记录 warning 并返回 `null`, 不会任意选择数据库。
 * Dao 未注册时返回 `null`。
 * qualifier 为空、未注册或不属于请求的 Dao 类型时返回 `null`。
-* Dao 工厂执行失败时返回 `null`。
+* Dao 工厂抛出普通 `Exception` 或发生链接错误时返回 `null`; `CancellationException` 会原样传播, JVM `Error` 等不可恢复错误也不会被吞掉。
 * Dao 工厂返回类型不匹配时返回 `null`。
 
 Provider 和 `HabitatFactory` 保存的是延迟工厂函数。安装 Registry 时不会访问数据库实例或缓存 Dao; 只有成功命中绑定后才会
-调用对应数据库 accessor。
+调用对应数据库 accessor。每次 `get()` 都会调用一次工厂; Dao 是否复用由 RoomDatabase accessor 自身决定。
 
 初始化前调用属于使用错误:
 

@@ -585,6 +585,43 @@ class HabitatCompilerFunctionalTest {
     }
 
     /**
+     * 验证编译依赖中的父 accessor 已声明 qualifier 时, 子 override 不能静默丢失该声明.
+     */
+    @Test
+    fun rejectsMissingBindingOnOverrideFromCompiledDependency() {
+        val projectDir: File = createCompiledParentAccessorProject(childBinding = "")
+
+        val result: BuildResult = runBuildAndFail(projectDir, task = ":app:compileKotlin")
+
+        assertTrue(
+            result.output.contains(
+                "Habitat Dao accessor userDao overrides an accessor annotated with @HabitatDaoBinding. " +
+                    "Qualifiers are not inherited; repeat @HabitatDaoBinding on the most-derived accessor."
+            )
+        )
+        assertTrue(result.output.contains("AppDatabase.kt"))
+        assertFalse(generatedRegistryFile(File(projectDir, "app")).exists())
+    }
+
+    /**
+     * 验证子 override 重复编译依赖父 accessor 的 qualifier 后正常生成绑定.
+     */
+    @Test
+    fun generatesBindingForAnnotatedOverrideFromCompiledDependency() {
+        val projectDir: File = createCompiledParentAccessorProject(
+            childBinding = "@HabitatDaoBinding(\"user.account\")",
+        )
+
+        runBuild(projectDir, task = ":app:compileKotlin")
+
+        val providerSource: String = generatedProviderFile(
+            File(projectDir, "app"),
+            "AppDatabaseHabitatDaoProvider",
+        ).readText()
+        assertTrue(providerSource.contains("\"user.account\" to { AppDatabase.instance.userDao() }"))
+    }
+
+    /**
      * 验证继承的 Dao accessor 仍参与多绑定显式限定校验.
      */
     @Test
@@ -850,6 +887,92 @@ class HabitatCompilerFunctionalTest {
     }
 
     /**
+     * 验证真实 Room compiler 与 Habitat 可以共同处理同一 Dao 跨数据库限定绑定.
+     */
+    @Test
+    fun compilesQualifiedBindingsWithRealRoomProcessor() {
+        val projectDir: File = createProject(
+            source = """
+                package com.example.database
+
+                import androidx.room.Dao
+                import androidx.room.Database
+                import androidx.room.Entity
+                import androidx.room.PrimaryKey
+                import androidx.room.Query
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDaoBinding
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                @Entity
+                data class UserEntity(
+                    @PrimaryKey val id: Long,
+                )
+
+                @Dao
+                interface UserDao {
+
+                    @Query("SELECT * FROM UserEntity")
+                    suspend fun users(): List<UserEntity>
+                }
+
+                @HabitatDatabase
+                @Database(entities = [UserEntity::class], version = 1, exportSchema = false)
+                abstract class AccountDatabase : RoomDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: AccountDatabase
+                            get() = error("No test instance.")
+                    }
+
+                    @HabitatDaoBinding("user.account")
+                    abstract fun userDao(): UserDao
+                }
+
+                @HabitatDatabase
+                @Database(entities = [UserEntity::class], version = 1, exportSchema = false)
+                abstract class ArchiveDatabase : RoomDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: ArchiveDatabase
+                            get() = error("No test instance.")
+                    }
+
+                    @HabitatDaoBinding("user.archive")
+                    abstract fun userDao(): UserDao
+                }
+            """.trimIndent(),
+            roomVersion = requireNotNull(System.getProperty("habitat.test.roomVersion")) {
+                "Missing habitat.test.roomVersion test system property."
+            },
+        )
+
+        runBuild(projectDir)
+
+        val accountProvider: String = generatedProviderFile(
+            projectDir,
+            "AccountDatabaseHabitatDaoProvider",
+        ).readText()
+        val archiveProvider: String = generatedProviderFile(
+            projectDir,
+            "ArchiveDatabaseHabitatDaoProvider",
+        ).readText()
+        assertTrue(accountProvider.contains("\"user.account\" to { AccountDatabase.instance.userDao() }"))
+        assertTrue(archiveProvider.contains("\"user.archive\" to { ArchiveDatabase.instance.userDao() }"))
+        assertTrue(
+            File(
+                projectDir,
+                "build/generated/ksp/main/kotlin/com/example/database/AccountDatabase_Impl.kt",
+            ).isFile
+        )
+    }
+
+    /**
      * 验证多绑定 Dao 不能混用显式和省略的绑定注解.
      */
     @Test
@@ -906,6 +1029,27 @@ class HabitatCompilerFunctionalTest {
         assertValidationFailure(
             projectDir = projectDir,
             expectedMessage = "@HabitatDaoBinding qualifier must not be blank.",
+        )
+    }
+
+    /**
+     * 验证未标记有效 Dao accessor 的 HabitatDaoBinding 会在 KSP 阶段失败.
+     */
+    @Test
+    fun rejectsBindingOutsideRegisteredDaoAccessor() {
+        val projectDir: File = createValidationProject(
+            additionalDeclarations = """
+                @HabitatDaoBinding("user.account")
+                fun storageName(): String = "account"
+            """.trimIndent(),
+            additionalImports = "import com.whisper.habitat.runtime.annotation.HabitatDaoBinding",
+        )
+
+        assertValidationFailure(
+            projectDir = projectDir,
+            expectedMessage =
+                "@HabitatDaoBinding can only annotate a supported Dao accessor in a @HabitatDatabase inheritance " +
+                    "hierarchy.",
         )
     }
 
@@ -1162,8 +1306,8 @@ class HabitatCompilerFunctionalTest {
         return result
     }
 
-    private fun createProject(source: String): File {
-        val projectDir: File = temporaryFolder.newFolder("habitat-compiler-fixture")
+    private fun createCompiledParentAccessorProject(childBinding: String): File {
+        val projectDir: File = temporaryFolder.newFolder("habitat-compiled-parent-fixture")
         val processorJar: File = File(System.getProperty("user.dir"), "build/libs/habitat-compiler.jar")
         val kotlinPoetJar: File = codeSourceFile(ClassName::class.java)
         val kotlinVersion: String = requireNotNull(System.getProperty("habitat.test.kotlinVersion")) {
@@ -1182,6 +1326,149 @@ class HabitatCompilerFunctionalTest {
             source = """
                 pluginManagement {
                     repositories {
+                        mavenCentral()
+                        gradlePluginPortal()
+                    }
+                }
+
+                dependencyResolutionManagement {
+                    repositories {
+                        mavenCentral()
+                    }
+                }
+
+                rootProject.name = "habitat-compiled-parent-functional-test"
+                include(":base", ":app")
+            """.trimIndent(),
+        )
+        writeFixtureSource(
+            projectDir = projectDir,
+            relativePath = "build.gradle.kts",
+            source = """
+                plugins {
+                    id("org.jetbrains.kotlin.jvm") version "$kotlinVersion" apply false
+                    id("com.google.devtools.ksp") version "$kspVersion" apply false
+                }
+            """.trimIndent(),
+        )
+        writeFixtureSource(
+            projectDir = projectDir,
+            relativePath = "base/build.gradle.kts",
+            source = """
+                plugins {
+                    id("org.jetbrains.kotlin.jvm")
+                }
+            """.trimIndent(),
+        )
+        writeFixtureSource(
+            projectDir = projectDir,
+            relativePath = "app/build.gradle.kts",
+            source = """
+                plugins {
+                    id("org.jetbrains.kotlin.jvm")
+                    id("com.google.devtools.ksp")
+                }
+
+                dependencies {
+                    implementation(project(":base"))
+                    ksp(
+                        files(
+                            "${processorJar.absolutePath.escapeGradleString()}",
+                            "${kotlinPoetJar.absolutePath.escapeGradleString()}"
+                        )
+                    )
+                }
+
+                ksp {
+                    arg("habitat.registryPackage", "com.example.habitat.generated")
+                }
+            """.trimIndent(),
+        )
+        val baseProjectDir: File = File(projectDir, "base")
+        writeRuntimeStubs(baseProjectDir)
+        writeFixtureSource(
+            projectDir = baseProjectDir,
+            relativePath = "src/main/kotlin/com/example/base/BaseDatabase.kt",
+            source = """
+                package com.example.base
+
+                import androidx.room.Dao
+                import androidx.room.RoomDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDaoBinding
+
+                @Dao
+                interface UserDao
+
+                abstract class BaseDatabase : RoomDatabase() {
+
+                    @HabitatDaoBinding("user.account")
+                    abstract fun userDao(): UserDao
+                }
+            """.trimIndent(),
+        )
+        writeFixtureSource(
+            projectDir = File(projectDir, "app"),
+            relativePath = "src/main/kotlin/com/example/database/AppDatabase.kt",
+            source = """
+                package com.example.database
+
+                import androidx.room.Database
+                import com.example.base.BaseDatabase
+                import com.example.base.UserDao
+                import com.whisper.habitat.runtime.annotation.HabitatDaoBinding
+                import com.whisper.habitat.runtime.annotation.HabitatDatabase
+                import com.whisper.habitat.runtime.annotation.HabitatDatabaseInstance
+
+                class UserEntity
+
+                @HabitatDatabase
+                @Database(entities = [UserEntity::class], version = 1)
+                abstract class AppDatabase : BaseDatabase() {
+
+                    companion object {
+
+                        @HabitatDatabaseInstance
+                        val instance: AppDatabase
+                            get() = error("No test instance.")
+                    }
+
+                    $childBinding
+                    abstract override fun userDao(): UserDao
+                }
+            """.trimIndent(),
+        )
+        return projectDir
+    }
+
+    private fun createProject(
+        source: String,
+        roomVersion: String? = null,
+    ): File {
+        val projectDir: File = temporaryFolder.newFolder("habitat-compiler-fixture")
+        val processorJar: File = File(System.getProperty("user.dir"), "build/libs/habitat-compiler.jar")
+        val kotlinPoetJar: File = codeSourceFile(ClassName::class.java)
+        val kotlinVersion: String = requireNotNull(System.getProperty("habitat.test.kotlinVersion")) {
+            "Missing habitat.test.kotlinVersion test system property."
+        }
+        val kspVersion: String = requireNotNull(System.getProperty("habitat.test.kspVersion")) {
+            "Missing habitat.test.kspVersion test system property."
+        }
+        require(processorJar.isFile) {
+            "Habitat compiler JAR was not built: ${processorJar.absolutePath}"
+        }
+        val roomDependencies: String = roomVersion?.let { version: String ->
+            """
+                implementation("androidx.room:room-runtime:$version")
+                ksp("androidx.room:room-compiler:$version")
+            """.trimIndent()
+        }.orEmpty()
+
+        writeFixtureSource(
+            projectDir = projectDir,
+            relativePath = "settings.gradle.kts",
+            source = """
+                pluginManagement {
+                    repositories {
                         google()
                         mavenCentral()
                         gradlePluginPortal()
@@ -1190,6 +1477,7 @@ class HabitatCompilerFunctionalTest {
 
                 dependencyResolutionManagement {
                     repositories {
+                        google()
                         mavenCentral()
                     }
                 }
@@ -1207,10 +1495,12 @@ class HabitatCompilerFunctionalTest {
                 }
 
                 repositories {
+                    google()
                     mavenCentral()
                 }
 
                 dependencies {
+$roomDependencies
                     ksp(
                         files(
                             "${processorJar.absolutePath.escapeGradleString()}",
@@ -1224,7 +1514,11 @@ class HabitatCompilerFunctionalTest {
                 }
             """.trimIndent()
         )
-        writeRuntimeStubs(projectDir)
+        if (roomVersion == null) {
+            writeRuntimeStubs(projectDir)
+        } else {
+            writeHabitatRuntimeStubs(projectDir)
+        }
         writeFixtureSource(
             projectDir = projectDir,
             relativePath = "src/main/kotlin/com/example/database/AppDatabase.kt",
@@ -1257,6 +1551,10 @@ class HabitatCompilerFunctionalTest {
                 annotation class Dao
             """.trimIndent()
         )
+        writeHabitatRuntimeStubs(projectDir)
+    }
+
+    private fun writeHabitatRuntimeStubs(projectDir: File) {
         writeFixtureSource(
             projectDir = projectDir,
             relativePath = "src/main/kotlin/com/whisper/habitat/runtime/annotation/HabitatDatabase.kt",
@@ -1327,18 +1625,24 @@ class HabitatCompilerFunctionalTest {
         }
     }
 
-    private fun runBuild(projectDir: File): BuildResult {
-        return gradleRunner(projectDir).build()
+    private fun runBuild(
+        projectDir: File,
+        task: String = ":compileKotlin",
+    ): BuildResult {
+        return gradleRunner(projectDir, task).build()
     }
 
-    private fun runBuildAndFail(projectDir: File): BuildResult {
-        return gradleRunner(projectDir).buildAndFail()
+    private fun runBuildAndFail(
+        projectDir: File,
+        task: String = ":compileKotlin",
+    ): BuildResult {
+        return gradleRunner(projectDir, task).buildAndFail()
     }
 
-    private fun gradleRunner(projectDir: File): GradleRunner {
+    private fun gradleRunner(projectDir: File, task: String): GradleRunner {
         return GradleRunner.create()
             .withProjectDir(projectDir)
-            .withArguments("--stacktrace", ":compileKotlin")
+            .withArguments("--stacktrace", task)
             .forwardOutput()
     }
 

@@ -27,4 +27,5 @@ tasks.test {
     dependsOn("jar")
     systemProperty("habitat.test.kotlinVersion", libs.versions.kotlin.get())
     systemProperty("habitat.test.kspVersion", libs.versions.ksp.get())
+    systemProperty("habitat.test.roomVersion", libs.versions.room.get())
 }

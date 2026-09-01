@@ -4,6 +4,10 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                                  |
 |-----------------|---------|-------------------------------------------|
+| 2026-09-01      | whisper | 明确同签名继承 accessor 的 Room 校验边界 |
+| 2026-09-01      | whisper | 修复 Dao 工厂吞掉取消异常的问题          |
+| 2026-09-01      | whisper | 补全编译依赖父 accessor 的 qualifier 校验 |
+| 2026-09-01      | whisper | 补齐注解目标校验、真实 Room 测试和使用边界 |
 | 2026-08-31      | whisper | 简化 Dao binding 快照发布实现             |
 | 2026-08-31      | whisper | 支持 Dao qualifier 多数据库绑定和类型安全获取 |
 | 2026-08-31      | whisper | 清理过时技术债和过程记录                  |
@@ -170,9 +174,15 @@ Dao 方法:
 * 继承函数通过最终数据库类型解析, 支持父类类型参数绑定到具体 Dao 返回类型。
 * accessor 可以通过 `@HabitatDaoBinding` 声明非空白 qualifier。
 * `@HabitatDaoBinding` 使用 BINARY retention, 使继承自编译依赖的 accessor 仍能保留绑定信息。
+* `@HabitatDaoBinding` 必须落在参与 Habitat 数据库继承链的 Dao accessor 上; 标记普通函数或未参与数据库的方法会报错。
+* qualifier 不会通过 Kotlin override 自动继承; 父 accessor 已标记而最派生 accessor 未重复标记时, KSP 会在最派生声明处报错。
 * 同一个 Dao 只有一个 accessor 时, `@HabitatDaoBinding` 可以省略。
 * 同一个 Dao 有多个 accessor 时, 每个 accessor 都必须显式标记 `@HabitatDaoBinding`, 不能混用显式和省略形式。
 * 同一个 Dao 内的 qualifier 必须唯一; 不同 Dao 类型可以复用同一个 qualifier。
+
+Room compiler 会拒绝同一个 RoomDatabase 直接声明或从多个父类型继承多个返回同一 Dao 类型的抽象 accessor。多个无继承关系的
+父接口提供同签名 accessor 时, 最终数据库需要显式 `abstract override` 将其收敛为一个 accessor; Habitat 只读取该最派生声明上的
+qualifier。该唯一性属于 Room 数据库模型约束, Habitat 不重复实现同签名父 accessor 的歧义校验。
 
 全局校验:
 
@@ -252,7 +262,7 @@ habitat/habitat-runtime/src/main/java/com/whisper/habitat/runtime/
 |--------------------------|-----------------------------------------|
 | `HabitatFactory`         | 初始化 Registry, 安装 Dao 工厂, 按类型获取 Dao      |
 | `annotation`             | 提供 KSP 使用的数据库、实例入口和 Dao binding 注解   |
-| `registry`               | 生成代码与 runtime 之间的公开协议                   |
+| `registry`               | compiler 生成代码与 runtime 之间的 ABI, 不作为业务手写扩展点 |
 | `ManifestRegistryLoader` | 从 Application Manifest metadata 反射加载注册表 |
 | `LogcatErrorHandler`     | 通过 Android Logcat 输出可恢复问题               |
 
@@ -272,7 +282,8 @@ habitat/habitat-runtime/src/main/java/com/whisper/habitat/runtime/
 
 Dao binding 快照只保存 `() -> Any` 工厂并在发布后保持不变, 安装阶段不会调用数据库实例入口或固化 Dao 对象。`get()` 在快照
 为空时进入同一把初始化锁等待正在进行的初始化完成; 如果最终仍为空, 表示调用方未初始化, 直接抛异常。`@Volatile` 保证
-快照及其发布前完成的 Map 内容对读取线程可见; 发布后只执行并发读取, 不修改外层或内层 Map。
+快照及其发布前完成的 Map 内容对读取线程可见; 发布后只执行并发读取, 不修改外层或内层 Map。已发布的空 Map 表示初始化已完成,
+同样不会通过再次调用 `initialize()` 重新加载。
 
 非限定获取在目标 Dao 只有一个绑定时执行该工厂, 多于一个时 warning 并返回 `null`。限定获取只执行完全匹配
 `(Dao 类型, qualifier)` 的工厂。两个公开重载及其 reified 版本都通过 `KClass<T>` 保留返回值 `T?` 的类型安全。
@@ -290,8 +301,11 @@ Dao binding 快照只保存 `() -> Any` 工厂并在发布后保持不变, 安�
 * qualifier 为空、缺失或与请求 Dao 不匹配。
 * 非限定获取遇到多个 Dao binding。
 * 运行时 Provider 出现重复 qualifier 或混合限定/非限定绑定。
-* Dao 工厂执行失败。
+* Dao 工厂抛出 `CancellationException` 之外的 `Exception`, 或发生 `LinkageError`。
 * Dao 工厂返回类型不匹配或 cast 失败。
+
+Dao 工厂抛出的 `CancellationException` 必须原样传播, 不能记录为普通失败或转换为 `null`; JVM `Error` 等不可恢复错误同样不属于
+安全降级范围, 继续向调用方传播。
 
 使用错误仍直接抛异常:
 
@@ -325,7 +339,7 @@ Registry 通过 Manifest 字符串反射加载, 因此类名、public 无参构�
 | 2.7 | P2 | Provider 生成路径纳入数据库全限定名                 |
 | 2.8 | P2 | 拒绝 nullable `@HabitatDatabaseInstance` |
 | 2.9 | P3 | 支持 KSP 多 round 和 final deferred error  |
-| 2.10 | P1 | 支持继承 Dao accessor 收集、override 去重和重复归属校验 |
+| 2.10 | P1 | 支持继承 Dao accessor 收集、override 去重和多绑定校验 |
 | 2.11 | P2 | 补全生成代码可访问性和调用形态前置校验           |
 | 2.12 | P1 | 支持同一 Dao 通过 qualifier 绑定多个数据库       |
 
@@ -367,7 +381,9 @@ Habitat 已补充 dedicated test 目录:
   并安装空 Dao 注册表的降级行为。
 * `habitat/habitat-compiler/src/test`: 使用真实 compiler JAR 和 KSP Gradle 插件覆盖 Provider / Registry 生成、function
   实例入口、nullable 实例入口拒绝、直接/继承 Dao 生成、override 去重、继承 accessor 增量更新、Dao qualifier 多库生成及
-  缺失/空白/重复校验, 以及生成代码可访问性、不支持调用形态的前置校验和实例入口非级联诊断。
+  缺失/空白/重复/误用校验、编译依赖父 accessor qualifier override 校验, 以及生成代码可访问性、不支持调用形态的前置校验和
+  实例入口非级联诊断。其中跨数据库 qualifier 场景同时加载真实 Room compiler `2.8.4`, 其余诊断测试使用最小 Room stub 隔离
+  Habitat 自身行为。
 
 后续建议继续补充:
 

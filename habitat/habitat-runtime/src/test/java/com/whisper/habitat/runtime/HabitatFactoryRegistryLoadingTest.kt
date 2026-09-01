@@ -7,8 +7,10 @@ import android.os.Bundle
 import android.util.Log
 import com.whisper.habitat.runtime.registry.HabitatDaoProvider
 import com.whisper.habitat.runtime.registry.HabitatRegistry
+import java.io.IOException
 import java.lang.reflect.Field
 import java.lang.reflect.Method
+import java.util.concurrent.CancellationException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -224,6 +226,54 @@ class HabitatFactoryRegistryLoadingTest {
         assertTrue(warning.msg.contains(checkNotNull(TestDao::class.qualifiedName)))
         assertTrue(warning.msg.contains(checkNotNull(OtherDao::class.qualifiedName)))
         assertTrue(warning.msg.contains(ACCOUNT_QUALIFIER))
+    }
+
+    /**
+     * 验证 Dao 工厂抛出普通受检异常时记录 warning 并返回 null.
+     */
+    @Test
+    fun getWhenFactoryThrowsCheckedExceptionWarnsAndReturnsNull() {
+        installProviders(
+            listOf(
+                TestDaoProvider(
+                    mapOf(
+                        null to { throw IOException("Dao storage is unavailable.") }
+                    )
+                )
+            )
+        )
+
+        assertNull(HabitatFactory.get<TestDao>())
+
+        val warning: ShadowLog.LogItem = warningContaining("Dao factory failed")
+        assertEquals(Log.WARN, warning.type)
+        assertTrue(warning.throwable is IOException)
+    }
+
+    /**
+     * 验证 Dao 工厂抛出的取消异常会原样传播, 不会被降级为 null.
+     */
+    @Test
+    fun getWhenFactoryThrowsCancellationExceptionRethrowsIt() {
+        val expectedException: CancellationException = CancellationException("Dao request was cancelled.")
+        installProviders(
+            listOf(
+                TestDaoProvider(
+                    mapOf(null to { throw expectedException })
+                )
+            )
+        )
+
+        val actualException: CancellationException = assertThrows(CancellationException::class.java) {
+            HabitatFactory.get<TestDao>()
+        }
+
+        assertSame(expectedException, actualException)
+        assertTrue(
+            ShadowLog.getLogsForTag(LOG_TAG).none { item: ShadowLog.LogItem ->
+                item.msg.contains("Dao factory failed")
+            }
+        )
     }
 
     /**

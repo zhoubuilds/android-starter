@@ -19,6 +19,7 @@ okhttp = "5.4.0"
 retrofit = "3.0.0"
 gson = "2.14.0"
 robolectric = "4.16.1"
+room = "2.8.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

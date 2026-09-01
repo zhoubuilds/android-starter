@@ -6,6 +6,7 @@ import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.processing.Resolver
+import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSClassDeclaration
@@ -46,6 +47,8 @@ import java.nio.charset.StandardCharsets
  * @aegis-audit 2026-08-31 | whisper | 经授权消除实例入口级联误报并补全重复归属定位.
  * @aegis-audit 2026-08-31 | whisper | 经授权支持 Dao qualifier 解析、冲突校验和多数据库绑定生成.
  * @aegis-audit 2026-08-31 | whisper | 经授权移除阻碍同一 Dao 跨库绑定的 Entity 唯一归属限制.
+ * @aegis-audit 2026-09-01 | whisper | 经授权拒绝未落在有效 Dao accessor 上的 HabitatDaoBinding.
+ * @aegis-audit 2026-09-01 | whisper | 经授权补全编译依赖父 accessor 的 qualifier override 校验.
  *
  * @author whisper
  * @since 2026/07/27
@@ -75,8 +78,20 @@ class HabitatSymbolProcessor(
 
     private val databaseModels: MutableMap<String, HabitatDatabaseModel> = linkedMapOf()
 
+    private val sourceDaoBindingDeclarations: MutableMap<
+        HabitatSourceFunctionKey,
+        KSFunctionDeclaration,
+    > = linkedMapOf()
+
     override fun process(resolver: Resolver): List<KSAnnotated> {
         val generatedPackage: String = resolveGeneratedPackage() ?: return emptyList()
+        resolver.getSymbolsWithAnnotation(HABITAT_DAO_BINDING)
+            .filterIsInstance<KSFunctionDeclaration>()
+            .forEach { declaration: KSFunctionDeclaration ->
+                declaration.sourceFunctionKey()?.let { key: HabitatSourceFunctionKey ->
+                    sourceDaoBindingDeclarations[key] = declaration
+                }
+            }
         val databaseSymbols: List<KSClassDeclaration> = resolver
             .getSymbolsWithAnnotation(HABITAT_DATABASE)
             .filterIsInstance<KSClassDeclaration>()
@@ -123,6 +138,9 @@ class HabitatSymbolProcessor(
         }
 
         val models: List<HabitatDatabaseModel> = databaseModels.values.toList()
+        if (!validateDaoBindingTargets(models)) {
+            return
+        }
         if (models.isEmpty()) {
             logger.warn("No Habitat database was found. Generated empty Habitat registry.")
             writeRegistry(
@@ -205,7 +223,7 @@ class HabitatSymbolProcessor(
             }
         }
 
-        val daoMethods: List<HabitatDaoMethod> = collectDaoMethods(
+        val daoCollection: HabitatDaoCollection = collectDaoMethods(
             declaration = declaration,
             resolver = resolver,
         )
@@ -217,7 +235,8 @@ class HabitatSymbolProcessor(
                 databaseQualifiedName = databaseQualifiedName,
             ),
             instanceAccessor = instanceAccessor,
-            daoMethods = daoMethods,
+            daoMethods = daoCollection.methods,
+            sourceDaoAccessorKeys = daoCollection.sourceAccessorKeys,
             declaration = declaration,
             sourceFile = declaration.containingFile,
         )
@@ -353,14 +372,19 @@ class HabitatSymbolProcessor(
     private fun collectDaoMethods(
         declaration: KSClassDeclaration,
         resolver: Resolver,
-    ): List<HabitatDaoMethod> {
+    ): HabitatDaoCollection {
         val databaseType: KSType = declaration.asStarProjectedType()
         val daoFunctions: List<HabitatDaoAccessorCandidate> = declaration.getAllFunctions()
             .mapNotNull { function: KSFunctionDeclaration ->
                 function.toDaoAccessorCandidate(databaseType)
             }
             .toList()
-        return daoFunctions
+        val hierarchyDaoFunctions: List<HabitatDaoAccessorCandidate> = declaration
+            .getDeclaredFunctionsInHierarchy()
+            .mapNotNull { function: KSFunctionDeclaration ->
+                function.toDaoAccessorCandidate(databaseType)
+            }
+        val mostDerivedFunctions: List<HabitatDaoAccessorCandidate> = daoFunctions
             .filterNot { function: HabitatDaoAccessorCandidate ->
                 daoFunctions.any { candidate: HabitatDaoAccessorCandidate ->
                     candidate.function != function.function && resolver.overrides(
@@ -370,6 +394,15 @@ class HabitatSymbolProcessor(
                     )
                 }
             }
+        mostDerivedFunctions.forEach { function: HabitatDaoAccessorCandidate ->
+            validateMostDerivedDaoBinding(
+                function = function,
+                hierarchyDaoFunctions = hierarchyDaoFunctions,
+                containingClass = declaration,
+                resolver = resolver,
+            )
+        }
+        val methods: List<HabitatDaoMethod> = mostDerivedFunctions
             .groupBy(HabitatDaoAccessorCandidate::signature)
             .values
             .mapNotNull { functions: List<HabitatDaoAccessorCandidate> ->
@@ -380,6 +413,64 @@ class HabitatSymbolProcessor(
                     },
                 )
             }
+        return HabitatDaoCollection(
+            methods = methods,
+            sourceAccessorKeys = hierarchyDaoFunctions
+                .mapNotNull { function: HabitatDaoAccessorCandidate ->
+                    function.function.sourceFunctionKey()
+                }
+                .toSet(),
+        )
+    }
+
+    private fun validateMostDerivedDaoBinding(
+        function: HabitatDaoAccessorCandidate,
+        hierarchyDaoFunctions: List<HabitatDaoAccessorCandidate>,
+        containingClass: KSClassDeclaration,
+        resolver: Resolver,
+    ) {
+        if (function.function.hasAnnotation(HABITAT_DAO_BINDING)) {
+            return
+        }
+        val overridesAnnotatedAccessor: Boolean = hierarchyDaoFunctions.any { candidate: HabitatDaoAccessorCandidate ->
+            candidate.function != function.function &&
+                candidate.function.hasAnnotation(HABITAT_DAO_BINDING) &&
+                resolver.overrides(
+                    overrider = function.function,
+                    overridee = candidate.function,
+                    containingClass = containingClass,
+                )
+        }
+        if (overridesAnnotatedAccessor) {
+            reportError(
+                function.function,
+                "Habitat Dao accessor ${function.function.simpleName.asString()} overrides an accessor annotated " +
+                    "with @HabitatDaoBinding. Qualifiers are not inherited; repeat @HabitatDaoBinding on the " +
+                    "most-derived accessor.",
+            )
+        }
+    }
+
+    private fun KSClassDeclaration.getDeclaredFunctionsInHierarchy(): List<KSFunctionDeclaration> {
+        val functions: MutableList<KSFunctionDeclaration> = mutableListOf()
+        val visitedClasses: MutableSet<String> = mutableSetOf()
+
+        fun collect(currentClass: KSClassDeclaration) {
+            val qualifiedName: String = currentClass.qualifiedName?.asString() ?: return
+            if (!visitedClasses.add(qualifiedName)) {
+                return
+            }
+            functions += currentClass.declarations.filterIsInstance<KSFunctionDeclaration>()
+            currentClass.superTypes.forEach { superTypeReference ->
+                val superType: KSType = superTypeReference.resolve()
+                if (!superType.isError) {
+                    (superType.declaration as? KSClassDeclaration)?.let(::collect)
+                }
+            }
+        }
+
+        collect(this)
+        return functions
     }
 
     private fun KSFunctionDeclaration.toDaoAccessorCandidate(
@@ -538,6 +629,25 @@ class HabitatSymbolProcessor(
                 }
         }
         return isValid
+    }
+
+    private fun validateDaoBindingTargets(models: List<HabitatDatabaseModel>): Boolean {
+        val registeredBindingTargets: Set<HabitatSourceFunctionKey> = models
+            .flatMap(HabitatDatabaseModel::sourceDaoAccessorKeys)
+            .toSet()
+        val invalidDeclarations: List<KSFunctionDeclaration> = sourceDaoBindingDeclarations
+            .filterKeys { key: HabitatSourceFunctionKey -> key !in registeredBindingTargets }
+            .values
+            .toList()
+        invalidDeclarations.forEach { declaration: KSFunctionDeclaration ->
+            reportError(
+                declaration,
+                "@HabitatDaoBinding can only annotate a supported Dao accessor in a @HabitatDatabase inheritance " +
+                    "hierarchy. The accessor must be abstract and return a non-null @Dao type; an overriding " +
+                    "accessor must declare the annotation on its most-derived declaration.",
+            )
+        }
+        return invalidDeclarations.isEmpty()
     }
 
     private fun findDatabaseOwnershipConflicts(
@@ -714,6 +824,17 @@ class HabitatSymbolProcessor(
         }
     }
 
+    private fun KSFunctionDeclaration.sourceFunctionKey(): HabitatSourceFunctionKey? {
+        val sourceFile: KSFile = containingFile ?: return null
+        val fileLocation: FileLocation = location as? FileLocation ?: return null
+        return HabitatSourceFunctionKey(
+            filePath = sourceFile.filePath,
+            lineNumber = fileLocation.lineNumber,
+            qualifiedName = qualifiedName?.asString(),
+            parameterCount = parameters.size,
+        )
+    }
+
     private fun KSDeclaration.isAccessibleFromGeneratedProvider(): Boolean {
         var currentDeclaration: KSDeclaration? = this
         while (currentDeclaration != null) {
@@ -795,6 +916,7 @@ class HabitatSymbolProcessor(
         val providerClassName: ClassName,
         val instanceAccessor: HabitatDatabaseInstanceAccessor,
         val daoMethods: List<HabitatDaoMethod>,
+        val sourceDaoAccessorKeys: Set<HabitatSourceFunctionKey>,
         val declaration: KSClassDeclaration,
         val sourceFile: KSFile?,
     ) {
@@ -851,6 +973,14 @@ class HabitatSymbolProcessor(
     )
 
     /**
+     * Habitat Dao accessor 收集结果.
+     */
+    private data class HabitatDaoCollection(
+        val methods: List<HabitatDaoMethod>,
+        val sourceAccessorKeys: Set<HabitatSourceFunctionKey>,
+    )
+
+    /**
      * Habitat Dao accessor 去重签名.
      */
     private data class HabitatDaoAccessorSignature(
@@ -858,6 +988,16 @@ class HabitatSymbolProcessor(
         val receiverTypeName: String?,
         val parameterTypeNames: List<String?>,
         val returnTypeName: String?,
+    )
+
+    /**
+     * Habitat 源码函数位置标识.
+     */
+    private data class HabitatSourceFunctionKey(
+        val filePath: String,
+        val lineNumber: Int,
+        val qualifiedName: String?,
+        val parameterCount: Int,
     )
 
     /**

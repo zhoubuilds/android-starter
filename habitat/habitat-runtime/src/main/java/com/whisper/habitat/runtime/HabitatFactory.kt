@@ -5,16 +5,20 @@ import com.whisper.habitat.runtime.internal.LogcatErrorHandler
 import com.whisper.habitat.runtime.internal.registry.ManifestRegistryLoader
 import com.whisper.habitat.runtime.registry.HabitatDaoProvider
 import com.whisper.habitat.runtime.registry.HabitatRegistry
+import java.util.concurrent.CancellationException
 import kotlin.reflect.KClass
 
 /**
  * Habitat Dao 工厂.
  *
- * 业务模块通过 Dao 类型获取 Dao 实例, 不感知 Dao 最终归属的 RoomDatabase.
+ * 业务模块通过 Dao 类型获取 Dao 实例, 不感知 Dao 最终归属的 RoomDatabase. HabitatFactory 只安装编译期生成的静态
+ * Dao binding, 不负责创建 RoomDatabase、缓存 Dao 或在动态模块安装后追加 binding.
  *
  * @aegis 保护初始化发布, 按类型获取 Dao, 未初始化失败和可恢复加载失败语义.
  * @aegis-audit 2026-08-31 | whisper | 经授权支持限定 Dao 获取、唯一绑定回退和多绑定歧义降级.
  * @aegis-audit 2026-08-31 | whisper | 经授权使用 @Volatile 可空只读 Map 发布 Dao binding 快照.
+ * @aegis-audit 2026-09-01 | whisper | 经授权覆盖全部 Exception 工厂失败并明确静态注册与初始化边界.
+ * @aegis-audit 2026-09-01 | whisper | 经授权确保 Dao 工厂的 CancellationException 原样传播.
  *
  * @author whisper
  * @since 2026/07/27
@@ -35,6 +39,9 @@ object HabitatFactory {
     /**
      * 初始化 Habitat 运行时.
      *
+     * 每个进程只安装第一次完成加载的 binding 快照, 后续调用保持幂等. Registry 缺失或损坏时会安装空快照, 后续调用也不会
+     * 自动重试. 本方法只安装延迟工厂, 不访问或初始化 RoomDatabase; 调用方需要在第一次成功命中 [get] 前准备好数据库实例.
+     *
      * @param application 当前进程的 Application.
      */
     fun initialize(application: Application) {
@@ -53,10 +60,13 @@ object HabitatFactory {
     /**
      * 按 Dao 类型获取实例.
      *
-     * 只有一个绑定时执行其工厂; 存在多个绑定时记录 warning 并返回 null.
+     * 必须先调用 [initialize]. 只有一个绑定时执行其延迟工厂; 存在多个绑定时记录 warning 并返回 `null`, 不推断默认
+     * binding. 数据库实例必须在工厂执行前可用.
      *
      * @param daoClass Dao 类型.
-     * @return Dao 实例, 找不到时返回 null.
+     * @return Dao 实例; 未注册、多绑定歧义、工厂失败或返回类型不匹配时返回 `null`.
+     * @exception CancellationException Dao 工厂通过取消异常终止时原样抛出.
+     * @exception IllegalStateException 尚未调用 [initialize] 时抛出.
      */
     fun <T : Any> get(daoClass: KClass<T>): T? {
         val daoBindings: Map<KClass<*>, Map<String?, () -> Any>> = requireInitializedBindings()
@@ -85,11 +95,14 @@ object HabitatFactory {
     /**
      * 按 Dao 类型和限定符获取实例.
      *
-     * 只执行完全匹配当前 Dao 类型和限定符的工厂.
+     * 必须先调用 [initialize]. qualifier 按区分大小写的原始字符串精确匹配, 不执行 trim 或其它规范化. 只执行完全匹配
+     * 当前 Dao 类型和 qualifier 的延迟工厂, 数据库实例必须在工厂执行前可用.
      *
      * @param daoClass Dao 类型.
-     * @param qualifier Dao 限定符.
-     * @return Dao 实例, 找不到时返回 null.
+     * @param qualifier 非空白的稳定 Dao 限定符.
+     * @return Dao 实例; qualifier 非法或不匹配、工厂失败或返回类型不匹配时返回 `null`.
+     * @exception CancellationException Dao 工厂通过取消异常终止时原样抛出.
+     * @exception IllegalStateException 尚未调用 [initialize] 时抛出.
      */
     fun <T : Any> get(
         daoClass: KClass<T>,
@@ -127,7 +140,9 @@ object HabitatFactory {
     ): T? {
         val dao: Any = try {
             daoFactory()
-        } catch (exception: RuntimeException) {
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
             LogcatErrorHandler.warning(
                 "Dao factory failed: dao=${daoClass.displayName()}, qualifier=${qualifier.displayValue()}.",
                 exception,
@@ -163,7 +178,11 @@ object HabitatFactory {
     /**
      * 按 Dao 类型获取实例.
      *
-     * @return Dao 实例, 找不到时返回 null.
+     * 行为边界与 [get] 的 `KClass` 重载一致.
+     *
+     * @return Dao 实例, 无法获取时返回 `null`.
+     * @exception CancellationException Dao 工厂通过取消异常终止时原样抛出.
+     * @exception IllegalStateException 尚未调用 [initialize] 时抛出.
      */
     inline fun <reified T : Any> get(): T? {
         return get(T::class)
@@ -172,8 +191,12 @@ object HabitatFactory {
     /**
      * 按 Dao 类型和限定符获取实例.
      *
-     * @param qualifier Dao 限定符.
-     * @return Dao 实例, 找不到时返回 null.
+     * 行为边界与 [get] 的 `KClass` 和 qualifier 重载一致.
+     *
+     * @param qualifier 非空白的稳定 Dao 限定符.
+     * @return Dao 实例, 无法获取时返回 `null`.
+     * @exception CancellationException Dao 工厂通过取消异常终止时原样抛出.
+     * @exception IllegalStateException 尚未调用 [initialize] 时抛出.
      */
     inline fun <reified T : Any> get(qualifier: String): T? {
         return get(T::class, qualifier)

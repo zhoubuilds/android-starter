@@ -4,6 +4,8 @@
 
 | 修订时间（CST）  | 修订人     | 修订说明                  |
 |------------|---------|-----------------------|
+| 2026-09-01 | whisper | 明确 Dao 工厂取消异常传播边界 |
+| 2026-09-01 | whisper | 明确静态注册、生成 ABI 和唯一装配边界 |
 | 2026-08-31 | whisper | 简化 Dao binding 快照发布实现 |
 | 2026-08-31 | whisper | 支持 Dao qualifier 多数据库绑定 |
 | 2026-08-31 | whisper | 明确固定 Manifest metadata 协议取舍 |
@@ -33,6 +35,8 @@ Habitat 不计划承担以下职责:
 * 替代 Repository、UseCase 或依赖注入容器。
 * 支持按数据库名获取 Dao。
 * 为多个 Dao 绑定推断默认数据库。
+* 支持运行时追加 binding、动态 Feature 安装后重载 Registry 或切换数据库归属。
+* 把生成用 Registry / Provider ABI 作为业务手写扩展点。
 
 ## 3. 核心模型
 
@@ -60,7 +64,8 @@ Habitat 不定义默认 binding, 因此不会在多个候选中任意选择。
 
 ### 3.2 Dao Provider 模型
 
-每个参与 Habitat 的 RoomDatabase 生成一个 Dao Provider。Provider 暴露 Dao 类型、可空 qualifier 和工厂函数的二级映射:
+每个参与 Habitat 的 RoomDatabase 生成一个 Dao Provider。Provider 暴露 Dao 类型、可空 qualifier 和工厂函数的二级映射。
+`HabitatDaoProvider` 是 compiler 与 runtime 之间的生成 ABI, 不作为业务手写扩展点:
 
 ```kotlin
 class AppDataBaseHabitatDaoProvider : HabitatDaoProvider {
@@ -78,7 +83,8 @@ class AppDataBaseHabitatDaoProvider : HabitatDaoProvider {
 
 ### 3.3 Registry 模型
 
-每个装配模块生成一个固定类名 Registry:
+最终唯一装配模块生成一个固定类名 Registry。Registry 是 compiler、Manifest 索引与 runtime 之间的生成 ABI, 不支持运行时
+追加 Provider:
 
 ```text
 <android.namespace>.habitat.generated.GeneratedHabitatRegistry
@@ -131,7 +137,9 @@ Manifest Merger 暴露冲突; 如果改用 Registry 全限定类名作为 name, 
 * 同一个 Gradle Build 内只允许一个源码模块应用 `com.whisper.habitat`。
 * metadata name 固定为 `com.whisper.habitat.registry`, 外部 AAR 带来多个同名 metadata 时由 Manifest Merger 暴露冲突。
 
-装配模块可以是 Android application, 也可以是 Android library。library 作为 AAR 被最终 app 依赖时, 生成 Manifest 会随 AAR 参与合并。
+装配模块可以是 Android application, 也可以是 Android library。library 作为 AAR 被最终 app 依赖时, 生成 Manifest 会随 AAR
+参与合并, 因此只有拥有最终应用完整数据库装配、且消费 app 不再声明 Habitat 入口的 library 才适合作为装配模块。普通可复用
+library 或 feature 应只依赖 runtime, 不应用 Habitat 插件。
 
 ## 6. 错误处理
 
@@ -140,14 +148,17 @@ Habitat 按责任边界处理错误:
 * KSP 可确认的问题直接输出 error 并停止生成 Provider / Registry。
 * Gradle 插件配置错误直接中断构建。
 * `HabitatFactory.get()` 在 `initialize()` 前调用属于使用错误, 直接抛异常。
-* Manifest 缺失、Registry 反射失败、Provider 加载失败、Dao 或 qualifier 找不到、多绑定歧义、Dao 工厂失败和类型不匹配记录
-  Logcat warning 并返回安全值。
+* Manifest 缺失、Registry 反射失败、Provider 加载失败、Dao 或 qualifier 找不到、多绑定歧义、Dao 工厂抛出普通 `Exception`、
+  链接失败和类型不匹配记录 Logcat warning 并返回安全值。
+* Dao 工厂抛出的 `CancellationException` 原样传播; JVM `Error` 等不可恢复错误同样继续传播, 不作为普通查找失败吞掉。
 
 运行时默认避免因为生成物或注册表损坏导致业务崩溃, 但不掩盖明确的使用错误。
 
 ## 7. 并发设计
 
-`HabitatFactory` 使用 `@Volatile` 可空只读 Map 发布 Dao binding 快照, 并用初始化锁保证只安装一次。`get()` 在快照为空时会进入同一把锁等待正在进行的初始化完成, 避免把初始化过程中的短暂空值误判为未初始化。快照在发布后不再修改, 普通 Map 可以安全地被多个线程并发读取。
+`HabitatFactory` 使用 `@Volatile` 可空只读 Map 发布 Dao binding 快照, 并用初始化锁保证只安装一次。`get()` 在快照为空时会进入
+同一把锁等待正在进行的初始化完成, 避免把初始化过程中的短暂空值误判为未初始化。快照在发布后不再修改, 普通 Map 可以安全地
+被多个线程并发读取。空 Map 表示初始化已经完成但没有可用 binding, 后续初始化调用保持幂等而不会重试加载。
 
 数据库实例本身由业务数据库类负责线程安全。当前 `AppDataBase` 使用 `@Volatile` 加私有初始化锁完成安全发布, `instance` getter 也会在空值时进入同一把锁等待正在进行的初始化完成。
 
