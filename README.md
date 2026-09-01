@@ -2,11 +2,12 @@
 
 ## 修订记录
 
-| 修订时间（CST） | 修订人  | 修订说明               |
-|-----------------|---------|------------------------|
-| 2026-08-31      | whisper | 统一 Prism 文档入口    |
-| 2026-08-31      | whisper | 区分项目规范与智能体规则 |
-| 2026-08-28      | whisper | 建立开源仓库入口文档   |
+| 修订时间（CST） | 修订人  | 修订说明                    |
+|-----------------|---------|-----------------------------|
+| 2026-09-01      | whisper | 明确 Kit 定位和设计文档入口 |
+| 2026-08-31      | whisper | 统一 Prism 文档入口         |
+| 2026-08-31      | whisper | 区分项目规范与智能体规则    |
+| 2026-08-28      | whisper | 建立开源仓库入口文档        |
 
 Android Starter 是一个持续演进的 Android 多模块起始工程. 它提供通用架构, 应用业务基座, Android 工具, 日志,
 路由, 能力发现, Dao 注册和可选构建配置能力, 用于快速建立新的 Android 应用, 而不是绑定具体业务的成品应用.
@@ -29,7 +30,7 @@ release tag.
 | [`app`](app/)                                           | 示例应用和最终装配入口                                 |
 | [`architecture`](architecture/)                         | Business 管线, Architecture UI 和网络创建骨架          |
 | [`foundation`](foundation/)                             | 应用业务基座及 architecture 抽象的应用级实现           |
-| [`kit`](kit/)                                           | Android, View 和 RecyclerView 通用能力                 |
+| [`kit`](kit/)                                           | 业务无关的 Android 工具, 扩展和通用 UI 组件            |
 | [`quill`](quill/)                                       | 可插拔, 延迟构建消息的日志能力                         |
 | [`aster`](aster/)                                       | Activity 路由和 Capability 发现的 runtime / compiler   |
 | [`aster-gradle-plugin`](aster-gradle-plugin/)           | Aster 的 Android Variant 与 Manifest 接入              |
@@ -97,7 +98,7 @@ Prism 的配置契约和完整退出步骤见 [Prism 使用文档](doc/prism/usa
 * Aster: [设计](doc/aster/design.md), [开发](doc/aster/development.md), [使用](doc/aster/usage.md).
 * Habitat: [设计](doc/habitat/design.md), [开发](doc/habitat/development.md), [使用](doc/habitat/usage.md).
 * Quill: [设计](doc/quill/design.md), [开发](doc/quill/development.md), [使用](doc/quill/usage.md).
-* Kit: [开发](doc/kit/development.md), [使用](doc/kit/usage.md).
+* Kit: [设计](doc/kit/design.md), [开发](doc/kit/development.md), [使用](doc/kit/usage.md).
 
 所有维护者遵守 [代码规范](doc/application/code-style.md) 和 [开发规范](doc/application/development.md). 使用智能体维护项目时,
 还需遵守智能体专属的 [执行规范](AGENTS.md).

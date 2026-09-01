@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-01      | whisper | 同步 Kit 当前源码结构和设计入口   |
 | 2026-08-27      | whisper | 迁入通用 ViewBinding 扩展         |
 | 2026-08-17      | 张梁    | 新增通用分享底部面板              |
 | 2026-08-17      | whisper | 新增全局栈顶 Activity 跟踪工具    |
@@ -25,7 +26,8 @@
 | 2026-07-30      | whisper | 补充 ViewBinding ViewHolder 工具  |
 | 2026-07-30      | whisper | 新增 Kit 模块维护说明             |
 
-本文面向 `kit` 模块维护者, 描述通用工具包的维护边界、源码结构和测试方式。业务接入见 [使用文档](usage.md)。
+本文面向 `kit` 模块维护者, 描述通用工具包的维护边界、源码结构和测试方式. 设计目标和结构取舍见
+[设计文档](design.md), 业务接入见 [使用文档](usage.md).
 
 ## 1. 模块定位
 
@@ -47,40 +49,52 @@ kit/
 `- src/
    |- main/
    |  |- java/com/whisper/kit/
+   |  |  |- KitApplicationHolder.kt
    |  |  |- activity/
    |  |  |- extension/
    |  |  |- function/
-   |  |  |- view/feed/
-   |  |  |- view/input/
-   |  |  |- view/refresh/
-   |  |  |- view/share/
-   |  |  `- recyclerview/
-   |  |     |- decoration/
-   |  |     |- holder/
-   |  |     `- listener/
+   |  |  |- recyclerview/
+   |  |  |  |- decoration/
+   |  |  |  |- holder/
+   |  |  |  `- listener/
+   |  |  |- utils/
+   |  |  |- view/
+   |  |  |  |- feed/
+   |  |  |  |- input/
+   |  |  |  |- refresh/
+   |  |  |  `- share/
+   |  |  `- widget/
    |  |- AndroidManifest.xml
-   |  `- keepRules/rules.keep
+   |  |- keepRules/rules.keep
+   |  `- res/
    `- test/java/com/whisper/kit/
-      |- view/input/
-      |- view/refresh/
-      `- recyclerview/
-         |- decoration/
-         |- holder/
-         `- listener/
+      |- activity/
+      |- function/
+      |- recyclerview/
+      |  |- decoration/
+      |  |- holder/
+      |  `- listener/
+      `- view/
+         |- feed/
+         |- input/
+         `- refresh/
 ```
 
-| 包                        | 职责                               |
-|---------------------------|------------------------------------|
-| `activity`                | 全局 Activity 生命周期跟踪工具     |
-| `extension`               | 通用 Android 与 ViewBinding 扩展   |
-| `function`                | 通用 Context 和 CharSequence 扩展  |
-| `view.feed`               | 通用内容瀑布流卡片                 |
-| `view.input`              | 分格文本输入控件                   |
-| `view.refresh`            | 下拉刷新和上拉加载容器             |
-| `view.share`              | 通用分享底部面板                   |
-| `recyclerview.decoration` | RecyclerView item 间距和分割线工具 |
-| `recyclerview.holder`     | RecyclerView ViewHolder 通用封装   |
-| `recyclerview.listener`   | RecyclerView item 内点击分发工具   |
+| 包                        | 职责                                |
+|---------------------------|-------------------------------------|
+| 根包                      | Application 等模块级 Android 工具   |
+| `activity`                | 全局 Activity 生命周期跟踪工具      |
+| `extension`               | 通用 Android 与 ViewBinding 扩展    |
+| `function`                | 通用 Context 和 CharSequence 扩展   |
+| `recyclerview.decoration` | RecyclerView item 间距和分割线工具  |
+| `recyclerview.holder`     | RecyclerView ViewHolder 通用封装    |
+| `recyclerview.listener`   | RecyclerView item 内点击分发工具    |
+| `utils`                   | 设备, 屏幕等 Android 平台工具       |
+| `view.feed`               | 通用内容瀑布流卡片                  |
+| `view.input`              | 分格文本输入控件                    |
+| `view.refresh`            | 下拉刷新和上拉加载容器              |
+| `view.share`              | 通用分享底部面板                    |
+| `widget`                  | 通用基础自定义 View                 |
 
 ## 3. 依赖边界
 
