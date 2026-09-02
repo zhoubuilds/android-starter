@@ -34,6 +34,7 @@ android {
 dependencies {
     api(libs.androidx.appcompat)
     api(libs.androidx.core.ktx)
+    api(libs.androidx.fragment)
     api(libs.androidx.recyclerview)
     api(libs.androidx.viewbinding)
     implementation(libs.material)

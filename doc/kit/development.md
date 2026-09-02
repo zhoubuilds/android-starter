@@ -4,6 +4,10 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-02      | whisper | 移除 ViewBinding 无效泛型实化约束 |
+| 2026-09-02      | whisper | 显式声明 Fragment 公开 API 依赖   |
+| 2026-09-01      | whisper | 明确 ViewBinding 主线程访问契约   |
+| 2026-09-01      | whisper | 补全 ViewBinding 委托生命周期     |
 | 2026-09-01      | whisper | 收敛重复同类富文本 Span           |
 | 2026-09-01      | whisper | 统一绝对与相对字号组合语义        |
 | 2026-09-01      | whisper | 明确点击与下划线的设置顺序        |
@@ -108,14 +112,21 @@ kit/
 |-----------------------|------------------------------------|--------------------------------------------|
 | AndroidX AppCompat    | `api(libs.androidx.appcompat)`     | 分格输入控件公开 API 继承 AppCompatEditText |
 | AndroidX Core KTX     | `api(libs.androidx.core.ktx)`      | 刷新加载容器公开 API 实现 NestedScrolling |
+| AndroidX Fragment     | `api(libs.androidx.fragment)`      | ViewBinding 扩展公开 API 暴露 `Fragment` 类型 |
 | AndroidX RecyclerView | `api(libs.androidx.recyclerview)`  | 点击分发公开 API 暴露 `RecyclerView` 类型 |
 | AndroidX ViewBinding  | `api(libs.androidx.viewbinding)`   | ViewHolder 公开 API 暴露 `ViewBinding` 类型 |
 | Material Components   | `implementation(libs.material)`    | 通用内容卡片内部使用 `ShapeableImageView`   |
 
 ## 4. 通用扩展
 
-`extension` 提供 Context, CharSequence, Activity, Dialog 和 Fragment 等 Android 类型的通用扩展. 当前 ViewBinding 实现从
-Architecture 原样迁入, 其 API 和生命周期行为留待 Kit 专项检查.
+`extension` 提供 Context, CharSequence, Activity, Dialog 和 Fragment 等 Android 类型的通用扩展. Activity 和 Dialog 的
+ViewBinding 委托使用 `LazyThreadSafetyMode.NONE` 在首次访问时调用生成类 `inflate()` 并按组件对象生命周期缓存,
+不在 Activity `onDestroy()` 或 Dialog `dismiss()` 时主动清理, 也不隐式调用 `setContentView()`. Fragment 委托使用生成类
+`bind()` 绑定已经创建的 View, 仅允许在 `onViewCreated()` 至
+`onDestroyView()` 之间访问, View 销毁时自动清空, View 重建后重新创建 Binding. 仅通过 `onCreateDialog()` 创建内容且没有
+Fragment View 的 DialogFragment 不使用 Fragment 委托; 应在 `onCreateDialog()` 内局部创建 Binding. 所有委托均不提供线程同步,
+创建委托和访问 Binding 必须发生在主线程; 调用方应为委托属性添加 `@get:MainThread`, 由 Android Lint 检查访问线程. 委托不通过
+反射查找生成类方法, 调用方应直接传入生成 Binding 类的 `inflate()` 或 `bind()` 方法引用.
 
 CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
 字体样式、指定 Typeface、下划线、删除线和点击行为. 所有扩展应作用于整段文本、保留与本次设置不冲突的 Span 并支持链式组合.

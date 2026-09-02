@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-01      | whisper | 明确 ViewBinding 主线程访问方式   |
+| 2026-09-01      | whisper | 补充 ViewBinding 委托用法         |
 | 2026-09-01      | whisper | 明确重复同类 Span 的收敛规则      |
 | 2026-09-01      | whisper | 明确绝对与相对字号组合规则        |
 | 2026-09-01      | whisper | 明确点击与下划线的设置顺序        |
@@ -53,8 +55,59 @@ dependencies {
 
 ## 2. ViewBinding 扩展
 
-Activity、Dialog 和 Fragment 的 ViewBinding 委托位于 `com.whisper.kit.extension.viewBinding`。本次只迁移既有 API 和实现;
-其生命周期契约和使用建议留待 Kit 专项检查。
+Activity、Dialog 和 Fragment 的 ViewBinding 委托函数为 `com.whisper.kit.extension.viewBinding`. 委托不提供线程同步,
+创建委托和访问 Binding 必须发生在主线程; 委托属性应使用 `@get:MainThread` 让 Android Lint 检查访问线程.
+
+Activity 使用生成类的 `inflate()` 方法引用, 并显式设置 content view:
+
+```kotlin
+class MainActivity : Activity() {
+    @get:MainThread
+    private val binding by viewBinding(ActivityMainBinding::inflate)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(binding.root)
+    }
+}
+```
+
+Activity Binding 在首次访问后按 Activity 对象生命周期缓存, 委托不会隐式调用 `setContentView()` 或在 `onDestroy()` 中清理.
+
+已经通过构造布局或 `onCreateView()` 创建 View 的 Fragment 使用生成类的 `bind()` 方法引用. Binding 只能在
+`onViewCreated()` 至 `onDestroyView()` 之间访问, View 销毁后由委托自动清空:
+
+```kotlin
+class ProfileFragment : Fragment(R.layout.fragment_profile) {
+    @get:MainThread
+    private val binding by viewBinding(FragmentProfileBinding::bind)
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        binding.title.text = "Profile"
+    }
+}
+```
+
+普通 Dialog 同样使用 `inflate()`, 并显式设置 content view:
+
+```kotlin
+class ProfileDialog(context: Context) : Dialog(context) {
+    @get:MainThread
+    private val binding by viewBinding(DialogProfileBinding::inflate)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(binding.root)
+    }
+}
+```
+
+Dialog Binding 在首次访问后按 Dialog 对象生命周期缓存, `dismiss()` 不会清理 Binding; 同一个 Dialog 对象再次展示时继续使用
+同一 Binding. 委托不会隐式调用 `setContentView()`.
+
+通过 `onCreateView()` 提供内容的 DialogFragment 可以使用 Fragment 委托. 仅实现 `onCreateDialog()` 且没有 Fragment View
+的 DialogFragment 不可使用该委托, 应在 `onCreateDialog()` 内局部调用生成类的 `inflate()`.
 
 ## 3. 通用分享底部面板
 

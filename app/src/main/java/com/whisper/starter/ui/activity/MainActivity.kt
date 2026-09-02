@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.MainThread
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
@@ -29,6 +30,7 @@ class MainActivity : ArchitectureActivity<GettingViewModel>() {
         const val TAG: String = "whisper"
     }
 
+    @get:MainThread
     private val _viewBinding by viewBinding(ActivityMainBinding::inflate)
     override val viewModel = GettingViewModel()
     override val architectureUiComponent: ArchitectureUiComponent =
