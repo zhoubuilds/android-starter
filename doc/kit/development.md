@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-02      | whisper | 收敛组件域尺寸换算的 Context 依赖 |
 | 2026-09-02      | whisper | 明确 Activity Context 判断边界    |
 | 2026-09-02      | whisper | 移除 ViewBinding 无效泛型实化约束 |
 | 2026-09-02      | whisper | 显式声明 Fragment 公开 API 依赖   |
@@ -123,6 +124,13 @@ kit/
 `extension` 提供 Context, CharSequence, Activity, Dialog 和 Fragment 等 Android 类型的通用扩展.
 `Context.hasActivityContext()` 使用对象身份沿 ContextWrapper 包装链判断是否包含 Activity, 并防止异常包装链形成循环;
 该结果不表示 Activity 仍处于可用生命周期状态或适合执行窗口操作.
+
+`Number.dp` 和 `Number.sp` 使用 Kotlin 稳定的命名 context parameter 显式依赖当前 Context, 分别按当前显示密度和字体缩放
+转换为保留亚像素精度的 px `Float`. 尺寸扩展不得读取全局 Application 或其它静态 Context; 整数像素的舍入策略由调用方根据
+具体布局或文本语义决定. Fragment、View 和 Dialog 的同名 context property 只负责取得组件 Context. 全部公开尺寸扩展统一复用
+私有换算桥接函数; Fragment 未附加 Context 时访问会按 `requireContext()` 契约失败. Kit 固定使用 Kotlin 2.4.0 及以上版本时
+无需为 context parameter 添加实验性编译参数. Fragment、View、Dialog 类型互不构成重载优先级; 多个组件接收者嵌套时必须调用
+`Number.dp(context)` 或 `Number.sp(context)` 并传入目标 Context, 不依赖编译器推断组件优先级.
 
 Activity 和 Dialog 的 ViewBinding 委托使用 `LazyThreadSafetyMode.NONE` 在首次访问时调用生成类 `inflate()`
 并按组件对象生命周期缓存,

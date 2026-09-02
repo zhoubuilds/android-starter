@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-02      | whisper | 完善 Context 域尺寸换算用法       |
 | 2026-09-01      | whisper | 明确 ViewBinding 主线程访问方式   |
 | 2026-09-01      | whisper | 补充 ViewBinding 委托用法         |
 | 2026-09-01      | whisper | 明确重复同类 Span 的收敛规则      |
@@ -53,7 +54,54 @@ dependencies {
 }
 ```
 
-## 2. ViewBinding 扩展
+## 2. 尺寸扩展
+
+`Number.dp` 和 `Number.sp` 分别使用当前 Context 的显示密度和字体缩放配置转换为 px `Float`. 两个属性只能在存在隐式 Context
+的作用域内使用, 不读取全局 Application:
+
+```kotlin
+val spacingPx: Float = with(context) { 16.dp }
+val textSizePx: Float = with(context) { 14.sp }
+```
+
+当前代码位置没有隐式 Context 接收者时, 可以通过 `with(context)` 建立 Context 作用域:
+
+```kotlin
+val spacingPx: Float = with(requireContext()) { 16.dp }
+```
+
+Fragment、View 和 Dialog 也提供直接的组件域适配. 在它们的成员作用域内可以直接访问:
+
+```kotlin
+class ExampleFragment : Fragment() {
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        val spacingPx: Float = 16.dp
+    }
+}
+
+class ExampleView(context: Context) : View(context) {
+    val insetPx: Float
+        get() = 8.dp
+}
+
+class ExampleDialog(context: Context) : Dialog(context) {
+    val textSizePx: Float
+        get() = 14.sp
+}
+```
+
+Fragment 适配依赖 `requireContext()`, 因此只能在 Fragment 已附加 Context 时访问.
+多个不同类型的组件接收者嵌套时, 使用函数形式显式传入目标 Context, 避免同名组件适配产生歧义:
+
+```kotlin
+val spacingPx: Float = 16.dp(view.context)
+val textSizePx: Float = 14.sp(dialog.context)
+```
+
+返回值保留亚像素精度. 需要传给只接收整数像素的 API 时, 调用方应根据布局或文本语义显式选择舍入方式.
+项目使用 Kotlin 2.4.0 及以上版本时无需添加 context parameter 实验性编译参数.
+
+## 3. ViewBinding 扩展
 
 Activity、Dialog 和 Fragment 的 ViewBinding 委托函数为 `com.whisper.kit.extension.viewBinding`. 委托不提供线程同步,
 创建委托和访问 Binding 必须发生在主线程; 委托属性应使用 `@get:MainThread` 让 Android Lint 检查访问线程.
@@ -109,7 +157,7 @@ Dialog Binding 在首次访问后按 Dialog 对象生命周期缓存, `dismiss()
 通过 `onCreateView()` 提供内容的 DialogFragment 可以使用 Fragment 委托. 仅实现 `onCreateDialog()` 且没有 Fragment View
 的 DialogFragment 不可使用该委托, 应在 `onCreateDialog()` 内局部调用生成类的 `inflate()`.
 
-## 3. 通用分享底部面板
+## 4. 通用分享底部面板
 
 需要展示底部分享渠道选择时, 使用 `KitShareSheetDialog`。`kit` 只提供面板和入口点击分发, 调用方负责提供渠道文案、图标和实际分享动作:
 
@@ -135,7 +183,7 @@ KitShareSheetDialog.Builder(context)
 并在业务完成后自行关闭或保留面板。分享渠道不可用时, 调用方可以把 `ShareAction.enabled` 设为 `false`;
 不可用原因和提示文案仍由业务模块处理。
 
-## 4. 富文本扩展
+## 5. 富文本扩展
 
 富文本扩展位于 `com.whisper.kit.extension` 包.
 
@@ -168,7 +216,7 @@ val content: CharSequence = buildSpannedString {
 该扩展不设置颜色, 应按视觉语义与 `color()` 组合使用.
 普通 `TextView` 承载点击文本时还需设置 `LinkMovementMethod`; 已统一处理可点击 Span 的公共组件不需要调用方重复设置.
 
-## 5. 分格文本输入
+## 6. 分格文本输入
 
 需要保留标准 EditText 输入能力并按格展示字符时, 使用 `KitCodeInputEditText`:
 
@@ -209,7 +257,7 @@ val content: CharSequence = buildSpannedString {
 控件会隐藏光标并把选区保持在文本末尾。页面使用 `-` 这类非描述性 hint 时, 应使用 `android:labelFor`
 将字段标题与输入控件关联, 避免损失无障碍语义。
 
-## 6. 刷新加载容器
+## 7. 刷新加载容器
 
 需要下拉刷新和上拉加载的纵向内容可以使用 `KitRefreshLoadLayout` 包裹。容器只负责交互和回调,
 具体刷新、加载、点赞、删除等业务状态仍由页面 ViewModel 维护。header/footer 子 View 角色必须通过
@@ -352,7 +400,7 @@ if (!state.loadingMore) {
 
 没有更多数据的文案或分割展示应由列表自身处理, 例如在列表末尾 item 或 RecyclerView decoration 中绘制。
 
-## 7. RecyclerView Decoration
+## 8. RecyclerView Decoration
 
 线性或网格列表可以使用 `ItemSpaceDecoration` 设置 item 间距:
 
@@ -382,7 +430,7 @@ recyclerView.addItemDecoration(
 Decoration 只接收 px 值, 不负责 dp 转换、主题色读取或业务尺寸选择. 分割线绘制边界见
 [RecyclerView Decoration 边界](recyclerview-decoration-boundary.md).
 
-## 8. RecyclerView ViewHolder
+## 9. RecyclerView ViewHolder
 
 ViewBinding item 可以使用 `ViewBindingHolder` 减少 ViewHolder 样板代码:
 
@@ -397,7 +445,7 @@ override fun onBindViewHolder(holder: ViewBindingHolder<ItemUserBinding>, positi
 
 该工具只持有 binding, 不持有 item 数据, 不处理业务点击事件。点击事件可按需搭配 RecyclerView 点击分发工具统一处理。
 
-## 9. RecyclerView 点击分发
+## 10. RecyclerView 点击分发
 
 RecyclerView item 内子 View 点击可以通过统一触摸监听分发, 避免在每个 ViewHolder 中分散绑定点击逻辑:
 
