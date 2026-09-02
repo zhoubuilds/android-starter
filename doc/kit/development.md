@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-02      | whisper | 明确 Activity Context 判断边界    |
 | 2026-09-02      | whisper | 移除 ViewBinding 无效泛型实化约束 |
 | 2026-09-02      | whisper | 显式声明 Fragment 公开 API 依赖   |
 | 2026-09-01      | whisper | 明确 ViewBinding 主线程访问契约   |
@@ -119,8 +120,12 @@ kit/
 
 ## 4. 通用扩展
 
-`extension` 提供 Context, CharSequence, Activity, Dialog 和 Fragment 等 Android 类型的通用扩展. Activity 和 Dialog 的
-ViewBinding 委托使用 `LazyThreadSafetyMode.NONE` 在首次访问时调用生成类 `inflate()` 并按组件对象生命周期缓存,
+`extension` 提供 Context, CharSequence, Activity, Dialog 和 Fragment 等 Android 类型的通用扩展.
+`Context.hasActivityContext()` 使用对象身份沿 ContextWrapper 包装链判断是否包含 Activity, 并防止异常包装链形成循环;
+该结果不表示 Activity 仍处于可用生命周期状态或适合执行窗口操作.
+
+Activity 和 Dialog 的 ViewBinding 委托使用 `LazyThreadSafetyMode.NONE` 在首次访问时调用生成类 `inflate()`
+并按组件对象生命周期缓存,
 不在 Activity `onDestroy()` 或 Dialog `dismiss()` 时主动清理, 也不隐式调用 `setContentView()`. Fragment 委托使用生成类
 `bind()` 绑定已经创建的 View, 仅允许在 `onViewCreated()` 至
 `onDestroyView()` 之间访问, View 销毁时自动清空, View 重建后重新创建 Binding. 仅通过 `onCreateDialog()` 创建内容且没有
