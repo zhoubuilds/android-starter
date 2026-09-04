@@ -2,10 +2,18 @@
 
 ## 修订记录
 
-| 修订时间（CST） | 修订人  | 修订说明                |
-|-----------------|---------|-------------------------|
-| 2026-09-01      | whisper | 排除应用级 Activity 状态 |
-| 2026-09-01      | whisper | 建立 Kit 定位和结构取舍 |
+| 修订时间（CST） | 修订人  | 修订说明                   |
+|-----------------|---------|----------------------------|
+| 2026-09-04      | whisper | 明确 Decoration 非致命降级策略 |
+| 2026-09-03      | whisper | 明确连续分割线低版本兼容策略 |
+| 2026-09-03      | whisper | 区分 Regular 与 Staggered Decoration |
+| 2026-09-03      | whisper | 增加 Staggered 分割线能力 |
+| 2026-09-03      | whisper | 明确 Decoration 动画期绘制取舍 |
+| 2026-09-02      | whisper | 明确 Grid 分割线贯穿方向 |
+| 2026-09-02      | whisper | 增加 Staggered 列表间距能力 |
+| 2026-09-02      | whisper | 明确 RecyclerView 职责边界 |
+| 2026-09-01      | whisper | 排除应用级 Activity 状态    |
+| 2026-09-01      | whisper | 建立 Kit 定位和结构取舍     |
 
 本文记录 Kit 的设计目标, 职责边界和结构取舍. 维护实现请阅读 [开发文档](development.md), 业务接入请阅读
 [使用文档](usage.md).
@@ -70,3 +78,35 @@ Kit 当前有意保持为单一模块. 工具, 扩展, 通用 View, 交互容器
 * 需要观察当前 Activity 或任务栈时, 由应用组合根按具体消费场景实现并注入, Kit 不提供全局 Activity 定位器.
 * 应用文案, 资源选择, 业务回调和领域模型由调用方提供, Kit 只处理通用 Android 行为.
 * 公共 API 或可观察行为变化时, 同步更新测试, 开发文档和使用文档.
+
+## 6. RecyclerView 职责边界
+
+Kit 的 RecyclerView 工具用于维持列表各参与者的职责边界, 不建设替代 AndroidX RecyclerView 的 Adapter 或
+LayoutManager 框架:
+
+* Adapter 负责 item 类型、item View 创建、数据绑定、稳定 ID 和数据更新通知, 不负责 item 之间或 item 与容器边界之间的几何间距.
+* RecyclerView 通过 `ItemDecoration` 统一应用列表间距和分割线, 不要求 Adapter 为装饰创建额外 View 或修改 item 根布局参数.
+* LayoutManager 负责方向、顺序、span、item 布局和滚动; Decoration 读取其布局拓扑计算 offset, 不复制或接管布局算法.
+* itemView 负责单个 item 的内容、内部布局和语义. item 根 View 不使用 margin 表达列表间距, item 层级不增加纯装饰性的分割线子 View.
+
+item 内部内容之间的 margin 和具备真实内容语义的 View 不受上述限制. 判断边界时以视觉元素是否属于单个 item 内容为准,
+不以它恰好写在 XML、ViewHolder 或 Adapter 中为准.
+
+Grid 的 span 边界在交叉轴上稳定, 分割线因而优先沿主轴贯穿当前已布局内容; 行或列间的分割线再按 item
+沿交叉轴分段补齐. 该顺序让交汇区域始终由连续线覆盖, 也与不具备统一交叉轴分组边界的流式布局保持相同模型.
+
+分割线在 item 之前绘制, 并直接使用 RecyclerView 当前布局状态判断归属, 不持有逐 View 的历史归属. Adapter 更新动画期间
+允许分割线与旧 View 几何短暂不一致, item 会覆盖其绘制结果. Decoration 不观察 Adapter 更新; 影响列表几何的更新布局完成后,
+调用方负责失效 decoration inset, 以保证最终间距和归属正确.
+
+Linear/Grid 的行列规整拓扑使用 `RegularItemSpaceDecoration` 和 `RegularItemDividerDecoration`.
+`StaggeredGridLayoutManager` 的 span 由运行时高度和 full-span 拓扑共同决定, 与 Linear/Grid 的规则不同, 因此使用独立的
+`StaggeredItemSpaceDecoration` 和 `StaggeredItemDividerDecoration`. Decoration 直接读取 LayoutManager 已分配的
+span index; Adapter 只通过 `StaggeredFullSpanProvider` 暴露自己本就负责设置的 full-span 元数据, 不参与间距数值、
+分割线样式或方向计算. Staggered 分割线与 Grid 使用同一绘制模型: 先沿主轴连续绘制 span 间分割线并跳过与 item
+实际区域相交的主轴切片, 再在非起始 item 的 logical start 间距中沿交叉轴分段绘制主轴分割线.
+
+Decoration 类型与 LayoutManager 不匹配时采用非致命 no-op, 并按实例记录一次警告. Staggered 的交叉轴行为只依赖
+LayoutParams 的实际 span 信息; 只有主轴起始拓扑需要区分 `startSpace` 与内部间距时才依赖
+`StaggeredFullSpanProvider`. 缺少 Provider 时只禁用依赖该拓扑的主轴行为, 已提供 Provider 却与
+`LayoutParams.isFullSpan` 不一致时仍立即失败, 避免两个布局事实静默分叉.

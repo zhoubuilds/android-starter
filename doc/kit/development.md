@@ -4,6 +4,21 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-04      | whisper | 恢复 Divider 受约束继承关系 |
+| 2026-09-04      | whisper | 明确 Decoration 构造与降级契约 |
+| 2026-09-03      | whisper | 使用分段绘制兼容低版本 Canvas |
+| 2026-09-03      | whisper | 明确 Decoration 单轴所有权与透明间距 |
+| 2026-09-03      | whisper | 明确 Divider 裁剪与 Grid 查询复杂度 |
+| 2026-09-03      | whisper | 明确 Staggered 主轴零尺寸限制 |
+| 2026-09-03      | whisper | 明确 Decoration 失效时序与组合边界 |
+| 2026-09-03      | whisper | 区分 Regular 与 Staggered Decoration |
+| 2026-09-03      | whisper | 增加 Staggered 分割线装饰器      |
+| 2026-09-03      | whisper | 收敛 Decoration 预测布局和 span 查询 |
+| 2026-09-03      | whisper | 明确 Divider 动画取舍并限定 margin 轴 |
+| 2026-09-02      | whisper | 统一 Grid Decoration 绘制与热路径契约 |
+| 2026-09-02      | whisper | 增加 Staggered 列表间距契约       |
+| 2026-09-02      | whisper | 统一主轴间距的 logical start 分配 |
+| 2026-09-02      | whisper | 收紧 RecyclerView 间距职责与取整  |
 | 2026-09-02      | whisper | 收敛组件域尺寸换算的 Context 依赖 |
 | 2026-09-02      | whisper | 明确 Activity Context 判断边界    |
 | 2026-09-02      | whisper | 移除 ViewBinding 无效泛型实化约束 |
@@ -238,13 +253,86 @@ CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
 
 维护要求:
 
-1. 支持 `LinearLayoutManager` 和 `GridLayoutManager`。
-2. 对 `RecyclerView.NO_POSITION` 做保护, 不把无效位置参与 span 或首尾计算。
-3. `reverseLayout` 和 RTL 下主轴首尾间距和分割线位置必须保持一致.
-4. `Start` / `End` 参数使用逻辑方向语义, 横向 RTL 或垂直 RTL 时必须映射到正确的物理边.
-5. 网格交叉轴分割线只绘制在非首个 span 前, 避免在容器边界额外画线。
-6. 分割线绘制位置应跟随 item translation, 避免 item 动画过程中分割线和 item 视觉位置错开。
-7. 不在该工具中读取应用资源、主题色或业务尺寸。
+1. Adapter 只负责 item 类型、创建、数据绑定和更新通知, 不通过 item 根 margin、占位 View 或分割线子 View 实现列表间距和分隔.
+2. item 内部内容之间的 margin 仍由 item 布局负责; 只有跨 item 或 item 与 RecyclerView 边界的几何关系交给 Decoration.
+3. `RegularItemSpaceDecoration` 和 `RegularItemDividerDecoration` 支持 `LinearLayoutManager`、`GridLayoutManager`;
+   `StaggeredItemSpaceDecoration` 和 `StaggeredItemDividerDecoration` 只支持 `StaggeredGridLayoutManager`.
+4. `RegularItemSpaceDecoration` 使用 `RecyclerView.State.itemCount` 判断当前布局首尾. predictive layout 中该数量与 Adapter
+   当前数量不一致时, 首尾 span group 采用保守结果, 不使用旧 position 查询 Adapter 的新 `SpanSizeLookup`.
+5. 对 `RecyclerView.NO_POSITION` 和超出当前布局状态的 position 做保护, 不把无效位置参与 span 或首尾计算。
+6. `reverseLayout` 和 RTL 下主轴首尾间距和分割线位置必须保持一致.
+7. `Start` / `End` 参数使用逻辑方向语义, 横向 RTL 或垂直 RTL 时必须映射到正确的物理边.
+8. Grid 交叉轴分割线只启用当前已布局 item 实际使用的非边界 span 分隔位置, 避免在容器边界或
+   未使用的 span 间额外画线.
+9. 分割线通过 `onDraw` 在 item 之前绘制, 并使用当前 `RecyclerView.State`、child position 和 LayoutParams 判断归属,
+   不保存逐 View 的历史归属. Adapter 更新动画期间允许短暂偏差. Decoration 不观察 Adapter 更新. 同步
+   `notifyItem*` 会影响 position、itemCount、span 或首尾归属时, 调用方必须在通知前通过 AndroidX Core KTX 官方
+   `doOnNextLayout` 注册回调, 在更新布局完成后调用 `RecyclerView.invalidateItemDecorations()`.
+   `ListAdapter` 或 `AsyncListDiffer.submitList` 必须在实际提交列表的 commit callback 中注册同样的下一次布局回调;
+   较早提交可能被后续提交取代且不执行 commit callback, 不能依赖较早回调完成失效. 两类路径都只承诺最终稳定布局的
+   间距和归属正确.
+   按 item 绘制的分割线继续跟随 item translation; Grid 连续 span 分割线固定在 LayoutManager 的 span 边界,
+   并从连续线中排除与带 translation 的 item 相交的主轴切片.
+10. `RegularItemSpaceDecoration` 的间距参数只接受非负 px; 不在该工具中读取应用资源、主题色或业务尺寸。
+11. 网格交叉轴 offset 的 start 向上取整、end 向下取整, 相邻两侧之和必须严格等于目标间距; 取整结果只依赖 span 索引.
+12. 主轴内部间距由后一个 item 或 span group 的 logical start offset 单边承担; logical end 只表达列表结束边界.
+13. `StaggeredItemSpaceDecoration` 的普通 item 使用 LayoutManager 已分配的 span index 计算交叉轴 offset; full-span item
+    的交叉轴 offset 为 0.
+14. Staggered 主轴内部间距由所有非起始 item 的 logical start offset 承担. 需要区分 `startSpace` 与内部间距时,
+    起始 item 由 Adapter 实现的 `StaggeredFullSpanProvider` 和起始处最多 `spanCount` 个 position 推导.
+15. Adapter 实现 `StaggeredFullSpanProvider` 时, 绑定 item 必须复用 `isFullSpan(position)` 的查询结果设置
+    `StaggeredGridLayoutManager.LayoutParams.isFullSpan`. 非预测布局中 Provider 与 LayoutParams 不一致时立即失败.
+16. 主轴起始拓扑需要 Provider 时, `StaggeredFullSpanProvider` 必须由 RecyclerView 的直接 Adapter 实现并基于当前
+    Adapter 数据稳定查询. 缺少时禁用主轴行为并保留交叉轴行为. `ConcatAdapter` 不能直接实现该接口,
+    因而只能使用不依赖 Provider 的交叉轴行为或无需区分起始拓扑的主轴配置.
+17. 运行时修改 LayoutManager 的 `orientation`、`reverseLayout`、`spanCount`, 替换 `SpanSizeLookup`,
+    或修改 RecyclerView layout direction 后, 调用方必须立即调用 `invalidateItemDecorations()`,
+    使下一次布局重算 RecyclerView 缓存的 decoration inset. 修改同一 `SpanSizeLookup` 实例的 span 规则时,
+    必须先调用 `invalidateSpanIndexCache()` 和 `invalidateSpanGroupIndexCache()`, 再调用
+    `RecyclerView.invalidateItemDecorations()`, 避免 LayoutManager 与 Decoration 使用不同的 span 拓扑.
+18. `StaggeredItemSpaceDecoration` 不提供 `endSpace`: 瀑布流末端各 span 的结束位置可能不同, 不能仅由 Adapter
+    position 静态判断统一的结束边界.
+19. `RegularItemDividerDecoration` 和 `StaggeredItemDividerDecoration` 的分割线尺寸、margin 只接受非负 px; 构造参数同时使用
+    `@IntRange` 和运行时校验.
+    margin 参数名必须同时包含所属 divider 和应用方向: `mainAxisDividerCrossAxisStart/EndMargin` 或
+    `crossAxisDividerMainAxisStart/EndMargin`; `Start/End` 是对应方向上的逻辑边.
+20. Linear 主轴分割线由非首项 logical start 区域承载并跟随该 item 的 translation; Grid 主轴分割线由非首
+    span group 的每个 item logical start 区域承载, 并沿 item 交叉轴范围分段绘制.
+21. Grid 先在 span 间隙中沿主轴连续绘制交叉轴分割线, 再沿交叉轴分段绘制主轴分割线. 连续线的主轴范围只需
+    覆盖当前已布局内容与 RecyclerView 可见内容区域的交集, 不依赖未加载 item.
+22. Divider 的容器绘制边界必须遵循 `RecyclerView.clipToPadding`: `true` 时限制在 padding 内容区域,
+    `false` 时使用 RecyclerView 的完整可见范围. divider margin 从对应范围的逻辑边向内缩进.
+23. Grid Decoration 直接读取当前 item 已分配的 `GridLayoutManager.LayoutParams.spanIndex/spanSize`.
+    `getItemOffsets` 和绘制热路径不得调用可能从 Adapter 起点扫描的 `getSpanIndex/getSpanGroupIndex`; 首末 span group
+    判断的 `SpanSizeLookup` 查询次数必须只受 `spanCount` 限制, 不随 adapter position 或 itemCount 增长. 一轮
+    Regular Grid 可见 item offset 计算的最坏成本为 `O(visibleChildCount + spanCount^2)`.
+    连续分割线会对当前 child 的主轴区间排序, 并在每个 span 边界跳过与 child 相交的主轴切片; 一轮绘制最坏为
+    `O(visibleChildCount * log(visibleChildCount) + spanCount * visibleChildCount + spanCount^2)`.
+    两条路径都不随 adapter position 或 itemCount 增长. `endSpace` 为 0 时跳过末组判断; 非 0 时只允许
+    Adapter 最后 `spanCount` 个 position 向后探测.
+24. `RegularItemDividerDecoration` 继承 `RegularItemSpaceDecoration`, `StaggeredItemDividerDecoration` 继承
+    `StaggeredItemSpaceDecoration`, 直接复用对应 offset 规则并增加分割线绘制. 两个 SpaceDecoration 的
+    `getItemOffsets` 必须保持 `final`, 子类不得改写间距取整、Provider 或布局拓扑语义.
+25. Staggered 交叉轴分割线沿当前已布局内容的主轴包络连续绘制, 并排除与 item 相交的主轴切片;
+    主轴分割线在所有非起始 item 的 logical start 间距中分段绘制.
+26. Staggered 分割线绘制只允许查询当前可见 item 和 Adapter 起始处最多 `spanCount` 个 full-span position, 不得从
+    Adapter 起点扫描到任意当前 position. 连续分割线的可见 child 处理与 Regular 采用相同分段算法,
+    最坏复杂度为 `O(visibleChildCount * log(visibleChildCount) + spanCount * visibleChildCount)`.
+    main-axis end margin 只缩进绘制包络, 不构造 `endSpace`.
+27. Staggered Decoration 不支持 decorated main-axis measurement 为 0 的 item. 每个 item 包含
+    decoration inset 和 LayoutParams margin 后的主轴占用尺寸必须大于 0;
+    否则 LayoutManager 不推进 span 端点, 无法仅通过 position 和 full-span 拓扑稳定判断起始归属.
+28. 同一个 RecyclerView 的同一轴最多只能有一个内部间距非零的 Decoration. 内部间距均为 0、只设置主轴
+    `startSpace` / `endSpace` 的边界 SpaceDecoration 可以共存. 不得通过扫描或缓存其它 ItemDecoration 的方式推导
+    当前 Decoration 的绘制切片.
+29. Divider size 始终参与对应轴的 offset 计算. Drawable 为 `null` 时只保留透明间距且不绘制, 用于在单个
+    DividerDecoration 中组合一个轴的分割线和另一个轴的空白间距.
+30. 两个 DividerDecoration 都必须提供双轴独立尺寸和 Drawable、全部 margin 为 0 的次构造器, 让常见的双轴配置无需
+    经过八参数高级构造器. 便捷构造器无法表达非零 margin 与双轴独立尺寸或 Drawable 的组合时,
+    使用八参数高级构造器并通过命名实参调用.
+31. Decoration 遇到不支持的非空 LayoutManager 时必须清空 offset、跳过绘制并按实例最多记录一次警告, 不得使应用崩溃.
+    Staggered 缺少主轴起始拓扑所需的 `StaggeredFullSpanProvider` 时, 只禁用主轴 offset 和分割线, 交叉轴继续读取实际
+    LayoutParams. Adapter 已实现 Provider 时, 非预测布局中的查询结果必须与 `LayoutParams.isFullSpan` 一致, 否则立即失败.
 
 ## 7. RecyclerView ViewHolder
 

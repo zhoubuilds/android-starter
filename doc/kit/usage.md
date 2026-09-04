@@ -4,6 +4,20 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-04      | whisper | 修正 Divider 高级构造器使用条件 |
+| 2026-09-04      | whisper | 补充 Divider 构造与 Staggered 降级说明 |
+| 2026-09-03      | whisper | 补全 Divider 非负参数契约       |
+| 2026-09-03      | whisper | 明确 Decoration 单轴所有权与透明间距 |
+| 2026-09-03      | whisper | 区分异步列表与 span 缓存失效时序 |
+| 2026-09-03      | whisper | 明确 Staggered 主轴零尺寸限制 |
+| 2026-09-03      | whisper | 明确 Decoration 失效调用时序 |
+| 2026-09-03      | whisper | 区分 Regular 与 Staggered Decoration |
+| 2026-09-03      | whisper | 增加 Staggered 分割线用法        |
+| 2026-09-03      | whisper | 明确 Decoration 预测布局退化语义 |
+| 2026-09-03      | whisper | 明确 Divider margin 与动画取舍    |
+| 2026-09-02      | whisper | 明确 Divider 参数和绘制归属       |
+| 2026-09-02      | whisper | 补充 Staggered 列表间距用法       |
+| 2026-09-02      | whisper | 明确 RecyclerView 列表装饰用法    |
 | 2026-09-02      | whisper | 完善 Context 域尺寸换算用法       |
 | 2026-09-01      | whisper | 明确 ViewBinding 主线程访问方式   |
 | 2026-09-01      | whisper | 补充 ViewBinding 委托用法         |
@@ -402,11 +416,15 @@ if (!state.loadingMore) {
 
 ## 8. RecyclerView Decoration
 
-线性或网格列表可以使用 `ItemSpaceDecoration` 设置 item 间距:
+item 与 item、item 与 RecyclerView 主轴边界之间的间距统一通过 Decoration 配置. 不要在 item 根 View 上设置 margin
+表达列表间距, 也不要在 item XML 或 ViewHolder 中增加纯装饰性的分割线 View. item 内部标题、图片、标签等内容之间的 margin
+仍由 item 布局自身维护.
+
+线性或网格列表可以使用 `RegularItemSpaceDecoration` 设置 item 间距:
 
 ```kotlin
 recyclerView.addItemDecoration(
-    ItemSpaceDecoration(
+    RegularItemSpaceDecoration(
         mainAxisSpace = 16,
         crossAxisSpace = 12,
         startSpace = 16,
@@ -415,11 +433,54 @@ recyclerView.addItemDecoration(
 )
 ```
 
-需要绘制分割线时使用 `ItemDividerDecoration`:
+瀑布流列表使用独立的 `StaggeredItemSpaceDecoration`. Adapter 同时实现 `StaggeredFullSpanProvider`, 并在绑定时
+复用同一个查询结果设置 LayoutParams:
+
+```kotlin
+class FeedAdapter(
+    private val items: List<FeedItem>,
+) : RecyclerView.Adapter<FeedViewHolder>(), StaggeredFullSpanProvider {
+
+    override fun isFullSpan(position: Int): Boolean = items[position].isSectionHeader
+
+    override fun onBindViewHolder(holder: FeedViewHolder, position: Int) {
+        val layoutParams =
+            holder.itemView.layoutParams as StaggeredGridLayoutManager.LayoutParams
+        layoutParams.isFullSpan = isFullSpan(position)
+        holder.bind(items[position])
+    }
+}
+
+recyclerView.layoutManager = StaggeredGridLayoutManager(
+    2,
+    RecyclerView.VERTICAL,
+)
+recyclerView.adapter = FeedAdapter(items)
+recyclerView.addItemDecoration(
+    StaggeredItemSpaceDecoration(
+        mainAxisSpace = 16,
+        crossAxisSpace = 12,
+        startSpace = 16,
+    )
+)
+```
+
+`StaggeredItemSpaceDecoration` 不接收 `spanCount` 或 `spanIndex`: 两者直接读取当前 LayoutManager. full-span item
+不会增加交叉轴 offset; `mainAxisSpace` 位于所有非起始 item 的 logical start; `startSpace` 位于实际接触 Adapter
+逻辑起始边界的 item. 当 `startSpace != mainAxisSpace`、span 数大于 1 且列表不止一个 item 时, 该主轴起始拓扑需要
+RecyclerView 的直接 Adapter 实现 `StaggeredFullSpanProvider`, 当前不能自动穿透 `ConcatAdapter`.
+缺少 Provider 不会导致崩溃: Decoration 会按实例记录一次警告并禁用主轴 offset, 交叉轴仍按 LayoutParams 的实际
+span/full-span 状态工作. Adapter 已实现 Provider 时, 其结果必须与 `LayoutParams.isFullSpan` 一致, 否则立即失败.
+该装饰器不提供 `endSpace`, 因为瀑布流各 span 的结束位置不一定一致.
+每个 item 包含 decoration inset 和 LayoutParams margin 后的 decorated 主轴占用尺寸必须大于 0;
+`StaggeredItemSpaceDecoration` 和 `StaggeredItemDividerDecoration` 都不支持主轴零尺寸 item.
+
+Staggered 列表需要分割线时使用 `StaggeredItemDividerDecoration`, Adapter 继续复用上面的
+`StaggeredFullSpanProvider` 实现:
 
 ```kotlin
 recyclerView.addItemDecoration(
-    ItemDividerDecoration(
+    StaggeredItemDividerDecoration(
         dividerSize = 1,
         dividerMargin = 16,
         dividerColor = Color.LTGRAY,
@@ -427,8 +488,105 @@ recyclerView.addItemDecoration(
 )
 ```
 
-Decoration 只接收 px 值, 不负责 dp 转换、主题色读取或业务尺寸选择. 分割线绘制边界见
+主轴和交叉轴需要不同尺寸或 Drawable、但不需要 margin 时, 使用四参数次构造器:
+
+```kotlin
+StaggeredItemDividerDecoration(
+    mainAxisDividerSize = 1,
+    crossAxisDividerSize = 12,
+    mainAxisDivider = ColorDrawable(Color.LTGRAY),
+    crossAxisDivider = null,
+)
+```
+
+交叉轴分割线在当前已布局内容的 span 间隙中沿主轴连续绘制, full-span item 的实际区域会从分割线中排除;
+主轴分割线绘制在所有非起始 item 的 logical start 间距中. 该装饰器同样不提供 item 的 `endSpace`.
+`crossAxisDividerMainAxisEndMargin` 只缩进连续分割线在当前内容包络中的 logical end, 不改变任一 item 的 offset.
+主轴分割线尺寸非 0、span 数大于 1 且列表不止一个 item 时需要 Provider; 缺少时主轴 offset 和绘制一起禁用,
+交叉轴 offset 与分割线继续工作.
+
+Linear/Grid 列表需要绘制分割线时使用 `RegularItemDividerDecoration`:
+
+```kotlin
+recyclerView.addItemDecoration(
+    RegularItemDividerDecoration(
+        dividerSize = 1,
+        dividerMargin = 16,
+        dividerColor = Color.LTGRAY,
+    )
+)
+```
+
+`RegularItemDividerDecoration` 也提供同样的四参数次构造器, 用于双轴独立、零 margin 的配置. 现有便捷构造器无法表达
+非零 margin 与双轴独立尺寸或 Drawable 的组合时, 使用完整八参数构造器, 并应使用命名实参避免混淆相邻的同类型参数.
+
+Grid 中 `crossAxisDivider` 先在 span 间隙中沿主轴连续绘制, `mainAxisDivider` 再在非首行或列的 item
+logical start 中沿交叉轴分段绘制. 连续线只处理当前已布局内容, 不需要 Adapter 预先加载全部 item. 分割线在 item
+之前绘制; 数据更新动画期间允许归属短暂偏离旧 View.
+
+同一个 RecyclerView 的同一轴最多只能由一个 Decoration 提供非零内部间距. 不要在同一轴叠加非零的 SpaceDecoration
+和 DividerDecoration, 也不要叠加两个非零 DividerDecoration: RecyclerView 虽然会累加 offset, 但分割线仍会锚定同一个
+item 边界, 且分别取整后的交叉轴 offset 不再保证合计误差最多 1px. 主轴和交叉轴内部间距均为 0、只提供
+`startSpace` / `endSpace` 的边界 SpaceDecoration 可以共存.
+
+`mainAxisDividerSize` 和 `crossAxisDividerSize` 始终预留对应轴的 offset. 对应 Drawable 为 `null` 时只保留透明间距,
+不会绘制分割线. 因而同一个 DividerDecoration 可以让一个轴绘制分割线、另一个轴只留白, 无需再安装第二个内部间距
+Decoration.
+
+Decoration 不观察 Adapter 更新. 同步 `notifyItem*` 会改变 position、itemCount、span 或首尾归属时, 在触发更新前注册
+下一次布局回调, 并在该次更新布局完成后手动失效 Decoration:
+
+```kotlin
+import androidx.core.view.doOnNextLayout
+
+recyclerView.doOnNextLayout {
+    recyclerView.invalidateItemDecorations()
+}
+adapter.notifyItemMoved(fromPosition, toPosition)
+```
+
+`ListAdapter` 或 `AsyncListDiffer` 的 `submitList` 会异步计算差异, 不能在调用 `submitList` 前预注册同一个一次性回调:
+差异提交前发生的其它布局可能提前消费该回调. 应在 commit callback 中注册下一次布局回调:
+
+```kotlin
+adapter.submitList(newList) {
+    recyclerView.doOnNextLayout {
+        recyclerView.invalidateItemDecorations()
+    }
+}
+```
+
+连续调用 `submitList` 时, 较早但未实际提交的列表可能不会执行 commit callback. 最终状态恢复必须挂在实际提交的最新列表
+callback 中. 不要只在同步 `notifyItem*` 之后立即调用 `invalidateItemDecorations()`: predictive layout 可能在 pre-layout
+消费这次失效, 无法保证最终 offset.
+pre-layout 的旧布局数量与 Adapter 当前数量不一致时, 首尾 span group 可能暂时使用保守间距; Decoration 不会使用旧 position
+查询当前 Adapter 的 `SpanSizeLookup`. 布局完成后的手动失效负责恢复严格的最终间距.
+
+运行时修改 `orientation`、`reverseLayout`、`spanCount`、替换 `SpanSizeLookup` 实例或 RecyclerView layout direction 时,
+这些配置变更不会保证将 RecyclerView 缓存的 decoration inset 标记为过期.
+在修改配置后立即调用 `recyclerView.invalidateItemDecorations()`, 使下一次布局使用新的方向和 span 拓扑.
+
+如果修改的是同一个 `SpanSizeLookup` 实例的内部规则, 还必须先清除 LayoutManager 持有的 span 查询缓存:
+
+```kotlin
+// 修改 spanSizeLookup 所读取的业务规则后:
+spanSizeLookup.invalidateSpanIndexCache()
+spanSizeLookup.invalidateSpanGroupIndexCache()
+recyclerView.invalidateItemDecorations()
+```
+
+`invalidateItemDecorations()` 只使 RecyclerView 缓存的 decoration inset 失效, 不会清除 `SpanSizeLookup` 的缓存.
+
+分别配置两类分割线时, margin 参数名中的方向表示 margin 实际应用的轴. `mainAxisDivider` 沿交叉轴延伸,
+因此使用 `mainAxisDividerCrossAxisStartMargin` / `mainAxisDividerCrossAxisEndMargin`; `crossAxisDivider` 沿主轴延伸,
+因此使用 `crossAxisDividerMainAxisStartMargin` / `crossAxisDividerMainAxisEndMargin`. `Start/End` 均为对应轴的逻辑方向,
+会随 RTL 和 `reverseLayout` 映射到正确物理边.
+
+间距装饰器的参数以及 `RegularItemDividerDecoration` / `StaggeredItemDividerDecoration` 的分割线尺寸和 margin
+只接收非负 px 值. Decoration 不负责 dp 转换、主题色读取或业务尺寸选择.
+Adapter 继续只负责 item 创建和数据绑定, LayoutManager 继续负责方向、span、布局和滚动. 分割线绘制边界见
 [RecyclerView Decoration 边界](recyclerview-decoration-boundary.md).
+Decoration 类型与 LayoutManager 不匹配时会清空 offset、跳过绘制并按实例记录一次警告, 不会使应用崩溃.
 
 ## 9. RecyclerView ViewHolder
 
