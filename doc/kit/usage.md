@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-04      | whisper | 明确点击与长按的退化语义和使用边界 |
+| 2026-09-04      | whisper | 收敛 RecyclerView 手势 API 与兼容边界 |
 | 2026-09-04      | whisper | 修正 Divider 高级构造器使用条件 |
 | 2026-09-04      | whisper | 补充 Divider 构造与 Staggered 降级说明 |
 | 2026-09-03      | whisper | 补全 Divider 非负参数契约       |
@@ -603,12 +605,12 @@ override fun onBindViewHolder(holder: ViewBindingHolder<ItemUserBinding>, positi
 
 该工具只持有 binding, 不持有 item 数据, 不处理业务点击事件。点击事件可按需搭配 RecyclerView 点击分发工具统一处理。
 
-## 10. RecyclerView 点击分发
+## 10. RecyclerView 点击与长按分发
 
 RecyclerView item 内子 View 点击可以通过统一触摸监听分发, 避免在每个 ViewHolder 中分散绑定点击逻辑:
 
 ```kotlin
-recyclerView.addOnItemChildClickListener { recyclerView, child, position ->
+recyclerView.addOnItemChildClickListener { recyclerView, child, absoluteAdapterPosition ->
     when (child.id) {
         R.id.avatar -> ...
         R.id.delete -> ...
@@ -616,13 +618,76 @@ recyclerView.addOnItemChildClickListener { recyclerView, child, position ->
 }
 ```
 
-该工具只回调 `clickable && enabled` 的命中目标, 不消费事件, 不改变子 View 原本的触摸和点击行为。需要让 item 空白区域响应点击时,
-应将 item 根 View 设置为 clickable。
+长按使用对称的扩展函数. 目标 View 必须设置 `longClickable = true`; 通过原生 `setOnLongClickListener` 配置的 View
+会自动具有该标志:
 
-返回值是已经添加到 RecyclerView 的触摸监听器, 需要移除时使用:
+```kotlin
+recyclerView.addOnItemChildLongClickListener { recyclerView, child, absoluteAdapterPosition ->
+    when (child.id) {
+        R.id.avatar -> ...
+        R.id.card -> ...
+    }
+}
+```
+
+该工具只回调 `clickable && enabled` 的命中目标, 不消费事件, 不改变子 View 原本的触摸和点击行为. 它不会向 item 或子 View
+安装监听器、AccessibilityDelegate 或其它状态. 需要让 item 空白区域响应点击时, 应由调用方将 item 根 View 设置为 clickable.
+单击目标在按下时确定; 手指移动期间即使其它 View 进入触点区域, 抬起时也不会改派目标. 原目标离开允许的点击边界后,
+即使再次回到触点区域, 当前手势也不会触发回调.
+只有 LayoutManager 支持的滚动轴位移超过 RecyclerView touch slop 才会按滚动取消手势. 触点仍在目标边界内时,
+交叉轴移动不会单独取消点击或长按.
+子 View 调用 `requestDisallowInterceptTouchEvent(true)` 后, RecyclerView 级监听器可能无法继续收到完整事件序列;
+该工具会取消已经锁定的目标, 当前手势不会回调. 传入 `false` 不影响当前目标.
+快速双击会像普通 View 一样产生两次独立点击回调, 不会等待双击确认或吞掉第二次点击.
+
+点击监听器在平台长按超时回调当下决定当前手势是否由长按占用:
+
+| 超时当下的目标状态                  | 后续旁路点击行为                                           |
+|-------------------------------------|------------------------------------------------------------|
+| `longClickable && enabled`          | 立即且永久取消当前点击, ACTION_UP 不再恢复                 |
+| 不满足 `longClickable && enabled`   | 保留目标, ACTION_UP 通过全部最终校验后回调                 |
+
+这项判断只读取公开 View 标志. 即使没有安装 `ItemLongClickTouchListener`, 只要目标在超时时是 longClickable 且 enabled,
+旁路点击仍会被取消. 通过 `setOnLongClickListener` 配置的 View 通常会自动成为 longClickable; 即使其原生监听器最终返回
+`false`, 本工具也无法无侵入地取得该结果, 因而仍按 longClickable 处理. 反过来, 自定义 OnTouchListener 自行识别长按但没有设置
+longClickable 时, 本工具不会把该手势视为已被长按占用.
+
+属性判断只发生在长按超时回调当下: 当时已经取消的点击不会因之后关闭 longClickable 而恢复; 当时保留的目标也不会因之后
+开启 longClickable 而重新取消. 保留目标不代表一定回调, ACTION_UP 仍会检查目标是否 `clickable && enabled`、是否仍属于原 item、
+触点是否仍在允许边界内、adapter position 是否有效, 以及 RecyclerView、item、目标的窗口挂载和焦点状态.
+
+同一 RecyclerView 同时安装点击和长按旁路监听器时, 同时满足 clickable 与 longClickable 的目标会在超时后只产生旁路长按通知,
+不会再产生旁路点击通知. 两个监听器仍都不消费原生事件; View 自己的 OnClickListener、OnLongClickListener 和上下文菜单按原生
+触摸链路独立运行, 可能形成另一套通知. 不应让旁路回调和原生回调重复执行同一个不可幂等业务操作.
+
+回调位置是 RecyclerView 完整 Adapter 链中的 absolute adapter position. 使用 `ConcatAdapter` 时, 它不是子 Adapter 的
+binding adapter position; 需要子 Adapter 位置的调用方应按自己的 Adapter/数据映射关系转换.
+
+长按使用平台手势超时, 回调不返回 Boolean, 也不消费或替代 View 原生 OnLongClickListener. 同一个 View 同时配置原生监听器和
+RecyclerView 旁路监听器时会收到两套长按通知.
+RecyclerView、item 或目标已经脱离窗口, 或 RecyclerView 已失去窗口焦点时, 点击和长按都不会回调.
+
+该能力只观察经过 RecyclerView 的 MotionEvent, 因此无障碍操作、键盘激活和代码直接调用 `performClick()` / `performLongClick()`
+不会触发此回调. 需要支持这些输入方式的业务操作必须继续通过 View 原生点击和无障碍链路提供, 不能把该触摸旁路回调作为唯一入口.
+
+命中和遮挡只匹配 `clickable`、`enabled`、`longClickable`、`contextClickable` 等标准 View 标志. 非 clickable View 上
+自定义的消费型 OnTouchListener 可能被视为普通前景, clickable View 的自定义消费结果也不会改变旁路回调;
+TouchDelegate 扩展出的点击区域不会被该工具识别. 这些场景没有可靠的无侵入探测方式, 应继续使用 View 原生监听器处理,
+不要把 RecyclerView 旁路回调作为其业务入口.
+
+扩展函数会把监听器正确绑定到当前 RecyclerView. 直接调用公开构造器时, 构造参数和
+`addOnItemTouchListener()` 的接收者必须是同一个 RecyclerView, 该绑定关系由调用方保证.
+
+该工具只保证实际收到完整 DOWN 至 UP/CANCEL 序列时的识别. 不要在手势进行中移除监听器, 也不要与可能在本监听器收到
+DOWN 后中途消费同一事件流的其它 `OnItemTouchListener` 组合使用. AndroidX 不会在这些情况下补发 CANCEL,
+已排队的长按仍可能回调.
+
+返回值是已经添加到 RecyclerView 的触摸监听器. 当前手势结束后需要移除时使用:
 
 ```kotlin
 val listener = recyclerView.addOnItemChildClickListener { _, _, _ -> }
+val longClickListener = recyclerView.addOnItemChildLongClickListener { _, _, _ -> }
 
 recyclerView.removeOnItemTouchListener(listener)
+recyclerView.removeOnItemTouchListener(longClickListener)
 ```

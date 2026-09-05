@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-04      | whisper | 明确点击与长按的退化语义和使用边界 |
+| 2026-09-04      | whisper | 收敛 RecyclerView 手势 API 与兼容边界 |
 | 2026-09-04      | whisper | 恢复 Divider 受约束继承关系 |
 | 2026-09-04      | whisper | 明确 Decoration 构造与降级契约 |
 | 2026-09-03      | whisper | 使用分段绘制兼容低版本 Canvas |
@@ -111,7 +113,7 @@ kit/
 | `extension`               | 通用 Android, 文本和 ViewBinding 扩展 |
 | `recyclerview.decoration` | RecyclerView item 间距和分割线工具  |
 | `recyclerview.holder`     | RecyclerView ViewHolder 通用封装    |
-| `recyclerview.listener`   | RecyclerView item 内点击分发工具    |
+| `recyclerview.listener`   | RecyclerView item 内点击与长按分发工具 |
 | `utils`                   | 设备, 屏幕等 Android 平台工具       |
 | `view.feed`               | 通用内容瀑布流卡片                  |
 | `view.input`              | 分格文本输入控件                    |
@@ -345,20 +347,59 @@ CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
 3. 不让 ViewHolder 持有 item 数据或业务回调。
 4. 只封装 ViewBinding 和 RecyclerView ViewHolder 的通用样板代码。
 
-## 8. RecyclerView 点击分发
+## 8. RecyclerView 点击与长按分发
 
-`recyclerview.listener` 提供 RecyclerView 级 item 内子 View 点击分发能力。该工具只处理 Android View 命中和手势通知, 不承载业务事件语义。
+`recyclerview.listener` 提供 RecyclerView 级 item 内子 View 点击和长按分发能力. 该工具只处理 Android View 命中和手势通知,
+不承载业务事件语义.
 
 维护要求:
 
-1. 保持 `OnItemClickListener` 为 `fun interface`, 让调用方可直接传入 lambda。
-2. 扩展函数参数继续使用 `OnItemClickListener`, 保持公开 API 语义明确。
-3. 默认只回调 `clickable && enabled` 的目标 View。
-4. 没有命中可点击目标时不回调; 需要 item 空白区域响应时, 由调用方将 item 根 View 设置为 clickable。
-5. 监听器是旁路通知工具, 不消费事件, 不改变原生 View 点击行为。
-6. 命中顺序只承诺常规 child order + z/elevation, 不承诺自定义 `getChildDrawingOrder`。
+1. 保持 `OnItemClickListener` 和 `OnItemLongClickListener` 为 `fun interface`, 让调用方可直接传入 lambda.
+2. 点击与长按扩展函数分别使用对应接口, 保持公开 API 语义明确; 两种回调都不返回触摸消费结果.
+3. 点击只回调 `clickable && enabled` 的目标 View, 长按只回调 `longClickable && enabled` 的目标 View.
+4. 没有命中目标时不回调; 需要 item 空白区域响应时, 由调用方在 item 根 View 设置对应的 clickable 或 longClickable.
+5. 监听器是完全无侵入的旁路通知工具: 不向 item 或子 View 安装监听器、AccessibilityDelegate 或状态,
+   不修改 View 属性, 不消费、合成或重新分发 MotionEvent, 不改变原生 View 点击行为.
+6. 核心命中算法必须逐层处理 parent scroll、child left/top 和 child matrix 逆变换, 支持平移、缩放、旋转、pivot、
+   rotationX/rotationY 及嵌套变换; 不可逆矩阵按未命中处理.
+7. 命中顺序只承诺常规 child order + z/elevation, 不承诺自定义 `getChildDrawingOrder`.
+8. 被过滤但通过 `clickable`、`longClickable` 或 `contextClickable` 标志仍会处理标准指针事件的前景 View 必须阻断
+   后方兄弟节点, 不得把禁用或非当前手势目标的控件区域穿透给下层目标.
+9. 监听器只观察经过 RecyclerView 的 MotionEvent. 无障碍、键盘和代码直接调用 `performClick()` / `performLongClick()` 不在
+   观察范围内; 需要这些输入方式的业务操作必须继续使用 View 原生点击和无障碍链路.
+10. 单击目标必须在 ACTION_DOWN 时锁定. MOVE 只允许沿原目标父链验证当前矩阵和点击边界, 不得重新扫描兄弟树;
+    目标离开后当前手势永久取消. 滚动取消只检查 LayoutManager 支持的滚动轴, 并按各轴位移分别与 RecyclerView
+    touch slop 比较, 不得使用二维合成距离取消交叉轴移动. ACTION_UP 只验证原目标的归属、过滤条件和当前位置,
+    不得重新选择目标.
+11. DOWN item 和目标允许使用实例级强引用保存, 但必须在 UP、CANCEL、多指、滚动和下一次 DOWN 主动清理;
+    外部回调前先清理状态, 避免异常或重入延长 View 生命周期. 收到
+    `requestDisallowInterceptTouchEvent(true)` 时必须清理目标, 因为 RecyclerView 级旁路监听器此后不保证继续收到完整事件序列;
+    `false` 不改变当前目标.
+12. 快速双击必须按两个独立的普通点击处理, 不启用 GestureDetector 双击识别, 不延迟单击确认. 点击监听器收到长按超时后,
+    在该时点采样锁定目标: 满足 `longClickable && enabled` 时必须立即清理且当前手势不可恢复; 否则保留目标并在
+    ACTION_UP 补充分发. 补充分发仍必须执行 clickable、enabled、父链、命中边界、adapter position、窗口挂载和焦点校验,
+    不得因为超时时曾经有效而跳过最终校验. 超时后的属性变化不得重新执行长按占用判断.
+    该判断不依赖是否安装 `ItemLongClickTouchListener`, 只表达基于公开 View 标志的低成本退化, 不得解释为原生
+    `performLongClick()` 的 Boolean 消费结果.
+13. 命中和遮挡只依据公开的标准 View 触摸标志. 不通过反射读取 OnTouchListener 或 TouchDelegate, 不试探性调用
+    `dispatchTouchEvent()`; 自定义消费结果和 TouchDelegate 扩展区域明确不在该无侵入监听器的命中模型内.
+14. 长按使用平台 GestureDetector 超时并在超时成立时回调锁定目标. `OnItemLongClickListener` 只表达旁路通知,
+    不得模拟或代理原生 OnLongClickListener 的 Boolean 消费语义.
+15. 点击和长按回调的位置参数是 RecyclerView 完整 Adapter 链中的 absolute adapter position. `ConcatAdapter` 调用方
+    需要子 Adapter 位置时, 应使用自己的 Adapter/数据映射关系转换, 不得把该参数解释为 binding adapter position.
+16. 公开监听器构造器接收的 RecyclerView 必须与实际注册监听器的 RecyclerView 是同一实例; 直接构造时由调用方保证,
+    推荐优先使用扩展函数创建并注册监听器.
+17. 监听器只保证实际收到完整 DOWN 至 UP/CANCEL 事件序列时的识别. DOWN 后通过
+    `removeOnItemTouchListener()` 移除监听器, 或由其它消费型 `OnItemTouchListener` 中途接管时, AndroidX 不会补发
+    CANCEL, 已排队的识别任务也不会因移除动作自动取消. 这些用法不在支持范围内; 监听器只能在当前手势结束后移除,
+    且不得与可能中途消费同一事件流的监听器组合使用.
+18. 外部回调前必须验证 RecyclerView、DOWN item 和目标 View 仍附着到窗口, 并验证 RecyclerView 仍持有窗口焦点;
+    任一条件不满足时静默结束当前手势, 不得向已经离开活动窗口的界面发送点击或长按通知.
 
-后续增加长按、双击等能力时, 优先继承内部 `OnDispatchGestureListener` 复用命中检测逻辑, 不复制坐标转换算法。
+点击长按协调测试必须至少覆盖 clickable-only 长按后点击、longClickable 长按后抑制点击、超时采样前属性变化和
+ACTION_UP 最终校验. 不通过测试访问私有状态验证实现细节, 应从公开回调结果验证契约.
+
+如果未来提供双击能力, 必须使用独立的显式 API, 不得静默改变现有点击 API 的两次普通点击语义.
 
 ## 9. 测试
 

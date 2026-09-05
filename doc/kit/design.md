@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                   |
 |-----------------|---------|----------------------------|
+| 2026-09-04      | whisper | 明确点击与长按的退化语义和使用边界 |
+| 2026-09-04      | whisper | 收敛 RecyclerView 手势 API 与兼容边界 |
 | 2026-09-04      | whisper | 明确 Decoration 非致命降级策略 |
 | 2026-09-03      | whisper | 明确连续分割线低版本兼容策略 |
 | 2026-09-03      | whisper | 区分 Regular 与 Staggered Decoration |
@@ -110,3 +112,45 @@ Decoration 类型与 LayoutManager 不匹配时采用非致命 no-op, 并按实�
 LayoutParams 的实际 span 信息; 只有主轴起始拓扑需要区分 `startSpace` 与内部间距时才依赖
 `StaggeredFullSpanProvider`. 缺少 Provider 时只禁用依赖该拓扑的主轴行为, 已提供 Provider 却与
 `LayoutParams.isFullSpan` 不一致时仍立即失败, 避免两个布局事实静默分叉.
+
+## 7. RecyclerView 非侵入手势命中
+
+`recyclerview.listener` 用于在 RecyclerView 层统一观察 item 及其子 View 的点击和长按手势, 核心职责是根据触点、View
+层级和变换矩阵确定命中目标. 点击与长按分别使用 `clickable && enabled` 和 `longClickable && enabled` 过滤目标,
+并复用同一套命中、目标锁定和失效算法.
+
+完全无侵入是该能力的设计前提: listener 不向 itemView 或子 View 安装监听器、AccessibilityDelegate、tag 或其它状态,
+不修改 `clickable` / `enabled`, 不消费 MotionEvent, 也不合成或重新分发事件. 命中算法逐层应用子 View 矩阵的逆变换,
+并遵循常规 child order 与 z/elevation. 被目标过滤器排除但按标准 View 标志仍会处理指针事件的前景节点必须阻断后方节点,
+避免视觉遮挡区域发生点击穿透.
+
+单击目标在 ACTION_DOWN 时完成一次完整命中并锁定. 后续 MOVE 只沿原目标的当前父链做坐标逆变换和边界验证,
+不会重新扫描兄弟树; 原目标一旦离开允许的点击边界, 当前手势永久取消. ACTION_UP 只验证锁定目标仍属于原 item、
+仍满足过滤条件且 adapter position 有效, 不允许把一次手势改派给后来移动到触点下方的其它 View.
+滚动判定只检查 LayoutManager 支持的滚动轴, 并分别比较各轴位移与 RecyclerView touch slop; 交叉轴移动以及
+各滚动轴分别未越过阈值的移动不会因二维合成距离被提前取消.
+`requestDisallowInterceptTouchEvent(true)` 不是触摸协议中的 CANCEL, 但可能让 RecyclerView 级旁路监听器无法继续收到完整事件序列;
+监听器收到该通知时清理已经锁定的目标, 让当前手势安全退化为不回调.
+每个有效的 DOWN/UP 序列独立表达一次普通 View 点击; 点击分发器禁用双击识别, 不合并第二次点击, 也不为确认单击增加延迟.
+按住超过平台长按超时后, 点击监听器在超时回调当下采样锁定目标的公开状态. 目标满足
+`longClickable && enabled` 时立即清理并永久放弃当前旁路点击; 该结果不取决于是否同时安装旁路长按监听器,
+也不取决于原生 OnLongClickListener 或上下文菜单是否真正消费长按. 其它目标保留到 ACTION_UP 并执行完整最终校验;
+超时后的属性变化不重新触发长按占用判断. 这是完全无侵入前提下基于公开 View 标志的稳定退化, 不等同于观察
+原生 `performLongClick()` 的动态 Boolean 消费结果.
+长按使用平台 GestureDetector 超时, 在超时成立时验证并回调同一个 DOWN 目标. 长按回调只是观察通知, 不返回消费结果,
+不代替或改变 View 原生 OnLongClickListener 和上下文菜单行为.
+任何点击或长按回调都要求 RecyclerView、item 和目标仍附着到窗口, 且 RecyclerView 仍持有窗口焦点;
+不满足时当前手势静默结束.
+
+listener 只保证实际收到完整 DOWN 至 UP/CANCEL 事件序列时的手势识别. AndroidX 在手势中途移除
+`OnItemTouchListener`, 或由其它 `OnItemTouchListener` 接管事件时, 不会向此前观察到 DOWN 的监听器补发 CANCEL.
+因此手势中途移除和与其它中途消费型监听器组合不属于该能力的兼容范围; 调用方应在当前手势结束后移除监听器.
+
+命中和前景遮挡只以 `clickable`、`enabled`、`longClickable`、`contextClickable` 等公开 View 标志为依据.
+Android 没有公开 API 可以无副作用地查询 OnTouchListener 是否消费事件, TouchDelegate 也不公开可反查的目标区域;
+试探性调用 `dispatchTouchEvent()` 则会重复分发并改变控件状态. 因此自定义触摸消费和 TouchDelegate 扩展区域不属于该旁路
+监听器的命中模型, 依赖这些机制的业务交互必须保留原生触摸入口.
+
+由上述无侵入边界决定, listener 只能观察经过 RecyclerView 的 MotionEvent. 无障碍操作、键盘激活和代码直接调用
+`View.performClick()` / `View.performLongClick()` 不产生这条触摸事件流, 因而不在该能力的观察范围内. 需要支持这些输入方式的业务操作仍应通过
+View 原生点击和无障碍链路提供; listener 不通过侵入 item 层级来模拟完整的 `performClick()` 语义.

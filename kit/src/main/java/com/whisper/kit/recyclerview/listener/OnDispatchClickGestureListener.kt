@@ -14,22 +14,36 @@ import androidx.recyclerview.widget.RecyclerView
  * @since 2026/07/30
  */
 internal class OnDispatchClickGestureListener(
-    private val recyclerView: RecyclerView,
-    filter: ItemViewFilter?,
+    recyclerView: RecyclerView,
+    filter: GestureTargetFilter?,
     private val listener: OnItemClickListener?,
-) : OnDispatchGestureListener(filter) {
+) : OnDispatchTargetGestureListener(recyclerView, filter) {
 
     override fun onSingleTapUp(e: MotionEvent): Boolean {
-        val view: View = findChildViewOnPoint(recyclerView, e.x, e.y) ?: return false
-        val position: Int = recyclerView.getChildAdapterPosition(view)
-        if (position == RecyclerView.NO_POSITION) return false
-
-        // 将 RecyclerView 坐标转换到 itemView 的本地坐标系, 保留 item 自身 matrix 影响.
-        val point: FloatArray = transformPointToChildLocal(recyclerView, view, e.x, e.y)
-        val localX: Float = point[0]
-        val localY: Float = point[1]
-        val target: View = findViewOnPoint(view, localX, localY) ?: return false
-        listener?.onItemClick(recyclerView, target, position)
+        dispatchGestureTarget(e)
         return false
+    }
+
+    override fun onLongPress(e: MotionEvent) {
+        // 无法无侵入地取得 performLongClick() 结果, 以超时当下的公开 View 标志决定归属.
+        if (isGestureTargetLongClickableAndEnabled()) {
+            clearGestureTarget()
+        }
+    }
+
+    /**
+     * 补充分发 GestureDetector 进入长按状态后不再产生的单击抬起回调.
+     *
+     * 普通单击已经在 [onSingleTapUp] 清理目标, longClickable 目标已经在长按超时时清理;
+     * 因此这里只可能分发超时时未被长按占用且通过 ACTION_UP 最终校验的目标.
+     */
+    fun dispatchGestureTargetOnUp(e: MotionEvent) {
+        if (e.actionMasked == MotionEvent.ACTION_UP) {
+            dispatchGestureTarget(e)
+        }
+    }
+
+    override fun onGestureTarget(targetView: View, absoluteAdapterPosition: Int) {
+        listener?.onItemClick(recyclerView, targetView, absoluteAdapterPosition)
     }
 }
