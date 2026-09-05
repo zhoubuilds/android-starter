@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-05      | whisper | 明确客户端信息维护契约            |
 | 2026-09-05      | whisper | 明确匿名设备标识维护契约          |
 | 2026-09-04      | whisper | 明确点击与长按的退化语义和使用边界 |
 | 2026-09-04      | whisper | 收敛 RecyclerView 手势 API 与兼容边界 |
@@ -421,7 +422,27 @@ ACTION_UP 最终校验. 不通过测试访问私有状态验证实现细节, 应
 该值只适合作为验证码请求控频、滥用检测等服务端策略的弱信号. 不得将它作为账号身份、认证凭据、授权依据或唯一控频维度;
 服务端应结合手机号、账号、IP、请求行为或平台完整性信号形成最终策略.
 
-## 10. 测试
+## 10. 客户端与应用信息
+
+`ClientInfoUtils` 统一提供 Android 客户端和宿主应用的基础运行环境信息. 它不提供设备标识, 屏幕尺寸或窗口状态:
+匿名应用侧标识由 `DeviceIdUtils` 负责, 显示与窗口信息由 `ScreenUtils` 负责. 该边界避免一个宽泛的设备信息入口混合不同生命周期,
+隐私属性和 Android API 来源.
+
+`sdkInt`, `osRelease`, `manufacturer`, `brand` 和 `model` 必须直接返回对应 `Build` 字段原值, 不在 getter 中执行 trim,
+大小写转换、拼接或缺省替换. `getPackageName()`, `getAppVersionName()` 和 `getAppVersionCode()` 同样保留 Context 与
+PackageManager 返回的原始语义. 应用包不存在时版本名和版本号返回 `null`; 其它运行时异常不得被宽泛捕获和静默隐藏.
+版本号在 API 28 及以上读取 `PackageInfo.longVersionCode`, 在 API 24 至 27 将 `versionCode` 转换为 `Long`.
+
+`getAppLocales()` 返回传入 Context 当前资源配置中的 LocaleList 原值, 不把它解释为应用显式选择的全局语言.
+`getPrimaryAppLocale()` 只提供方便读取首项的派生结果; 异常空列表回退到进程默认 Locale. Kit 最低支持 API 24,
+统一读取 `Configuration.locales`.
+
+`getDefaultUserAgent()` 生成符合 RFC 9110 product 语法的默认值:
+`<package>/<version> Android/<release> API/<sdk>`. 版本名为空时依次回退到版本号和 `unknown`. 该方法只在格式化结果中把
+连续的非 ASCII token 字符替换为 `-`, 并将每个动态 token 限制为 128 个字符; 不得反向改变原始 getter. 默认值不加入匿名设备标识,
+厂商、品牌或型号, 避免为普通网络请求增加不必要的设备指纹信息. 具体服务端协议需要其它字段时应由调用方自行组合.
+
+## 11. 测试
 
 修改 `kit` 后至少执行:
 

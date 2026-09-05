@@ -1,7 +1,7 @@
 package com.whisper.starter.network
 
 import android.content.Context
-import com.whisper.kit.utils.DeviceInfoUtils
+import com.whisper.kit.utils.ClientInfoUtils
 import com.whisper.starter.BuildConfig
 
 /**
@@ -19,9 +19,9 @@ class StarterRequestHeadersProvider(
 ) {
 
     fun currentHeaders(): Map<String, String> = linkedMapOf(
-        HEADER_PLATFORM to DeviceInfoUtils.PLATFORM,
+        HEADER_PLATFORM to ClientInfoUtils.PLATFORM,
         HEADER_PACKAGE_NAME to context.packageName,
-        HEADER_LOCALE to DeviceInfoUtils.getAppLocal(context).toLanguageTag(),
+        HEADER_LOCALE to ClientInfoUtils.getPrimaryAppLocale(context).toLanguageTag(),
         HEADER_APP_VERSION to BuildConfig.VERSION_NAME,
         HEADER_API_VERSION to BuildConfig.API_VERSION,
         HEADER_TIMESTAMP to System.currentTimeMillis().toString(),

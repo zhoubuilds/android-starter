@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-05      | whisper | 补充客户端信息使用边界            |
 | 2026-09-05      | whisper | 补充匿名设备标识使用边界          |
 | 2026-09-04      | whisper | 明确点击与长按的退化语义和使用边界 |
 | 2026-09-04      | whisper | 收敛 RecyclerView 手势 API 与兼容边界 |
@@ -707,3 +708,42 @@ val deviceId: String = DeviceIdUtils.getDeviceId(context)
 
 调用方可以把它作为服务端风控输入之一, 但不能用于身份认证、授权或唯一控频依据. 验证码接口仍应在服务端结合手机号、账号、
 IP、请求行为或平台完整性信号进行限制, 并按适用的隐私规则处理和保留该标识.
+
+## 12. 客户端与应用信息
+
+读取 Android 平台与当前宿主应用的基础信息:
+
+```kotlin
+val sdkInt: Int = ClientInfoUtils.sdkInt
+val release: String = ClientInfoUtils.osRelease
+val manufacturer: String = ClientInfoUtils.manufacturer
+val brand: String = ClientInfoUtils.brand
+val model: String = ClientInfoUtils.model
+val packageName: String = ClientInfoUtils.getPackageName(context)
+val versionName: String? = ClientInfoUtils.getAppVersionName(context)
+val versionCode: Long? = ClientInfoUtils.getAppVersionCode(context)
+```
+
+这些 API 返回平台或 PackageManager 原值, 不会清理空白、拼接显示名称或替换缺失值. 版本信息在当前包不存在时返回 `null`;
+调用方应根据自己的展示或协议契约处理缺失值, 不要直接把 nullable 值插入请求头或用户可见文本.
+
+读取当前 Context 资源配置实际使用的 Locale:
+
+```kotlin
+val locales: LocaleList = ClientInfoUtils.getAppLocales(context)
+val primaryLocale: Locale = ClientInfoUtils.getPrimaryAppLocale(context)
+```
+
+`getAppLocales()` 保留配置中的完整列表. `getPrimaryAppLocale()` 返回首项, 仅在列表异常为空时回退到进程默认 Locale.
+这些结果表示传入 Context 的资源配置, 不保证等同于应用显式设置的全局语言列表.
+
+需要一个无需额外配置、可直接放入 HTTP 请求头的默认 User-Agent 时使用:
+
+```kotlin
+val userAgent: String = ClientInfoUtils.getDefaultUserAgent(context)
+```
+
+返回格式为 `<package>/<version> Android/<release> API/<sdk>`, 例如
+`com.example.app/1.2.0 Android/16 API/36`. 动态字段会清理为 RFC 9110 允许的 ASCII token 并限制长度;
+版本名不可用时自动回退到版本号或 `unknown`. 默认值有意不包含设备 ID、厂商、品牌和型号. 服务端协议明确要求其它字段时,
+由调用方基于原始 getter 自行组合, 并评估隐私和兼容性影响.
