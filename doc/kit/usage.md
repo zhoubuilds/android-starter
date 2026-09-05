@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-05      | whisper | 补充匿名设备标识使用边界          |
 | 2026-09-04      | whisper | 明确点击与长按的退化语义和使用边界 |
 | 2026-09-04      | whisper | 收敛 RecyclerView 手势 API 与兼容边界 |
 | 2026-09-04      | whisper | 修正 Divider 高级构造器使用条件 |
@@ -691,3 +692,18 @@ val longClickListener = recyclerView.addOnItemChildLongClickListener { _, _, _ -
 recyclerView.removeOnItemTouchListener(listener)
 recyclerView.removeOnItemTouchListener(longClickListener)
 ```
+
+## 11. 匿名设备标识
+
+需要为验证码请求控频等场景提供一个无需额外权限的弱标识时, 可以使用:
+
+```kotlin
+val deviceId: String = DeviceIdUtils.getDeviceId(context)
+```
+
+该值由应用首次生成并保存在私有 SharedPreferences 中, 在应用数据仍然存在时尽量保持稳定. 它不读取 `ANDROID_ID`,
+不绑定设备或硬件, 也不保证在清除数据、卸载、备份恢复、存储异常或多进程竞争后保持不变. 宿主应用允许系统备份时,
+已有值可能随备份恢复到另一设备. 如果首次调用时 SharedPreferences 暂时不可用, 后续调用会保持当前进程中的同一个值并尝试补写.
+
+调用方可以把它作为服务端风控输入之一, 但不能用于身份认证、授权或唯一控频依据. 验证码接口仍应在服务端结合手机号、账号、
+IP、请求行为或平台完整性信号进行限制, 并按适用的隐私规则处理和保留该标识.
