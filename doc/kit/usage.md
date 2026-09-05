@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-05      | whisper | 补充完整窗口边界与方向用法        |
 | 2026-09-05      | whisper | 补充客户端信息使用边界            |
 | 2026-09-05      | whisper | 补充匿名设备标识使用边界          |
 | 2026-09-04      | whisper | 明确点击与长按的退化语义和使用边界 |
@@ -747,3 +748,30 @@ val userAgent: String = ClientInfoUtils.getDefaultUserAgent(context)
 `com.example.app/1.2.0 Android/16 API/36`. 动态字段会清理为 RFC 9110 允许的 ASCII token 并限制长度;
 版本名不可用时自动回退到版本号或 `unknown`. 默认值有意不包含设备 ID、厂商、品牌和型号. 服务端协议明确要求其它字段时,
 由调用方基于原始 getter 自行组合, 并评估隐私和兼容性影响.
+
+## 13. 窗口信息
+
+需要获取当前 Activity 的完整窗口边界时使用:
+
+```kotlin
+val bounds: Rect = WindowUtils.getCurrentWindowBounds(activity)
+val windowWidth: Int = bounds.width()
+val windowHeight: Int = bounds.height()
+```
+
+该 bounds 使用 px, 包含状态栏和导航栏所在区域, 不会扣除任何 WindowInsets, 因而不能直接解释为安全内容区域.
+该结果是调用时基于系统最近一次上报窗口状态生成的快照. 旋转、分屏比例调整、自由窗口缩放或其它窗口配置变化后,
+调用方必须重新查询, 不得把返回的 `Rect` 作为进程级固定窗口状态长期缓存.
+API 29 及以上结果由 AndroidX Window 保证正确; API 24 至 28 为 best-effort 兼容, 多窗口或无法可靠补偿导航栏时可能不精确.
+需要避让状态栏、导航栏、IME 或 display cutout 时, 应在目标 View 上通过 `ViewCompat.setOnApplyWindowInsetsListener()`
+实时读取 `WindowInsetsCompat`; `WindowUtils` 不提供静态的“可用内容尺寸”.
+
+需要在命令式逻辑中读取当前 Context 的资源方向时使用:
+
+```kotlin
+val isLandscape: Boolean = WindowUtils.isLandscape(context)
+val isPortrait: Boolean = WindowUtils.isPortrait(context)
+```
+
+结果表示传入 Context 当前资源配置的方向, 不表示设备的自然方向或物理旋转角度. 配置方向未定义或为方形时,
+两个方法都会返回 `false`. 布局适配仍应优先使用 Android 的 `land` 资源限定符和响应式布局, 不依赖运行时分支复制资源系统能力.

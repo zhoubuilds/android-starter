@@ -37,6 +37,7 @@ dependencies {
     api(libs.androidx.fragment)
     api(libs.androidx.recyclerview)
     api(libs.androidx.viewbinding)
+    implementation(libs.androidx.window)
     implementation(libs.material)
 
     testImplementation(libs.junit)

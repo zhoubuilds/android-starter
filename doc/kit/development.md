@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-05      | whisper | 收敛窗口边界与方向查询契约        |
 | 2026-09-05      | whisper | 明确客户端信息维护契约            |
 | 2026-09-05      | whisper | 明确匿名设备标识维护契约          |
 | 2026-09-04      | whisper | 明确点击与长按的退化语义和使用边界 |
@@ -116,7 +117,7 @@ kit/
 | `recyclerview.decoration` | RecyclerView item 间距和分割线工具  |
 | `recyclerview.holder`     | RecyclerView ViewHolder 通用封装    |
 | `recyclerview.listener`   | RecyclerView item 内点击与长按分发工具 |
-| `utils`                   | 设备, 屏幕等 Android 平台工具       |
+| `utils`                   | 客户端标识, 窗口等 Android 平台工具 |
 | `view.feed`               | 通用内容瀑布流卡片                  |
 | `view.input`              | 分格文本输入控件                    |
 | `view.refresh`            | 下拉刷新和上拉加载容器              |
@@ -136,6 +137,7 @@ kit/
 | AndroidX Fragment     | `api(libs.androidx.fragment)`      | ViewBinding 扩展公开 API 暴露 `Fragment` 类型 |
 | AndroidX RecyclerView | `api(libs.androidx.recyclerview)`  | 点击分发公开 API 暴露 `RecyclerView` 类型 |
 | AndroidX ViewBinding  | `api(libs.androidx.viewbinding)`   | ViewHolder 公开 API 暴露 `ViewBinding` 类型 |
+| AndroidX Window       | `implementation(libs.androidx.window)` | 兼容计算 API 24 以上当前窗口 bounds |
 | Material Components   | `implementation(libs.material)`    | 通用内容卡片内部使用 `ShapeableImageView`   |
 
 ## 4. 通用扩展
@@ -425,7 +427,7 @@ ACTION_UP 最终校验. 不通过测试访问私有状态验证实现细节, 应
 ## 10. 客户端与应用信息
 
 `ClientInfoUtils` 统一提供 Android 客户端和宿主应用的基础运行环境信息. 它不提供设备标识, 屏幕尺寸或窗口状态:
-匿名应用侧标识由 `DeviceIdUtils` 负责, 显示与窗口信息由 `ScreenUtils` 负责. 该边界避免一个宽泛的设备信息入口混合不同生命周期,
+匿名应用侧标识由 `DeviceIdUtils` 负责, 显示与窗口信息由 `WindowUtils` 负责. 该边界避免一个宽泛的设备信息入口混合不同生命周期,
 隐私属性和 Android API 来源.
 
 `sdkInt`, `osRelease`, `manufacturer`, `brand` 和 `model` 必须直接返回对应 `Build` 字段原值, 不在 getter 中执行 trim,
@@ -442,7 +444,23 @@ PackageManager 返回的原始语义. 应用包不存在时版本名和版本号
 连续的非 ASCII token 字符替换为 `-`, 并将每个动态 token 限制为 128 个字符; 不得反向改变原始 getter. 默认值不加入匿名设备标识,
 厂商、品牌或型号, 避免为普通网络请求增加不必要的设备指纹信息. 具体服务端协议需要其它字段时应由调用方自行组合.
 
-## 11. 测试
+## 11. 窗口信息
+
+`WindowUtils.getCurrentWindowBounds()` 只接收 Activity, 通过 AndroidX `WindowMetricsCalculator` 统一计算 API 24 及以上
+当前窗口 bounds. 返回独立的 `Rect` 副本, 单位为 px, 包含状态栏和导航栏所在区域, 不扣除任何 WindowInsets.
+API 29 及以上结果由 AndroidX Window 保证正确; API 24 至 28 使用 best-effort 兼容计算, 多窗口或无法可靠补偿导航栏时
+可能不精确.
+该结果是调用时基于系统最近一次上报窗口状态生成的快照. 旋转、分屏比例调整、自由窗口缩放或其它窗口配置变化后,
+调用方必须重新查询, 不得把返回的 `Rect` 作为进程级固定窗口状态长期缓存.
+该工具不提供物理屏幕尺寸或静态的安全内容尺寸; 状态栏、导航栏、IME 和 display cutout 必须由界面层基于目标 View 实时收到的
+`WindowInsetsCompat` 处理.
+
+`WindowUtils.isLandscape()` 和 `WindowUtils.isPortrait()` 必须严格读取传入 Context 当前资源配置的
+`Configuration.orientation`. Display rotation 只表示相对设备自然方向的旋转角度, 不得用于推断当前窗口方向.
+两个方法分别只在配置明确为 `ORIENTATION_LANDSCAPE` 或 `ORIENTATION_PORTRAIT` 时返回 `true`;
+`ORIENTATION_UNDEFINED` 和 `ORIENTATION_SQUARE` 下都返回 `false`, 不使用互为取反的实现.
+
+## 12. 测试
 
 修改 `kit` 后至少执行:
 
