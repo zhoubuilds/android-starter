@@ -13,6 +13,8 @@ import java.util.Locale
  * 设备与系统属性直接返回 Android 平台原值. 默认 User-Agent 只包含应用标识,
  * 应用版本和 Android 版本, 不加入设备标识或硬件型号.
  *
+ * @aegis 保护公开 API、平台原值 getter、版本与 Locale 查询语义以及默认 User-Agent 格式和隐私边界.
+ *
  * @author whisper
  * @since 2026/09/05
  */

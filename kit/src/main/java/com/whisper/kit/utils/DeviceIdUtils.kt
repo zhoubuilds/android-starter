@@ -15,6 +15,8 @@ import java.util.concurrent.atomic.AtomicReference
  * 也不承诺在清除数据、卸载、备份恢复、存储异常或多进程竞争后保持不变.
  * 调用方不得将其作为身份认证、安全凭据或服务端控频的唯一依据.
  *
+ * @aegis 保护公开 API、匿名标识生成与存储兼容语义、进程内并发一致性及安全使用边界.
+ *
  * @author whisper
  * @since 2025/09/10
  */

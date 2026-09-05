@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-05      | whisper | 标记工具类 Aegis 保护范围          |
 | 2026-09-05      | whisper | 收敛窗口边界与方向查询契约        |
 | 2026-09-05      | whisper | 明确客户端信息维护契约            |
 | 2026-09-05      | whisper | 明确匿名设备标识维护契约          |
@@ -460,7 +461,18 @@ API 29 及以上结果由 AndroidX Window 保证正确; API 24 至 28 使用 bes
 两个方法分别只在配置明确为 `ORIENTATION_LANDSCAPE` 或 `ORIENTATION_PORTRAIT` 时返回 `true`;
 `ORIENTATION_UNDEFINED` 和 `ORIENTATION_SQUARE` 下都返回 `false`, 不使用互为取反的实现.
 
-## 12. 测试
+## 12. Aegis 保护范围
+
+`utils` 包中的三个公开顶层工具均由类型 KDoc 的 `@aegis` 标记保护:
+
+* `DeviceIdUtils` 保护公开 API、匿名标识生成与存储兼容语义、进程内并发一致性及安全使用边界.
+* `ClientInfoUtils` 保护公开 API、平台原值 getter、版本与 Locale 查询语义以及默认 User-Agent 格式和隐私边界.
+* `WindowUtils` 保护公开 API、完整窗口 bounds 的快照与兼容语义、Insets 职责边界及资源方向判定规则.
+
+保护范围包括本文件第 9 至 11 节明确的对应公开契约、可观察行为和实现约束. 修改受保护内容时必须遵守根目录
+`AGENTS.md` 的授权和审计要求.
+
+## 13. 测试
 
 修改 `kit` 后至少执行:
 
