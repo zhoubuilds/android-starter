@@ -1,4 +1,4 @@
-package com.whisper.kit.view.refresh
+package com.whisper.kit.widget
 
 import androidx.annotation.Px
 

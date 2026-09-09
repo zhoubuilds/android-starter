@@ -4,6 +4,13 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-09      | whisper | 补齐取消拖拽、菜单创建期与方向变化维护规则 |
+| 2026-09-09      | whisper | 补齐触摸焦点、长按粘贴与图标背景绘制契约 |
+| 2026-09-08      | whisper | 收敛短码无障碍节点和文本菜单契约 |
+| 2026-09-08      | whisper | 移除分格输入的 codeLength 兼容 API |
+| 2026-09-08      | whisper | 明确分格宽度上限与单元测试 SDK 基线 |
+| 2026-09-08      | whisper | 修正分格输入长度与绘制契约并补充设备验证 |
+| 2026-09-08      | whisper | 合并 widget 包并移除内容卡片和分享面板 |
 | 2026-09-05      | whisper | 标记工具类 Aegis 保护范围          |
 | 2026-09-05      | whisper | 收敛窗口边界与方向查询契约        |
 | 2026-09-05      | whisper | 明确客户端信息维护契约            |
@@ -90,25 +97,24 @@ kit/
    |  |  |  |- holder/
    |  |  |  `- listener/
    |  |  |- utils/
-   |  |  |- view/
-   |  |  |  |- feed/
-   |  |  |  |- input/
-   |  |  |  |- refresh/
-   |  |  |  `- share/
    |  |  `- widget/
+   |  |     |- KitCodeInputEditText.kt
+   |  |     |- KitLineView.kt
+   |  |     |- KitRangeBar.kt
+   |  |     |- KitRefreshLoadComponent.kt
+   |  |     `- KitRefreshLoadLayout.kt
    |  |- AndroidManifest.xml
    |  |- keepRules/rules.keep
    |  `- res/
-   `- test/java/com/whisper/kit/
-      |- extension/
-      |- recyclerview/
-      |  |- decoration/
-      |  |- holder/
-      |  `- listener/
-      `- view/
-         |- feed/
-         |- input/
-         `- refresh/
+   |- test/java/com/whisper/kit/
+   |  |- extension/
+   |  |- recyclerview/
+   |  |  |- decoration/
+   |  |  |- holder/
+   |  |  `- listener/
+   |  `- widget/
+   `- androidTest/java/com/whisper/kit/
+      `- widget/
 ```
 
 | 包                        | 职责                                |
@@ -119,11 +125,7 @@ kit/
 | `recyclerview.holder`     | RecyclerView ViewHolder 通用封装    |
 | `recyclerview.listener`   | RecyclerView item 内点击与长按分发工具 |
 | `utils`                   | 客户端标识, 窗口等 Android 平台工具 |
-| `view.feed`               | 通用内容瀑布流卡片                  |
-| `view.input`              | 分格文本输入控件                    |
-| `view.refresh`            | 下拉刷新和上拉加载容器              |
-| `view.share`              | 通用分享底部面板                    |
-| `widget`                  | 通用基础自定义 View                 |
+| `widget`                  | 线条绘制, 范围选择, 分格输入和刷新加载等基础控件及其回调契约 |
 
 ## 3. 依赖边界
 
@@ -139,7 +141,6 @@ kit/
 | AndroidX RecyclerView | `api(libs.androidx.recyclerview)`  | 点击分发公开 API 暴露 `RecyclerView` 类型 |
 | AndroidX ViewBinding  | `api(libs.androidx.viewbinding)`   | ViewHolder 公开 API 暴露 `ViewBinding` 类型 |
 | AndroidX Window       | `implementation(libs.androidx.window)` | 兼容计算 API 24 以上当前窗口 bounds |
-| Material Components   | `implementation(libs.material)`    | 通用内容卡片内部使用 `ShapeableImageView`   |
 
 ## 4. 通用扩展
 
@@ -176,61 +177,74 @@ CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
 字体 fallback, 字形栅格和像素指标完全一致. 自定义字体 Span 只用于进程内渲染, 不承诺经过 Bundle, SavedState 或 IPC 后保留.
 `TextView` 是否启用 `LinkMovementMethod` 仍由承载点击文本的组件或调用方负责.
 
-## 5. 通用 View
+## 5. 基础控件
 
-`view` 提供业务无关的 View 和交互工具。当前包含 `KitContentFeedCardViewHolder`、`KitShareSheetDialog`、
-`KitCodeInputEditText` 和 `KitRefreshLoadLayout`。
+`widget` 统一提供业务无关的基础控件与回调契约: `KitLineView`, `KitRangeBar`, `KitCodeInputEditText`,
+`KitRefreshLoadLayout` 和 `KitRefreshLoadComponent`. 不再维护语义重叠的 `view` 包, 也不为单个控件建立子包.
 
-### 5.1 通用内容瀑布流卡片
+控件应围绕独立的绘制, 输入或交互能力维护, 应用样式和内容组合由调用方负责. 内容卡片和分享面板固化整套展示结构,
+不作为 Kit 的公共控件提供; 实际使用它们的应用应在自己的业务模块或 `foundation` 中维护相应界面和资源.
 
-`KitContentFeedCardViewHolder` 用于封面、标题、标签、统计文案、播放图标、时长和封面角标构成的通用内容卡片。
-组件只处理视觉绑定、封面高度和点击分发; 业务内容类型、默认标签文案、跳转目标和图片加载库由调用模块提供。
+### 5.1 分格文本输入
 
-维护要求:
-
-1. `KitContentFeedCardUi` 只表达卡片 UI 状态, 不新增首页、生活、课程、商品等业务语义字段。
-2. 图片加载必须通过 `KitContentFeedImageLoader` 回调接入, `kit` 不依赖 `foundation.loadMedia`、Glide 约定或应用图片占位规则。
-3. 动态封面高度统一使用 `KitContentFeedCoverHeight`, 固定高度由调用方转换业务类型后写入 `fixedCoverHeightDp`。
-4. 点击回调返回 `KitContentFeedCardUi`, 调用方可通过 `payload` 持有自己的原始业务 item; `kit` 不解析该对象。
-5. 卡片颜色、圆角、间距和图标资源保持业务无关命名, 资源名遵守 `kit` 前缀。
-
-### 5.2 通用分享底部面板
-
-`KitShareSheetDialog` 用于展示底部分享入口面板。组件只处理窗口、标题、入口排列、取消按钮和点击分发; 分享渠道语义、入口文案、图标资源、
-是否可用、实际 SDK 调用、埋点和业务提示由调用模块负责。
+`KitCodeInputEditText` 使用单个原生 `Editable` 和 `InputConnection` 承接输入, 保留粘贴, 删除, TextWatcher, Autofill
+和状态恢复能力, 不在多个子 EditText 之间转移焦点. 控件面向数字或 ASCII 字母组成的短验证码, 允许字符由调用方通过
+原生 `android:digits` 或 `filters` 限制. 不承诺复杂文字排版, 自由选区或无障碍逐字导航.
 
 维护要求:
 
-1. `ShareAction` 的 `id`、`title`、`iconRes` 和 `payload` 均为调用方数据, `kit` 不内置微信、朋友圈、复制链接、系统分享等渠道语义。
-2. 面板不依赖 `foundation`、微信 OpenSDK、图片加载库或应用主题资源; 只能使用 `kit_` 前缀的基础色、背景和布局资源。
-3. 面板点击后默认关闭, 需要等待业务操作结果时由调用方通过 `setDismissOnActionClick(false)` 接管关闭时机。
-4. 导航栏、状态栏和 edge-to-edge 仍由宿主 Activity 负责; 分享面板只设置底部窗口展示和默认 dim 遮罩。
-
-### 5.3 分格文本输入
-
-`KitCodeInputEditText` 使用单个原生 `Editable` 和 `InputConnection` 承接输入, 只接管文本区域绘制。
-控件应保留粘贴、删除、TextWatcher、Autofill、无障碍和状态恢复能力, 不在多个子 EditText 之间转移焦点。
-
-维护要求:
-
-1. XML 使用原生 `android:maxLength` 同时定义分格数量和最大输入字符数; 未配置时默认 6, 运行时通过 `codeLength` 修改时同步更新长度过滤器。
-2. 已输入字符使用标准 `textColor`、`textSize` 和 `fontFamily`; 空位置重复绘制标准 `hint`, 并使用 `textColorHint` 和 `kitCodeHintFontFamily`。
-3. 输入格背景接收 `Drawable`, 格子宽高优先使用显式配置, 未配置时依次使用 Drawable 固有尺寸和文本尺寸。
-4. 控件由内容决定宽度时, 使用 `kitCodeItemSpacing` 计算期望宽度; 父布局限制最终宽度时, 忽略该期望间距并根据可用宽度、格宽和分格数量重新分配实际间距。
-5. 父布局提供的宽度小于全部格子所需宽度时, 允许计算出负间距并继续绘制重叠格子, 不静默停止绘制。
+1. XML 或样式的原生 `android:maxLength` 同时定义初始分格数量和 UTF-16 长度上限, 未配置时默认 6;
+   不把 TextView 单行模式自动安装的 5000 位限制当作控件默认值. 运行时 `setFilters()` 保留调用方的其它过滤器,
+   使用最小 `LengthFilter.max` 作为格数, 没有长度过滤器时补充 6 位限制. 非正长度必须在修改现有状态前拒绝.
+   不再提供额外的长度属性或 setter. 缩短长度时在原 `Editable` 上截断, 不割裂截断边界上的有效代理对.
+2. 测量应建立并维护原生 `Layout`; 绘制保留经过裁剪的父类调用以维持 Editor 与 IME 同步, 分格正文从 `layout.text`
+   读取转换后的文本, 不绕过密码等原生转换行为. 绘制画笔复制原生文本画笔以保留缩放与字形样式;
+   空位置使用标准 `hint`, `textColorHint` 和 `kitCodeHintFontFamily`, hint 字体也必须参与自适应宽高测量.
+   父类绘制使用空裁剪区时, 必须独立绘制当前 `compoundDrawables`, 包括 `setError()` 的图标及原生 RTL 解析结果.
+   测量和格子内容区域使用 compound padding, 期望尺寸还应容纳左右图标高度与上下图标宽度, 避免图标与格子重叠或被裁切.
+3. 输入格背景接收 `Drawable`, 格子宽高优先使用显式配置, 未配置时依次使用 Drawable 固有尺寸和文本尺寸.
+   同一个背景实例使用固定局部 bounds 和 Canvas 平移绘制各格, 不为每个位置重复改写 bounds.
+   背景回调必须失效全部格子, selector 状态变化导致固有尺寸改变时请求重新布局.
+   更新背景布局方向后同样检查固有尺寸, 尺寸变化时请求重新布局并刷新绘制.
+   背景可见性通过 `onVisibilityAggregated()` 同步, 替换或 detach 时将旧背景设为不可见并取消调度;
+   不主动调用动画的 `start()` / `stop()`, 不改变调用方的播放意图.
+   Ripple 热点使用最近格子的局部坐标, 并限制在该格宽高内. 所有格子仍共享背景状态和热点, 不提供逐格独立交互.
+4. 控件由内容决定宽度时, 使用 `kitCodeItemSpacing` 计算期望宽度, 并遵循原生像素 min/max 尺寸约束;
+   父布局指定精确宽度, 或父布局上限, 控件自身 `maxWidth` / `maxEms` 将宽度压缩到期望值以下时,
+   忽略该期望间距并根据可用宽度, 格宽和分格数量重新分配实际间距, 包括 `UNSPECIFIED` 下自身上限生效的情况.
+5. 最终可用宽度小于全部格子所需宽度时, 允许计算出负间距并继续绘制重叠格子, 不静默停止绘制.
 6. 光标保持隐藏, 选区固定在文本末尾, 避免点击空白格后产生不可见的中间插入位置。
 7. 控件不负责判断输入内容、发送验证码或触发提交; 完成时机由调用方监听文本决定。
 8. 页面使用简短分格 hint 时, 应通过 `labelFor` 或等价无障碍信息提供输入字段语义。
 9. 业务布局应显式引用应用提供的组件样式; `kitCodeInputEditTextStyle` 只用于遗漏显式 style 时兜底。kit 只定义样式入口和可配置属性,
    不持有应用颜色、尺寸或 Drawable。
+   自定义样式未提供触摸焦点配置时, 可聚焦的输入框默认支持触摸获焦; XML 或样式显式配置的
+   `android:focusableInTouchMode="false"` 和 `android:focusable="false"` 必须保留, 不引入原生 EditText 样式改变外观.
+10. 分格沿用 UTF-16 长度单位, 有效代理对必须联合绘制且占两个格子; 不将其计为一个格子, 不承诺 grapheme 分格.
+    RTL 页面中的短码仍从左向右排列, 控件及周边布局继续继承 RTL, 不强制整个 View 的布局方向为 LTR.
+11. 无障碍节点保留 editable, label, text, hint, password 和焦点等原生字段语义, `maxTextLength` 使用最小长度过滤器上限.
+    移除并拒绝 `ACTION_SET_SELECTION`, `ACTION_NEXT_AT_MOVEMENT_GRANULARITY` 和
+    `ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY`, 将 movement granularities 设为 0; API 33 及以上将 `isTextSelectable` 设为 `false`.
+    API 26 及以上不得声明或返回 `EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY`, 避免把连续文本 Layout 的坐标作为分格坐标提供.
+    `ACTION_SET_TEXT` 设置和清空整段文本, `ACTION_PASTE` 及 IME 末尾删除继续走原生编辑与过滤链路.
+12. 默认插入和选区 ActionMode 以及右键菜单不提供 `selectAll`, `onTextContextMenuItem()` 必须拒绝该操作.
+    调用方替换原生 ActionMode callback 时也应保留不提供全选的规则, 不为该限制新增组件专属配置 API.
+    默认 `OnLongClickListener` 通过公开的 `ActionMode.TYPE_FLOATING` 展示系统粘贴菜单项, 并调用
+    `customInsertionActionModeCallback`; 未被 callback 消费的粘贴交给 `onTextContextMenuItem()` 进入原生 Editable 和过滤链路.
+    返回键, 再次点击输入框, 失去输入焦点, 聚合可见性变为不可见或 detach 时关闭菜单. 再次触摸在 `ACTION_DOWN` 关闭;
+    返回键兼容旧版 `onKeyPreIme()` 与 API 33 及以上的 `OnBackInvokedCallback`, 菜单销毁时注销已注册的返回回调.
+    创建回调同步结束菜单时不得将返回的失效模式写入字段或注册返回回调, 后续长按仍可重新创建菜单.
+    调用方设置自己的 `OnLongClickListener` 会按原生语义替换默认入口, 应自行处理长按或接入自己的操作流程.
 
-### 5.4 刷新加载容器
+### 5.2 刷新加载容器
 
 `KitRefreshLoadLayout` 用于处理纵向内容的下拉刷新和上拉加载交互。
 
 维护要求:
 
 1. 只处理触摸、NestedScrolling、内容位移、header/footer 露出、刷新加载状态和回调。
+   容器直接处理的触摸序列只有 `ACTION_UP` 按阈值触发; `ACTION_CANCEL` 清理指针和拖拽状态,
+   尚未进入刷新或加载时回弹至 0, 已在进行中的任务保持原状态, 不重复通知业务回调.
 2. 不持有业务列表数据, 不处理页码、接口请求、业务错误、空页面语义和没有更多数据语义。
 3. 通过 `View.canScrollVertically()` 判断内容滚动边界, 不把实现绑定到某个业务列表。
 4. 运行时 API 只提供启用刷新、启用加载、监听触发、完成刷新和完成加载能力, 不暴露业务 loading 状态同步入口。
@@ -242,7 +256,7 @@ CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
 9. 除 header/footer 外最多只能存在一个普通直接子 View, 多个内容子 View 应抛出异常。
 10. header/footer 如需感知拖拽距离或状态变化, 应实现 `KitRefreshLoadComponent`, 容器不直接读取具体子 View 的文案或控件 ID。
 11. 刷新中和加载中, header/footer 应作为 content 的附加部分跟随列表滚动, 包括触摸滚动和惯性滚动。
-12. 刷新和加载触发距离使用负数作为哨兵值, 表示跟随对应 header/footer 自身高度。
+12. 刷新和加载触发距离使用负数作为哨兵值, 表示跟随对应 header/footer 自身高度; 0 会归一化为 1 px。
 13. 自动加载只通过通用 `View.canScrollVertically(1)` 判断内容是否到底, 不依赖 RecyclerView 或具体滚动容器类型。
 14. 内容可以是不滚动 View 或支持 NestedScrolling 的滚动 View; 可滚动但不支持 NestedScrolling 的内容不保证连续边界衔接和自动加载触发。
 
@@ -483,3 +497,19 @@ git diff --check
 ```
 
 公开扩展函数应保留编译型测试, 覆盖 lambda 调用形态。
+
+单元测试启用 Android 资源以加载测试 XML. `kit/src/test/resources/robolectric.properties` 使用 `sdk=24` 保持原有默认测试基线,
+避免默认 SDK 随 Manifest 的 targetSdk 改变; 测试类或方法中的显式 `@Config` 继续覆盖该默认值.
+分格输入测试显式使用 API 34 Native Graphics, 验证长度过滤, 原生转换文本, 测量, Drawable 绘制及文本菜单限制.
+涉及原生编辑器或窗口行为的修改还需连接设备或模拟器执行:
+
+```bash
+./gradlew :kit:connectedDebugAndroidTest -q
+```
+
+设备测试覆盖 InputConnection, Autofill, 原生 Layout 保留, 不声明或返回字符几何和静态背景停止重绘.
+长按粘贴回归通过真实触摸事件长按空输入框或空白格, 再点击系统浮动菜单中的粘贴项, 验证末尾插入和长度过滤;
+不能只用直接调用粘贴方法代替该入口验证.
+通过 UiAutomation 获取真实无障碍节点, 验证字段语义, 焦点, 整段文本限长与清空, 粘贴及拒绝不支持的选区和导航操作.
+设备上的 `ACTION_PASTE` 与长按菜单粘贴验证仅在剪贴板为空时执行; 已有内容时跳过相应测试, 以保留用户剪贴板数据.
+节点集成测试不能替代启用 TalkBack 后的端到端操作验证, 不据此宣称完整的 TalkBack 使用体验已经验证.

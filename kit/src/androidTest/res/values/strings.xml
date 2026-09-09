@@ -1,0 +1,8 @@
+<resources>
+    <string name="kit_test_code_input_label">Code</string>
+    <string name="kit_test_manual_app_name">Kit 输入测试</string>
+    <string name="kit_test_manual_numeric_label">数字验证码</string>
+    <string name="kit_test_manual_ascii_label">字母与数字验证码</string>
+    <string name="kit_test_manual_clear">清空</string>
+    <string name="kit_test_manual_done">完成</string>
+</resources>

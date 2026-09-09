@@ -4,6 +4,13 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-09      | whisper | 明确取消拖拽与菜单回调边界 |
+| 2026-09-09      | whisper | 补充短码触摸焦点、长按粘贴与图标背景用法 |
+| 2026-09-08      | whisper | 明确短码字符约束与 RTL 无障碍用法 |
+| 2026-09-08      | whisper | 分格输入长度配置迁移到原生 filters |
+| 2026-09-08      | whisper | 补充分格自身宽度上限的间距规则 |
+| 2026-09-08      | whisper | 明确分格输入长度规则与编辑使用边界 |
+| 2026-09-08      | whisper | 更新 widget 用法并说明旧控件迁移 |
 | 2026-09-05      | whisper | 补充完整窗口边界与方向用法        |
 | 2026-09-05      | whisper | 补充客户端信息使用边界            |
 | 2026-09-05      | whisper | 补充匿名设备标识使用边界          |
@@ -176,31 +183,25 @@ Dialog Binding 在首次访问后按 Dialog 对象生命周期缓存, `dismiss()
 通过 `onCreateView()` 提供内容的 DialogFragment 可以使用 Fragment 委托. 仅实现 `onCreateDialog()` 且没有 Fragment View
 的 DialogFragment 不可使用该委托, 应在 `onCreateDialog()` 内局部调用生成类的 `inflate()`.
 
-## 4. 通用分享底部面板
+## 4. 基础控件与迁移
 
-需要展示底部分享渠道选择时, 使用 `KitShareSheetDialog`。`kit` 只提供面板和入口点击分发, 调用方负责提供渠道文案、图标和实际分享动作:
+基础控件统一位于 `com.whisper.kit.widget`, 提供线条绘制, 范围选择, 分格输入和刷新加载交互. 调用方负责配置样式,
+组合界面内容并处理业务状态.
 
-```kotlin
-KitShareSheetDialog.Builder(context)
-    .setTitle("分享到")
-    .addAction(
-        KitShareSheetDialog.ShareAction(
-            id = "wechat_session",
-            title = "微信好友",
-            iconRes = R.drawable.ic_wechat,
-        ),
-    )
-    .setOnActionClickListener { _, action ->
-        when (action.id) {
-            "wechat_session" -> shareToWechatSession()
-        }
-    }
-    .show()
-```
+从旧版本升级时, 同步更新 Kotlin / Java import, XML 控件标签和使用完整类名的反射或混淆配置:
 
-分享面板默认在入口点击后关闭。需要先等待权限、网络、截图或 SDK 调用结果时, 可以设置 `setDismissOnActionClick(false)`,
-并在业务完成后自行关闭或保留面板。分享渠道不可用时, 调用方可以把 `ShareAction.enabled` 设为 `false`;
-不可用原因和提示文案仍由业务模块处理。
+| 旧类型路径 | 当前类型路径 |
+|------------|--------------|
+| `com.whisper.kit.view.input.KitCodeInputEditText` | `com.whisper.kit.widget.KitCodeInputEditText` |
+| `com.whisper.kit.view.refresh.KitRefreshLoadLayout` | `com.whisper.kit.widget.KitRefreshLoadLayout` |
+| `com.whisper.kit.view.refresh.KitRefreshLoadComponent` | `com.whisper.kit.widget.KitRefreshLoadComponent` |
+
+旧包路径不再提供兼容类型, 使用它们的外部模块需要重新编译. `KitLineView` 和 `KitRangeBar` 保持现有 `widget` 包路径.
+控件包合并保留 XML 属性与样式入口, 分格输入的当前长度和绘制规则见第 6 节.
+
+`view.feed` 的 `KitContentFeedCardUi`, `KitContentFeedCardViewHolder`, `KitContentFeedCoverHeight`,
+`KitContentFeedImageLoader` 以及 `view.share.KitShareSheetDialog` 不再提供, 对应专属资源一并移除.
+旧版本的外部消费者应由自己的业务模块或应用 `foundation` 维护内容卡片, 分享面板和相关资源, 按应用展示需求组合基础控件.
 
 ## 5. 富文本扩展
 
@@ -237,15 +238,17 @@ val content: CharSequence = buildSpannedString {
 
 ## 6. 分格文本输入
 
-需要保留标准 EditText 输入能力并按格展示字符时, 使用 `KitCodeInputEditText`:
+数字或 ASCII 字母组成的短验证码可以使用 `KitCodeInputEditText`. 允许字符由调用方通过原生 `android:digits` 或
+`filters` 限制, 控件不内置字符白名单. 以下示例只允许 ASCII 数字:
 
 ```xml
-<com.whisper.kit.view.input.KitCodeInputEditText
+<com.whisper.kit.widget.KitCodeInputEditText
     android:id="@+id/codeInput"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:autofillHints="smsOTPCode"
     android:background="@android:color/transparent"
+    android:digits="0123456789"
     android:hint="@string/code_slot_hint"
     android:importantForAutofill="yes"
     android:inputType="number"
@@ -264,17 +267,51 @@ val content: CharSequence = buildSpannedString {
 已输入内容仍保存在原生 `Editable` 中, 调用方可以继续使用 TextWatcher、Autofill、粘贴和删除。
 控件不会在输入完成后自动提交; 页面应监听文本长度并把业务事件交给 ViewModel。
 
-分格数量使用原生 `android:maxLength`, 未配置时默认 6。`kitCodeItemBackground` 可以传入 shape、selector
-或其它 Drawable 来统一控制格子背景。`wrap_content` 按格子宽高、数量和 `kitCodeItemSpacing` 计算期望尺寸;
-`match_parent`、固定宽度或父布局上限压缩最终宽度时, `kitCodeItemSpacing` 不参与绘制, 控件会按最终可用宽度和分格数量重新分配间距。
+初始分格数量使用 XML 或样式中的原生 `android:maxLength`, 未配置时默认 6. 运行时通过 `filters` 设置正数
+`InputFilter.LengthFilter`, 格数使用其中的最小上限; 未提供长度过滤器时自动补充 6 位限制, 其它过滤器保留.
+非正长度会在修改状态前被拒绝. 缩短上限时同步截断已有文本, 并保留原 `Editable` 对象.
+
+`codeLength` 已移除, 不提供弃用过渡 API. 原来的运行时赋值应改为替换原生长度过滤器, 并保留其它过滤器:
+
+```kotlin
+codeInput.filters = (
+    codeInput.filters.filterNot { it is InputFilter.LengthFilter } + InputFilter.LengthFilter(4)
+).toTypedArray()
+```
+
+长度沿用原生 UTF-16 单位: 有效代理对联合绘制并占两个格子, 缩短长度不会将其截成半个代理对. 控件不按 grapheme
+计数或分格. 密码输入使用原生转换后的显示文本, 遮罩和临时可见行为遵循系统设置.
+
+`kitCodeItemBackground` 可以传入 shape, selector 或其它 Drawable 来统一控制格子背景. selector 的固有尺寸变化会触发重新布局.
+背景可见性跟随控件及祖先和窗口的聚合可见状态, 替换或移出窗口时隐藏并取消调度, 控件不会主动启动或停止背景动画.
+使用 Ripple 时, 热点映射到最近格子的局部坐标并限制在格子内; 各格使用同一个背景实例和状态, 不会分别响应交互.
+`wrap_content` 按格子宽高, 数量和 `kitCodeItemSpacing` 计算期望尺寸, 受像素 min/max 尺寸约束;
+未指定格子尺寸和背景固有尺寸时, 文本与 `kitCodeHintFontFamily` 指定的 hint 字体共同决定自适应尺寸.
+`match_parent`, 固定宽度, 父布局上限或控件自身的 `maxWidth` / `maxEms` 限制最终宽度时, `kitCodeItemSpacing` 不参与绘制,
+控件会按最终可用宽度和分格数量重新分配间距. 父布局未限制宽度时, 控件自身上限造成的宽度压缩也遵循该规则.
 空间不足以容纳全部固定宽度格子时会显示为格子重叠, 便于直接发现不合理的布局约束。
+
+原生 compound drawable 和 `setError()` 图标可以继续使用. 控件按 compound padding 为图标与格子分配空间,
+自适应尺寸会计入图标宽高, 图标位置遵循原生 RTL 解析结果.
 
 应用应为业务布局显式指定组件样式, 并可通过主题的 `kitCodeInputEditTextStyle` 提供漏写 `style` 时的默认兜底。
 直接依赖 kit 且没有应用组件样式时, 调用方仍需像上例一样显式提供背景、格子尺寸和文本样式;
 应用级颜色和 Drawable 不应下沉到 kit。
+可聚焦的控件默认支持触摸获焦, 无需在组件样式中重复声明; 显式设置 `android:focusableInTouchMode="false"`
+或 `android:focusable="false"` 时仍保留调用方的配置.
 
-控件会隐藏光标并把选区保持在文本末尾。页面使用 `-` 这类非描述性 hint 时, 应使用 `android:labelFor`
-将字段标题与输入控件关联, 避免损失无障碍语义。
+RTL 页面中短码仍从左向右排列, 控件及周边布局继续继承 RTL 方向, 无需把整个 View 或页面强制设为 LTR.
+控件隐藏光标并把选区保持在文本末尾. 页面使用 `-` 这类非描述性 hint 时, 应使用 `android:labelFor` 将字段标题与输入控件关联.
+
+无障碍节点保留可编辑字段的文本, hint, 密码和标签语义, 支持焦点, 受长度限制的整段文本设置, 清空与粘贴;
+IME 可以继续在末尾输入和删除. 当前不提供自由选区, 逐字导航和分格字符坐标, 默认文本菜单也不提供全选.
+调用方自定义插入或选区 ActionMode callback 时应继续移除全选菜单项. 需要自由选区, 逐字导航, 短码倒序或复杂文字排版时,
+应使用适合该场景的输入控件.
+
+控件可编辑且剪贴板有内容时, 默认长按会打开系统浮动粘贴菜单, 粘贴到文本末尾并遵循现有 `digits` 和过滤器.
+`customInsertionActionModeCallback` 仍参与菜单处理, 创建回调中同步结束菜单后, 后续长按可以重新打开菜单.
+设置自己的 `OnLongClickListener` 会替换默认长按入口,
+调用方应自行处理长按或接入自己的流程. 返回键, 再次点击输入框, 控件失焦, 控件或窗口不可见以及移出窗口时会关闭该菜单.
 
 ## 7. 刷新加载容器
 
@@ -305,7 +342,7 @@ val content: CharSequence = buildSpannedString {
 使用统一默认样式时, 页面只需要声明内容:
 
 ```xml
-<com.whisper.kit.view.refresh.KitRefreshLoadLayout
+<com.whisper.kit.widget.KitRefreshLoadLayout
     android:id="@+id/refreshLoadLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -314,14 +351,14 @@ val content: CharSequence = buildSpannedString {
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
-</com.whisper.kit.view.refresh.KitRefreshLoadLayout>
+</com.whisper.kit.widget.KitRefreshLoadLayout>
 ```
 
 单个页面需要特殊 header 或 footer 时, 可以显式声明对应 child 覆盖默认布局。只声明 header 时,
 footer 仍会继续使用主题中的默认配置:
 
 ```xml
-<com.whisper.kit.view.refresh.KitRefreshLoadLayout
+<com.whisper.kit.widget.KitRefreshLoadLayout
     android:id="@+id/refreshLoadLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -335,7 +372,7 @@ footer 仍会继续使用主题中的默认配置:
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
-</com.whisper.kit.view.refresh.KitRefreshLoadLayout>
+</com.whisper.kit.widget.KitRefreshLoadLayout>
 ```
 
 header/footer 各允许 0 或 1 个。缺少 header 时下拉刷新会自动禁用, 缺少 footer 时上拉加载会自动禁用。
@@ -343,12 +380,13 @@ header/footer 各允许 0 或 1 个。缺少 header 时下拉刷新会自动禁�
 后续运行时补充对应 header/footer 或通过默认样式补齐后, 控件会恢复对应能力。
 
 内容 View 的滚动能力决定边界衔接效果。普通 `LinearLayout` 等不滚动 View 可以直接通过手势拉出 header/footer。
+容器直接处理的拖拽如果收到系统取消事件, 会收起尚未提交的拖拽, 不触发刷新或加载回调.
 `RecyclerView`、`NestedScrollView` 等支持 NestedScrolling 的内容可以在滚到顶部或底部后连续把剩余滚动交给容器。
 可滚动但不支持 NestedScrolling 的自定义 View 可能需要松手后重新拖拽才能拉出 header/footer, 也可能无法触发滚动到底自动加载。
 
 `kitRefreshLoadRefreshTriggerDistance` 和 `kitRefreshLoadLoadMoreTriggerDistance` 默认值为 `-1`。
 在 XML 样式中配置负数哨兵值时仍按 dimension 写法保留单位, 例如 `-1dp`。所有负数值都表示触发距离分别使用 header/footer 自身高度。
-只有需要提前或延后触发时, 才配置具体 dimension 值。
+只有需要提前或延后触发时, 才配置具体 dimension 值; 配置 0 时按最小 1 px 处理。
 
 刷新中或加载中, header/footer 会作为 content 的附加部分跟随列表滚动。用户继续滚动 RecyclerView 或列表进入惯性滚动时,
 header/footer 会像列表条目一样逐步离开屏幕。
@@ -364,6 +402,9 @@ header/footer 会像列表条目一样逐步离开屏幕。
 header/footer View 如需根据拖拽状态更新文案或动画, 可以实现 `KitRefreshLoadComponent`:
 
 ```kotlin
+import com.whisper.kit.widget.KitRefreshLoadComponent
+import com.whisper.kit.widget.KitRefreshLoadLayout
+
 class DebugRefreshHeader @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,

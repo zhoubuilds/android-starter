@@ -29,6 +29,9 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -38,7 +41,6 @@ dependencies {
     api(libs.androidx.recyclerview)
     api(libs.androidx.viewbinding)
     implementation(libs.androidx.window)
-    implementation(libs.material)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

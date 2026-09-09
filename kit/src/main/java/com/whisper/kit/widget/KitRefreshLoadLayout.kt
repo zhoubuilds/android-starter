@@ -1,4 +1,4 @@
-package com.whisper.kit.view.refresh
+package com.whisper.kit.widget
 
 import android.annotation.SuppressLint
 import android.animation.Animator
@@ -80,7 +80,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     /**
      * 刷新触发距离, 单位 px.
      *
-     * 小于 0 时使用 header 高度作为触发距离.
+     * 小于 0 时使用 header 高度作为触发距离, 0 会归一化为 1 px.
      */
     @Px
     var refreshTriggerDistance: Int = DEFAULT_TRIGGER_DISTANCE
@@ -88,7 +88,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     /**
      * 加载更多触发距离, 单位 px.
      *
-     * 小于 0 时使用 footer 高度作为触发距离.
+     * 小于 0 时使用 footer 高度作为触发距离, 0 会归一化为 1 px.
      */
     @Px
     var loadMoreTriggerDistance: Int = DEFAULT_TRIGGER_DISTANCE
@@ -429,9 +429,17 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
 
             MotionEvent.ACTION_POINTER_UP -> handlePointerUp(event)
 
-            MotionEvent.ACTION_CANCEL,
-            MotionEvent.ACTION_UP,
-            -> {
+            MotionEvent.ACTION_CANCEL -> {
+                dragging = false
+                activePointerId = INVALID_POINTER_ID
+                if (contentOffset != 0 && !isBusyState()) {
+                    changeState(RefreshLoadState.Settling)
+                    animateToOffset(0, animate = true)
+                }
+                return true
+            }
+
+            MotionEvent.ACTION_UP -> {
                 if (dragging || contentOffset != 0) {
                     dragging = false
                     activePointerId = INVALID_POINTER_ID

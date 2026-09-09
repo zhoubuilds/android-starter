@@ -1,4 +1,4 @@
-package com.whisper.kit.view.refresh
+package com.whisper.kit.widget
 
 import android.view.MotionEvent
 import android.view.View
@@ -1358,6 +1358,62 @@ class KitRefreshLoadLayoutTest {
         )
 
         assertTrue(layout.currentOffset > offsetBeforePointerUp)
+    }
+
+    @Test
+    fun touchCancel_releasesOffsetWithoutTriggeringRefresh() {
+        val layout: KitRefreshLoadLayout = createLayout()
+        val header: View = createChild(width = MATCH_PARENT, height = HEADER_HEIGHT)
+        val content: View = createChild(width = MATCH_PARENT, height = MATCH_PARENT)
+        var refreshCount: Int = 0
+
+        layout.dragResistance = 1f
+        layout.animationDurationMillis = 0L
+        layout.refreshTriggerDistance = REFRESH_TRIGGER_DISTANCE
+        layout.addView(header, roleParams(KitRefreshLoadLayout.ChildRole.Header, MATCH_PARENT, HEADER_HEIGHT))
+        layout.addView(content)
+        layout.setOnRefreshLoadListener { action: KitRefreshLoadLayout.RefreshLoadAction ->
+            if (action == KitRefreshLoadLayout.RefreshLoadAction.Refresh) {
+                refreshCount += 1
+            }
+        }
+        measureAndLayout(layout)
+
+        layout.onTouchEvent(touchEvent(MotionEvent.ACTION_DOWN, pointer(id = 0, y = 0f)))
+        layout.onTouchEvent(touchEvent(MotionEvent.ACTION_MOVE, pointer(id = 0, y = REFRESH_DRAG_DISTANCE.toFloat())))
+        assertTrue(layout.currentOffset > REFRESH_TRIGGER_DISTANCE)
+        assertEquals(KitRefreshLoadLayout.RefreshLoadState.ReleaseToRefresh, layout.state)
+        layout.onTouchEvent(touchEvent(MotionEvent.ACTION_CANCEL, pointer(id = 0, y = REFRESH_DRAG_DISTANCE.toFloat())))
+
+        assertEquals(0, refreshCount)
+        assertEquals(0, layout.currentOffset)
+        assertEquals(KitRefreshLoadLayout.RefreshLoadState.Idle, layout.state)
+    }
+
+    @Test
+    fun touchCancel_releasesOffsetWithoutTriggeringLoadMore() {
+        val layout: KitRefreshLoadLayout = createLayout()
+        val content: View = createChild(width = MATCH_PARENT, height = MATCH_PARENT)
+        val footer: View = createChild(width = MATCH_PARENT, height = FOOTER_HEIGHT)
+        var loadCount: Int = 0
+
+        layout.dragResistance = 1f
+        layout.animationDurationMillis = 0L
+        layout.loadMoreTriggerDistance = LOAD_MORE_TRIGGER_DISTANCE
+        layout.addView(content)
+        layout.addView(footer, roleParams(KitRefreshLoadLayout.ChildRole.Footer, MATCH_PARENT, FOOTER_HEIGHT))
+        layout.setOnRefreshLoadListener { loadCount += 1 }
+        measureAndLayout(layout)
+
+        layout.onTouchEvent(touchEvent(MotionEvent.ACTION_DOWN, pointer(id = 0, y = 0f)))
+        layout.onTouchEvent(touchEvent(MotionEvent.ACTION_MOVE, pointer(id = 0, y = -LOAD_MORE_DRAG_DISTANCE.toFloat())))
+        assertTrue(-layout.currentOffset > LOAD_MORE_TRIGGER_DISTANCE)
+        assertEquals(KitRefreshLoadLayout.RefreshLoadState.ReleaseToLoadMore, layout.state)
+        layout.onTouchEvent(touchEvent(MotionEvent.ACTION_CANCEL, pointer(id = 0, y = -LOAD_MORE_DRAG_DISTANCE.toFloat())))
+
+        assertEquals(0, loadCount)
+        assertEquals(0, layout.currentOffset)
+        assertEquals(KitRefreshLoadLayout.RefreshLoadState.Idle, layout.state)
     }
 
     /**
