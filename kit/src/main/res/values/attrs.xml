@@ -6,10 +6,13 @@
     <attr name="kitCodeInputEditTextStyle" format="reference" />
 
     <declare-styleable name="KitLineView">
+        <!-- 点、划和间隔均为沿线方向的长度, 保留亚像素精度, 不表示线条粗细. -->
         <attr name="kitDotWidth" format="dimension" />
         <attr name="kitDashWidth" format="dimension" />
         <attr name="kitGapWidth" format="dimension" />
+        <!-- 支持纯色和随 View 状态变化的 ColorStateList. -->
         <attr name="android:color" />
+        <!-- 使用 Android 原生枚举: horizontal=0, vertical=1, 默认 horizontal. -->
         <attr name="android:orientation" />
     </declare-styleable>
 

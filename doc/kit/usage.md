@@ -4,6 +4,10 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-09      | whisper | 补充标准分割线与 KitLineView 的选型建议 |
+| 2026-09-09      | whisper | 补充线条低版本硬件加速兼容说明 |
+| 2026-09-09      | whisper | 补充线条默认实线、状态色与运行时配置用法 |
+| 2026-09-09      | whisper | 补充线条横竖示例、尺寸语义与方向迁移 |
 | 2026-09-09      | whisper | 明确取消拖拽与菜单回调边界 |
 | 2026-09-09      | whisper | 补充短码触摸焦点、长按粘贴与图标背景用法 |
 | 2026-09-08      | whisper | 明确短码字符约束与 RTL 无障碍用法 |
@@ -202,6 +206,107 @@ Dialog Binding 在首次访问后按 Dialog 对象生命周期缓存, `dismiss()
 `view.feed` 的 `KitContentFeedCardUi`, `KitContentFeedCardViewHolder`, `KitContentFeedCoverHeight`,
 `KitContentFeedImageLoader` 以及 `view.share.KitShareSheetDialog` 不再提供, 对应专属资源一并移除.
 旧版本的外部消费者应由自己的业务模块或应用 `foundation` 维护内容卡片, 分享面板和相关资源, 按应用展示需求组合基础控件.
+
+### 4.1 线条绘制
+
+`KitLineView` 通过 XML, `kitLineViewStyle` 或运行时属性配置方向, 颜色和线型. 默认绘制水平实线,
+颜色使用主题的 `android:textColorSecondary` 状态色, 主题未提供时回退到 `Color.GRAY`.
+
+如果只需要固定尺寸的静态实线, 优先使用已有 UI 依赖提供的标准控件. 接入 Material Components 时可以使用
+`MaterialDivider`:
+
+```xml
+<com.google.android.material.divider.MaterialDivider
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:dividerThickness="1dp"
+    app:dividerColor="?attr/colorOutlineVariant" />
+```
+
+不使用 Material Components 时可以直接使用平台 `View`:
+
+```xml
+<View
+    android:layout_width="match_parent"
+    android:layout_height="1dp"
+    android:background="?android:attr/textColorSecondary" />
+```
+
+需要虚线、点划线、横竖方向统一配置、状态色或运行时调整时再使用 `KitLineView`.
+水平实线可显式设置高度控制粗细, 使用 `android:color` 覆盖默认颜色:
+
+```xml
+<com.whisper.kit.widget.KitLineView
+    android:id="@+id/divider"
+    android:layout_width="match_parent"
+    android:layout_height="1dp"
+    android:color="@color/divider"
+    android:orientation="horizontal" />
+```
+
+垂直虚线则使用宽度控制粗细, 高度控制线条长度:
+
+```xml
+<com.whisper.kit.widget.KitLineView
+    android:layout_width="1dp"
+    android:layout_height="48dp"
+    android:color="@color/divider"
+    android:orientation="vertical"
+    app:kitDashWidth="4dp"
+    app:kitGapWidth="2dp" />
+```
+
+示例的 `@color/divider` 由应用定义, `app` 使用 `http://schemas.android.com/apk/res-auto` 命名空间.
+`kitDotWidth`, `kitDashWidth` 和 `kitGapWidth` 表示沿线方向的点长, 划长和间隔, 均默认 0, 支持小数尺寸,
+负数按 0 处理. 间隔为 0 时显示实线, 无需设置点或划长度. 间隔为正且点划只有一者为正时显示虚线;
+两者均为正时交替显示两段, 配置不同长度可得到点划线; 两者均为 0 时没有可绘制的图案, 不显示线条.
+控件内部处理旧版 Android 的点划绘制兼容, 使用虚线或点划线时无需关闭硬件加速或配置软件图层.
+
+线条粗细等于控件扣除 padding 后的高度(水平)或宽度(垂直). 该方向使用 `wrap_content` 时,
+期望尺寸为 padding 总和加 1px, 并遵守 `minWidth` / `minHeight`, 背景最小尺寸及父布局上限.
+沿线方向在父布局提供尺寸上限时会填满可用尺寸, 即使配置 `wrap_content` 也不会按一组点划的长度收缩.
+padding 耗尽内容宽度或高度时不绘制线条.
+
+`android:color` 支持纯色和 selector. 例如应用的 `res/color/divider.xml` 可按禁用和选中状态配置颜色,
+其中引用的三个颜色资源由应用定义:
+
+```xml
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:color="@color/divider_disabled" />
+    <item android:state_selected="true" android:color="@color/divider_selected" />
+    <item android:color="@color/divider_default" />
+</selector>
+```
+
+selector 按 View 自身状态匹配; 调用 `isEnabled = false` 或 `isSelected = true` 后线色自动更新.
+聚焦状态同样可用, 但控件不会为状态色自动开启点击或焦点能力, 调用方应按交互需求配置相应 View 属性.
+
+运行时属性与 XML 配置对应, 修改后自动重绘. `dotWidth`, `dashWidth` 和 `gapWidth` 的单位为 px `Float`,
+负数按 0 处理, `NaN` 或无穷值会抛出 `IllegalArgumentException`:
+
+```kotlin
+val line = view.findViewById<KitLineView>(R.id.divider)
+line.orientation = KitLineView.HORIZONTAL
+line.dotWidth = 0f
+line.dashWidth = with(line.context) { 4.dp }
+line.gapWidth = with(line.context) { 2.dp }
+line.lineColors = requireNotNull(AppCompatResources.getColorStateList(line.context, R.color.divider))
+```
+
+示例使用第 2 节的 `dp` 扩展及 AndroidX `AppCompatResources`. 将 `gapWidth` 设为 `0f` 即可恢复实线.
+`lineColors` 接收非空 `ColorStateList`; 只需纯色时使用
+`line.setLineColor(ContextCompat.getColor(line.context, R.color.divider_default))`, 这会替换已有状态列表.
+`orientation` 仅接受 `KitLineView.HORIZONTAL` 或 `VERTICAL`, 非法值会抛出 `IllegalArgumentException`.
+改变方向会触发重新测量, 但不自动交换布局宽高; 例如将 `match_parent` 宽, `1dp` 高的水平线切换为垂直线时,
+调用方也应按布局需求调整宽高. 点划和间隔属性不控制线条粗细.
+
+方向默认 `horizontal`. `KitLineView.HORIZONTAL` 和 `VERTICAL` 现与 Android `LinearLayout` 保持一致,
+分别为 0 和 1, 旧版本的 1 和 2 不再适用. 引用旧常量的外部模块需要重新编译, 手写数值应改用常量或 XML 的
+`horizontal` / `vertical` 枚举. 旧布局若曾用 `android:orientation="vertical"` 绕过映射错误来显示水平线,
+应改为 `horizontal`; 使用正确枚举表达原始方向意图的布局无需修改.
+
+默认行为也发生变化: 未配置点划长度和间隔的实例现在显示实线, 颜色从纯白改为主题状态色.
+旧代码若通过全 0 线型隐藏控件, 应改用 `visibility` 或透明色; 需要固定白色时显式配置 `android:color`.
 
 ## 5. 富文本扩展
 

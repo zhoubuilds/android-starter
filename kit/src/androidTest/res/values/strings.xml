@@ -5,4 +5,12 @@
     <string name="kit_test_manual_ascii_label">字母与数字验证码</string>
     <string name="kit_test_manual_clear">清空</string>
     <string name="kit_test_manual_done">完成</string>
+    <string name="kit_test_manual_line_title">KitLineView</string>
+    <string name="kit_test_manual_line_solid">实线</string>
+    <string name="kit_test_manual_line_dashed">虚线</string>
+    <string name="kit_test_manual_line_mixed">点划线</string>
+    <string name="kit_test_manual_line_horizontal">横向</string>
+    <string name="kit_test_manual_line_vertical">纵向</string>
+    <string name="kit_test_manual_line_enabled">启用</string>
+    <string name="kit_test_manual_line_selected">选中</string>
 </resources>

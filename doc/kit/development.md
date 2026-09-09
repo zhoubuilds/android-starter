@@ -4,6 +4,12 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-09      | whisper | 补充标准分割线与 KitLineView 的职责边界 |
+| 2026-09-09      | whisper | 补齐线型变化时的原生路径缓存失效规则 |
+| 2026-09-09      | whisper | 补充线条低版本绘制兼容与路径更新回归 |
+| 2026-09-09      | whisper | 补充线条真实窗口像素回归验证 |
+| 2026-09-09      | whisper | 补齐线条运行时属性、默认实线与状态色规则 |
+| 2026-09-09      | whisper | 补齐线条方向、测量与亚像素绘制契约 |
 | 2026-09-09      | whisper | 补齐取消拖拽、菜单创建期与方向变化维护规则 |
 | 2026-09-09      | whisper | 补齐触摸焦点、长按粘贴与图标背景绘制契约 |
 | 2026-09-08      | whisper | 收敛短码无障碍节点和文本菜单契约 |
@@ -267,6 +273,43 @@ CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
 3. `feature/*`。
 4. `app`。
 
+### 5.3 线条绘制
+
+`KitLineView` 使用 `android:orientation` 指定方向. `HORIZONTAL` 和 `VERTICAL` 直接引用
+`LinearLayout.HORIZONTAL = 0` 和 `LinearLayout.VERTICAL = 1`, 默认水平; 构造器的 `Context` 必须非空.
+样式入口为 `kitLineViewStyle`; 运行时通过 `orientation`, `dotWidth`, `dashWidth`, `gapWidth` 和 `lineColors`
+配置对应属性, `setLineColor(@ColorInt Int)` 提供纯色设置入口.
+
+维护时不要为静态实线场景重复扩展 `KitLineView` 的能力. 调用方已接入 Material Components 时可使用
+`MaterialDivider`; 无 Material 依赖时使用带背景色和固定厚度的普通 `View`. `KitLineView` 负责虚线、点划线、
+横竖方向统一配置、状态色和运行时线型变化等超出基础分割线的能力.
+
+维护要求:
+
+1. `kitDotWidth`, `kitDashWidth` 和 `kitGapWidth` 分别表示沿线方向的点长, 划长和间隔, 使用 `getDimension()`
+   读取为 px `Float`, 保留亚像素精度. 三者均默认 0; XML 与运行时赋值均将负数归一化为 0,
+   运行时 setter 对 `NaN` 或无穷值抛出 `IllegalArgumentException`, 不修改已有值.
+2. 间隔为 0 时绘制实线, 包括点长和划长均为 0 的默认配置. 间隔为正时, 两段均为 0 则不绘制,
+   只有一段为正则重复该段, 两段均为正则交替绘制点和划. 不在构建 `DashPathEffect` 前将正数尺寸截断为整数.
+   线型属性改变后重建绘制效果并重绘, 不改变线条粗细或请求重新布局.
+3. 沿线方向使用 `getDefaultSize()` 测量, 父布局提供 `EXACTLY` 或 `AT_MOST` 时填满其可用尺寸.
+   交叉轴期望尺寸为 `max(两侧 padding 总和 + 1px, suggestedMinimum)`;
+   `suggestedMinimum` 包含 View 最小尺寸和背景最小尺寸. 使用 `resolveSizeAndState()` 遵守精确尺寸和父布局上限.
+4. 绘制区域按实际布局后的 `width` 和 `height` 扣除 padding 计算; 内容宽度或高度不大于 0 时直接结束绘制,
+   避免零粗细触发 Canvas hairline, 或反向线段进入 padding 区域. 线条粗细等于内容区域的交叉轴尺寸.
+5. `android:color` 使用 `getColorStateList()` 保留 selector. 未配置时读取主题的 `android:textColorSecondary`
+   `ColorStateList`, 主题未提供时使用 `ColorStateList.valueOf(Color.GRAY)`; 显式 XML 或样式颜色优先.
+   `lineColors` 为非空 `ColorStateList`, 替换后立即请求重绘; `setLineColor()` 用纯色列表替换现有状态列表.
+6. 线色按 View 自身的 `drawableState` 解析, 状态变化请求重绘, 不自动开启 `clickable` 或 `focusable`.
+   生命周期回调需兼容父类构造期间的调用, 避免在自有颜色或画笔字段初始化前访问它们.
+7. `orientation` 只接受 SDK 定义的 0 和 1, 非法值抛出 `IllegalArgumentException`, 不修改已有值.
+   方向改变后调用 `requestLayout()` 和 `invalidate()`, 不交换 `LayoutParams.width` 与 `height`.
+8. 实线使用 `drawLine()`, 带 `DashPathEffect` 的线型使用 `drawPath()`, 兼容旧版 HWUI 不支持在线段上应用
+   `PathEffect` 的限制, 不修改 View 的 `layerType`. 复用单个 `Path`, 在实际内容边界, 方向或线型变化后清空并重建,
+   避免残留旧线段. 旧版 HWUI 的纹理缓存键包含 effect 原生地址和 Path 版本; 线型改变时必须使路径版本更新,
+   防止旧 effect 回收后地址复用命中旧图案. 实线或空线型期间保留路径失效标记, 下次绘制点划线时再重建;
+   仅颜色变化或重复赋相同线型值时继续复用路径.
+
 ## 6. RecyclerView Decoration
 
 `recyclerview.decoration` 提供 RecyclerView item 间距和分割线装饰器。该工具只处理 item offset 和分割线绘制,
@@ -501,11 +544,19 @@ git diff --check
 单元测试启用 Android 资源以加载测试 XML. `kit/src/test/resources/robolectric.properties` 使用 `sdk=24` 保持原有默认测试基线,
 避免默认 SDK 随 Manifest 的 targetSdk 改变; 测试类或方法中的显式 `@Config` 继续覆盖该默认值.
 分格输入测试显式使用 API 34 Native Graphics, 验证长度过滤, 原生转换文本, 测量, Drawable 绘制及文本菜单限制.
+线条测试同样使用 API 34 Native Graphics, 验证方向, 测量, 亚像素线型, 默认颜色与运行时属性更新.
+通过 Canvas 绘制入口观察公开的 `Path.generationId`, 验证线型变化更新路径版本, 包括从实线或空线型切回点划线;
+颜色或状态变化及相同线型值赋值应保留路径版本. 该测试验证缓存失效条件, 不依赖 GC 或原生地址复用时机.
 涉及原生编辑器或窗口行为的修改还需连接设备或模拟器执行:
 
 ```bash
 ./gradlew :kit:connectedDebugAndroidTest -q
 ```
+
+线条设备测试在 API 26 及以上通过 `PixelCopy` 读取硬件加速窗口中的控件区域, 验证默认实线, 状态色和运行时线型与方向变化.
+状态或属性更新后应由控件自身请求重绘, 测试不得额外调用 `invalidate()` 掩盖刷新遗漏; 复制的像素仅在内存中检查.
+路径兼容回归还需覆盖连续绘制后的方向, padding 和实际布局尺寸变化, 确认没有残留旧线段或错误沿用旧边界.
+低版本硬件加速兼容需在 API 26 或 27 的设备或模拟器复跑线型测试; API 34 的 Native Graphics 和设备结果不能替代旧版 HWUI 验证.
 
 设备测试覆盖 InputConnection, Autofill, 原生 Layout 保留, 不声明或返回字符几何和静态背景停止重绘.
 长按粘贴回归通过真实触摸事件长按空输入框或空白格, 再点击系统浮动菜单中的粘贴项, 验证末尾插入和长度过滤;

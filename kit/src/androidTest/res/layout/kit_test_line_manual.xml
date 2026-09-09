@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="24dp"
+    android:orientation="vertical">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/kit_test_manual_line_title"
+        android:textColor="#17221B"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="8dp"
+        android:background="#F1F3F5"
+        android:padding="12dp">
+
+        <com.whisper.kit.widget.KitLineView
+            android:id="@+id/kit_test_manual_line"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_gravity="center"
+            android:color="@color/kit_test_line_colors"
+            android:orientation="horizontal"
+            app:kitDashWidth="8dp"
+            app:kitGapWidth="4dp" />
+    </FrameLayout>
+
+    <RadioGroup
+        android:id="@+id/kit_test_manual_line_pattern"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:checkedButton="@id/kit_test_manual_line_dashed"
+        android:orientation="horizontal">
+
+        <RadioButton
+            android:id="@+id/kit_test_manual_line_solid"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="48dp"
+            android:text="@string/kit_test_manual_line_solid" />
+
+        <RadioButton
+            android:id="@+id/kit_test_manual_line_dashed"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="48dp"
+            android:text="@string/kit_test_manual_line_dashed" />
+
+        <RadioButton
+            android:id="@+id/kit_test_manual_line_mixed"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="48dp"
+            android:text="@string/kit_test_manual_line_mixed" />
+    </RadioGroup>
+
+    <RadioGroup
+        android:id="@+id/kit_test_manual_line_orientation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:checkedButton="@id/kit_test_manual_line_horizontal"
+        android:orientation="horizontal">
+
+        <RadioButton
+            android:id="@+id/kit_test_manual_line_horizontal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="48dp"
+            android:text="@string/kit_test_manual_line_horizontal" />
+
+        <RadioButton
+            android:id="@+id/kit_test_manual_line_vertical"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="48dp"
+            android:text="@string/kit_test_manual_line_vertical" />
+    </RadioGroup>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <CheckBox
+            android:id="@+id/kit_test_manual_line_enabled"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:checked="true"
+            android:minHeight="48dp"
+            android:text="@string/kit_test_manual_line_enabled" />
+
+        <CheckBox
+            android:id="@+id/kit_test_manual_line_selected"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="48dp"
+            android:text="@string/kit_test_manual_line_selected" />
+    </LinearLayout>
+</LinearLayout>

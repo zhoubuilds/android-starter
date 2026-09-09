@@ -18,11 +18,13 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="32dp"
+            android:layout_marginBottom="20dp"
             android:text="@string/kit_test_manual_app_name"
             android:textColor="#17221B"
             android:textSize="24sp"
             android:textStyle="bold" />
+
+        <include layout="@layout/kit_test_line_manual" />
 
         <TextView
             android:layout_width="match_parent"
