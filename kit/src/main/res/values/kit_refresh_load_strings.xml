@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kit_refresh_load_action_refresh">Refresh</string>
+    <string name="kit_refresh_load_action_load_more">Load more</string>
+    <string name="kit_refresh_load_state_refreshing">Refreshing</string>
+    <string name="kit_refresh_load_state_loading_more">Loading more</string>
+</resources>

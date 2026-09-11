@@ -89,7 +89,7 @@ class KitRefreshLoadLayoutTest {
      * 验证外部滚动边界判定可以阻止下拉刷新.
      */
     @Test
-    fun childScrollUpCallback_blocksRefreshWhenContentCanScrollUp() {
+    fun scrollBoundaryCallback_blocksRefreshWhenContentCanScrollUp() {
         val layout: KitRefreshLoadLayout = createLayout()
         val header: View = createChild(width = MATCH_PARENT, height = HEADER_HEIGHT)
         val content: View = createChild(width = MATCH_PARENT, height = MATCH_PARENT)
@@ -100,7 +100,7 @@ class KitRefreshLoadLayoutTest {
         layout.refreshTriggerDistance = REFRESH_TRIGGER_DISTANCE
         layout.addView(header, roleParams(KitRefreshLoadLayout.ChildRole.Header, MATCH_PARENT, HEADER_HEIGHT))
         layout.addView(content)
-        layout.setOnChildScrollUpCallback { _, _ -> true }
+        layout.setScrollBoundaryCallback { _, _, direction -> direction < 0 }
         layout.setOnRefreshLoadListener { action: KitRefreshLoadLayout.RefreshLoadAction ->
             if (action == KitRefreshLoadLayout.RefreshLoadAction.Refresh) {
                 refreshCount += 1

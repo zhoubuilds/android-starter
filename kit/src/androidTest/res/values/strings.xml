@@ -30,4 +30,5 @@
     <string name="kit_test_range_end_label">Upper limit</string>
     <string name="kit_test_range_before">Before range</string>
     <string name="kit_test_range_after">After range</string>
+    <string name="kit_test_refresh_load_content_button">Order details</string>
 </resources>

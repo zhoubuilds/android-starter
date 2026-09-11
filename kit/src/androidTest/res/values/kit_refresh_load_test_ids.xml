@@ -1,0 +1,5 @@
+<resources>
+    <item name="kit_test_refresh_load_container" type="id" />
+    <item name="kit_test_refresh_load_content" type="id" />
+    <item name="kit_test_refresh_load_content_button" type="id" />
+</resources>

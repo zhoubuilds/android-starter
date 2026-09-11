@@ -5,6 +5,7 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
+import android.os.Bundle
 import android.util.AttributeSet
 import android.util.Log
 import android.view.LayoutInflater
@@ -12,14 +13,19 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.OverScroller
+import androidx.annotation.FloatRange
 import androidx.annotation.LayoutRes
 import androidx.annotation.Px
 import androidx.core.content.withStyledAttributes
 import androidx.core.view.NestedScrollingParent3
+import androidx.core.view.NestedScrollingParentHelper
 import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.isGone
 import com.whisper.kit.R
 import kotlin.math.abs
@@ -34,6 +40,8 @@ import kotlin.math.roundToInt
  * 不持有业务列表数据, 不处理页码、接口请求或业务错误.
  * 普通 LinearLayout 等不滚动内容可通过手势直接拉出 header/footer.
  * 支持 NestedScrolling 的可滚动内容可在滚到边界后连续交给容器处理刷新或加载.
+ * 原生 ScrollView 需开启 nestedScrollingEnabled, 其旧版嵌套回调按触摸处理;
+ * 原生惯性或程序滚动不发送嵌套增量, 这类滚动不保证自动加载和指示器衔接.
  * 可滚动但不支持 NestedScrolling 的内容可能无法提供连续边界衔接, 也可能无法触发滚动到底自动加载.
  *
  * @author whisper
@@ -49,7 +57,9 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
      * 下拉刷新是否可用.
      *
      * 该属性的有效值依赖 header 是否存在. 如果没有 header, 设置为 true 时会保持禁用并输出警告日志.
-     * 设置为 false 时, 如果当前正在下拉、释放刷新或刷新中, 会立即收起 header 并回到空闲状态.
+     * header 为 GONE 时禁止该方向的手势和无障碍动作, 不改变开关值或结束已提交任务.
+     * 设置为 false 时, 如果当前正在下拉、释放刷新或刷新中, 会开始收起 header;
+     * 收起期间为 [RefreshLoadState.Settling], 完成后回到空闲状态, 不取消调用方的业务请求.
      */
     var refreshEnabled: Boolean
         get() = refreshEnabledValue
@@ -61,7 +71,9 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
      * 上拉加载是否可用.
      *
      * 该属性的有效值依赖 footer 是否存在. 如果没有 footer, 设置为 true 时会保持禁用并输出警告日志.
-     * 设置为 false 时, 如果当前正在上拉、释放加载或加载中, 会立即收起 footer 并回到空闲状态.
+     * footer 为 GONE 时禁止该方向的手势、自动加载和无障碍动作, 不改变开关值或结束已提交任务.
+     * 设置为 false 时, 如果当前正在上拉、释放加载或加载中, 会开始收起 footer;
+     * 收起期间为 [RefreshLoadState.Settling], 完成后回到空闲状态, 不取消调用方的业务请求.
      */
     var loadMoreEnabled: Boolean
         get() = loadMoreEnabledValue
@@ -76,43 +88,74 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
      * 具体加载请求、分页和没有更多数据仍由调用方维护.
      */
     var autoLoadMoreEnabled: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            scrollRevision += 1
+        }
 
     /**
      * 刷新触发距离, 单位 px.
      *
      * 小于 0 时使用 header 高度作为触发距离, 0 会归一化为 1 px.
+     * 运行时修改会同步拖拽状态和组件距离, 不主动提交动作或重启忙碌、收起动画.
      */
-    @Px
+    @get:Px
+    @setparam:Px
     var refreshTriggerDistance: Int = DEFAULT_TRIGGER_DISTANCE
+        set(value) {
+            if (field == value) return
+            val previousDistance: Int = resolveRefreshTriggerDistance()
+            field = value
+            if (initialized && previousDistance != resolveRefreshTriggerDistance()) {
+                onEffectiveDistancesChanged()
+            }
+        }
 
     /**
      * 加载更多触发距离, 单位 px.
      *
      * 小于 0 时使用 footer 高度作为触发距离, 0 会归一化为 1 px.
+     * 运行时修改会同步拖拽状态和组件距离, 不主动提交动作或重启忙碌、收起动画.
      */
-    @Px
+    @get:Px
+    @setparam:Px
     var loadMoreTriggerDistance: Int = DEFAULT_TRIGGER_DISTANCE
+        set(value) {
+            if (field == value) return
+            val previousDistance: Int = resolveLoadMoreTriggerDistance()
+            field = value
+            if (initialized && previousDistance != resolveLoadMoreTriggerDistance()) {
+                onEffectiveDistancesChanged()
+            }
+        }
 
     /**
      * 最大拖拽显示距离, 单位 px. 小于等于 0 时使用触发距离的两倍.
      */
-    @Px
+    @get:Px
+    @setparam:Px
     var maxDragDistance: Int = 0
 
     /**
      * 基础拖拽阻尼. 值越大, 内容跟随手指移动越慢.
      *
      * 实际拖拽阻尼会随已拉出距离增加, 越接近最大拖拽距离阻力越大.
+     * 有限值小于 1 时按 1 处理; NaN 或无穷值抛出 IllegalArgumentException, 保留原值.
      */
+    @get:FloatRange(from = 1.0, to = Double.MAX_VALUE)
+    @setparam:FloatRange(from = -Double.MAX_VALUE, to = Double.MAX_VALUE)
     var dragResistance: Float = DEFAULT_DRAG_RESISTANCE
         set(value) {
+            require(value.isFinite()) { "Drag resistance must be finite." }
             field = max(MIN_DRAG_RESISTANCE, value)
         }
 
     /**
      * 回弹和收起动画时长, 单位毫秒.
      *
-     * 该时长用于释放后从拖拽距离回弹到 header/footer 高度, 也用于刷新或加载完成后收起 header/footer.
+     * 该时长用于 header/footer 展开及收起的位置动画, 小于等于 0 时直接定位.
+     * 展开目标为组件高度与上下 margin 之和; 总和非正时使用该方向的有效触发距离.
      */
     var animationDurationMillis: Long = DEFAULT_ANIMATION_DURATION_MILLIS
 
@@ -150,9 +193,9 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     private var refreshLoadListener: OnRefreshLoadListener? = null
 
     /**
-     * 内容是否还能继续向顶部滚动的外部判定.
+     * 内容是否还能继续向指定方向滚动的外部判定.
      */
-    private var childScrollUpCallback: OnChildScrollUpCallback? = null
+    private var scrollBoundaryCallback: ScrollBoundaryCallback? = null
 
     /**
      * 当前正在执行的位移动画, 开始新拖拽或新动画前需要取消.
@@ -188,6 +231,49 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
      * 当前是否已由容器接管手势拖拽.
      */
     private var dragging: Boolean = false
+
+    /** 阻尼换算后不足一个像素的位移, 在同一拖动内继续累计. */
+    private var dragRemainder: Float = 0f
+
+    /** 已取消或完成的触摸会话不再提交, 仅新的 DOWN 或嵌套会话解除阻止. */
+    private var touchInteractionBlocked: Boolean = false
+
+    /** 非触摸滚动独立开启会话, 不依赖下一次手指按下恢复. */
+    private var nonTouchInteractionBlocked: Boolean = false
+
+    private var nestedTouchTarget: View? = null
+    private var nestedNonTouchTarget: View? = null
+    private val nestedScrollingParentHelper: NestedScrollingParentHelper = NestedScrollingParentHelper(this)
+    private var touchSequenceActive: Boolean = false
+    private var nestedTouchStopPending: Boolean = false
+    private var dispatchingTouchCancel: Boolean = false
+
+    /** 组件同步回调可以结束操作, 用版本判断后续通知是否仍然有效. */
+    private var stateRevision: Long = 0L
+    private var offsetRevision: Long = 0L
+    private var distanceRevision: Long = 0L
+    /** 状态、位移及会话变化后, 外部边界回调所在的旧滚动计算不再有效. */
+    private var scrollRevision: Long = 0L
+    private var startingAction: Boolean = false
+    private var initialized: Boolean = false
+
+    /** 程序同步或主动操作可早于首次布局, 保留目标直到对应组件的尺寸可用. */
+    private var pendingActionPosition: RefreshLoadAction? = null
+    private var animatePendingActionPosition: Boolean = false
+
+    // 首次状态通知可能改变组件尺寸; 尺寸重测时只补位移快照, 不重复通知同一状态.
+    private val pendingComponentStates: MutableSet<View> = linkedSetOf()
+    private val pendingComponentSnapshots: MutableSet<View> = linkedSetOf()
+    private val deliveredComponentSnapshots: MutableMap<View, ComponentOffsetSnapshot> = mutableMapOf()
+    private var synchronizedRefreshTriggerDistance: Int = 1
+    private var synchronizedLoadMoreTriggerDistance: Int = 1
+    private var synchronizedRefreshHoldDistance: Int = 1
+    private var synchronizedLoadMoreHoldDistance: Int = 1
+    private val synchronizeComponentsAfterLayout: Runnable = Runnable {
+        synchronizeComponentDistances()
+        synchronizePendingComponents()
+        positionPendingActionIfReady()
+    }
 
     /**
      * 当前跟踪的触摸指针 id.
@@ -279,6 +365,10 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
             ).toLong()
             recycle()
         }
+        initialized = true
+        if (importantForAccessibility == IMPORTANT_FOR_ACCESSIBILITY_AUTO) {
+            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+        }
     }
 
     override fun generateDefaultLayoutParams(): LayoutParams =
@@ -293,6 +383,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     override fun generateLayoutParams(params: ViewGroup.LayoutParams): LayoutParams =
         when (params) {
             is LayoutParams -> LayoutParams(params)
+            is FrameLayout.LayoutParams -> LayoutParams(params)
             is MarginLayoutParams -> LayoutParams(params)
             else -> LayoutParams(params)
         }
@@ -310,19 +401,30 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
 
     override fun onViewAdded(child: View) {
         super.onViewAdded(child)
+        scrollRevision += 1
+        if (child is KitRefreshLoadComponent) {
+            pendingComponentStates.add(child)
+            pendingComponentSnapshots.add(child)
+        }
         validateChildRoles()
         bringIndicatorChildrenToFront()
         if (childrenResolved) {
             updateEnabledByChildAvailability()
         }
+        notifyAccessibilityStateChanged()
     }
 
     override fun onViewRemoved(child: View) {
         super.onViewRemoved(child)
+        scrollRevision += 1
+        pendingComponentStates.remove(child)
+        pendingComponentSnapshots.remove(child)
+        deliveredComponentSnapshots.remove(child)
         if (childrenResolved) {
             childrenResolved = false
             requestLayout()
         }
+        notifyAccessibilityStateChanged()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -338,6 +440,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         bottom: Int,
     ) {
         resolveChildAvailability()
+        super.onLayout(changed, left, top, right, bottom)
         for (index: Int in 0 until childCount) {
             val child: View = getChildAt(index)
             if (child.isGone) continue
@@ -346,28 +449,135 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
             when (layoutParams.role) {
                 ChildRole.Header -> layoutHeader(child, layoutParams)
                 ChildRole.Footer -> layoutFooter(child, layoutParams)
-                ChildRole.Content -> layoutContent(child, layoutParams)
+                ChildRole.Content -> Unit
             }
             applyChildTranslation(child)
+        }
+        if (isInLayout) {
+            // ViewRoot 会延后或过滤布局回调内的 requestLayout, 在布局结束后通知才能可靠处理组件改尺寸/替换.
+            if (pendingComponentSnapshots.isNotEmpty() || pendingActionPosition != null || haveComponentDistancesChanged()) {
+                removeCallbacks(synchronizeComponentsAfterLayout)
+                post(synchronizeComponentsAfterLayout)
+            }
+        } else {
+            synchronizeComponentDistances()
+            synchronizePendingComponents()
+            positionPendingActionIfReady(fromLayout = true)
         }
     }
 
     override fun onDetachedFromWindow() {
-        stopIndicatorFling()
-        activeAnimator?.cancel()
+        removeCallbacks(synchronizeComponentsAfterLayout)
+        nestedTouchTarget = null
+        nestedNonTouchTarget = null
+        nestedScrollingParentHelper.onStopNestedScroll(this, ViewCompat.TYPE_TOUCH)
+        nestedScrollingParentHelper.onStopNestedScroll(this, ViewCompat.TYPE_NON_TOUCH)
+        cancelTouchInteraction(animate = false)
         super.onDetachedFromWindow()
     }
 
+    override fun setEnabled(enabled: Boolean) {
+        if (isEnabled == enabled) return
+        super.setEnabled(enabled)
+        if (initialized && !enabled) {
+            cancelTouchInteraction(animate = false)
+        }
+        notifyAccessibilityStateChanged()
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        val compat: AccessibilityNodeInfoCompat = AccessibilityNodeInfoCompat.wrap(info)
+        if (canPerformAccessibilityAction(RefreshLoadAction.Refresh)) {
+            compat.addAction(
+                AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                    R.id.kit_accessibility_action_refresh,
+                    context.getString(R.string.kit_refresh_load_action_refresh),
+                ),
+            )
+        }
+        if (canPerformAccessibilityAction(RefreshLoadAction.LoadMore)) {
+            compat.addAction(
+                AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                    R.id.kit_accessibility_action_load_more,
+                    context.getString(R.string.kit_refresh_load_action_load_more),
+                ),
+            )
+        }
+        if (compat.stateDescription == null && ViewCompat.getStateDescription(this) == null) {
+            compat.stateDescription = when (state) {
+                RefreshLoadState.Refreshing -> context.getString(R.string.kit_refresh_load_state_refreshing)
+                RefreshLoadState.LoadingMore -> context.getString(R.string.kit_refresh_load_state_loading_more)
+                else -> null
+            }
+        }
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean {
+        val refreshLoadAction: RefreshLoadAction = when (action) {
+            R.id.kit_accessibility_action_refresh -> RefreshLoadAction.Refresh
+            R.id.kit_accessibility_action_load_more -> RefreshLoadAction.LoadMore
+            else -> return super.performAccessibilityAction(action, arguments)
+        }
+        if (!canPerformAccessibilityAction(refreshLoadAction)) return false
+        blockCurrentInteractions()
+        beginAction(refreshLoadAction)
+        return true
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        val wasDispatchingTouchCancel: Boolean = dispatchingTouchCancel
+        val revision: Long = stateRevision
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                scrollRevision += 1
+                touchInteractionBlocked = !isEnabled
+                touchSequenceActive = true
+                nestedTouchStopPending = false
+                stopIndicatorFling()
+            }
+            // 子 View 会在处理 CANCEL 时先调用 onStopNestedScroll, 必须提前标记取消.
+            MotionEvent.ACTION_CANCEL -> {
+                scrollRevision += 1
+                touchInteractionBlocked = true
+                dispatchingTouchCancel = true
+            }
+        }
+        return try {
+            super.dispatchTouchEvent(event)
+        } finally {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_UP -> {
+                    touchSequenceActive = false
+                    val shouldSettle: Boolean = nestedTouchStopPending
+                    nestedTouchStopPending = false
+                    if (shouldSettle) {
+                        settleByCurrentOffset()
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    dispatchingTouchCancel = wasDispatchingTouchCancel
+                    // 直接与嵌套分发共用一次清理; 子回调新建的任务不属于旧取消事件.
+                    if (!wasDispatchingTouchCancel && (stateRevision == revision || !isBusyState())) {
+                        cancelTouchInteraction(animate = true)
+                    }
+                }
+            }
+        }
+    }
+
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
-        if (!isEnabled || isBusyState()) return false
+        if (!isEnabled || isBusyState() || nestedTouchTarget != null) return false
 
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                scrollRevision += 1
                 activePointerId = ev.getPointerId(0)
                 lastMotionY = ev.y
                 initialMotionY = ev.y
                 dragging = false
-                activeAnimator?.cancel()
+                dragRemainder = 0f
+                touchInteractionBlocked = false
                 stopIndicatorFling()
             }
 
@@ -377,8 +587,8 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
 
                 val y: Float = ev.getY(pointerIndex)
                 val dy: Float = y - initialMotionY
-                if (abs(dy) > touchSlop && canDragBy(dy)) {
-                    dragging = true
+                if (!touchInteractionBlocked && abs(dy) > touchSlop && canDragBy(dy)) {
+                    beginTouchDrag()
                     lastMotionY = y
                     return true
                 }
@@ -391,6 +601,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
             -> {
                 dragging = false
                 activePointerId = INVALID_POINTER_ID
+                dragRemainder = 0f
             }
         }
         return super.onInterceptTouchEvent(ev)
@@ -403,38 +614,41 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                scrollRevision += 1
                 activePointerId = event.getPointerId(0)
                 lastMotionY = event.y
                 initialMotionY = event.y
-                activeAnimator?.cancel()
+                dragging = false
+                dragRemainder = 0f
+                touchInteractionBlocked = false
                 stopIndicatorFling()
                 return true
             }
 
             MotionEvent.ACTION_MOVE -> {
+                if (touchInteractionBlocked || isBusyState()) return false
                 val pointerIndex: Int = event.findPointerIndex(activePointerId)
                 if (pointerIndex < 0) return false
 
                 val y: Float = event.getY(pointerIndex)
                 val dy: Float = y - lastMotionY
                 if (!dragging && abs(y - initialMotionY) > touchSlop && canDragBy(y - initialMotionY)) {
-                    dragging = true
+                    beginTouchDrag()
                 }
                 if (dragging) {
-                    moveOffsetBy(dy)
-                    lastMotionY = y
-                    return true
+                    if (moveOffsetBy(dy)) {
+                        if (dragging) lastMotionY = y
+                        return true
+                    }
+                    return false
                 }
             }
 
             MotionEvent.ACTION_POINTER_UP -> handlePointerUp(event)
 
             MotionEvent.ACTION_CANCEL -> {
-                dragging = false
-                activePointerId = INVALID_POINTER_ID
-                if (contentOffset != 0 && !isBusyState()) {
-                    changeState(RefreshLoadState.Settling)
-                    animateToOffset(0, animate = true)
+                if (!dispatchingTouchCancel) {
+                    cancelTouchInteraction(animate = true)
                 }
                 return true
             }
@@ -443,10 +657,12 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
                 if (dragging || contentOffset != 0) {
                     dragging = false
                     activePointerId = INVALID_POINTER_ID
+                    dragRemainder = 0f
                     settleByCurrentOffset()
                     return true
                 }
                 activePointerId = INVALID_POINTER_ID
+                dragRemainder = 0f
             }
         }
         return super.onTouchEvent(event)
@@ -459,6 +675,38 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
      */
     override fun performClick(): Boolean =
         super.performClick()
+
+    override fun getNestedScrollAxes(): Int = nestedScrollingParentHelper.nestedScrollAxes
+
+    // Framework 和旧版 AndroidX 没有 type 的入口统一按 TOUCH 桥接, 不从速度推测滚动类型.
+    override fun onStartNestedScroll(child: View, target: View, axes: Int): Boolean =
+        onStartNestedScroll(child, target, axes, ViewCompat.TYPE_TOUCH)
+
+    override fun onNestedScrollAccepted(child: View, target: View, axes: Int) {
+        onNestedScrollAccepted(child, target, axes, ViewCompat.TYPE_TOUCH)
+    }
+
+    override fun onNestedPreScroll(target: View, dx: Int, dy: Int, consumed: IntArray) {
+        onNestedPreScroll(target, dx, dy, consumed, ViewCompat.TYPE_TOUCH)
+    }
+
+    override fun onNestedScroll(
+        target: View,
+        dxConsumed: Int,
+        dyConsumed: Int,
+        dxUnconsumed: Int,
+        dyUnconsumed: Int,
+    ) {
+        onNestedScroll(target, dxConsumed, dyConsumed, dxUnconsumed, dyUnconsumed, ViewCompat.TYPE_TOUCH)
+    }
+
+    override fun onStopNestedScroll(target: View) {
+        onStopNestedScroll(target, ViewCompat.TYPE_TOUCH)
+        // 旧版协议没有独立的 NON_TOUCH stop, 未交给新协议的速度随旧会话结束.
+        if (nestedNonTouchTarget == null) {
+            pendingIndicatorFlingVelocityY = 0f
+        }
+    }
 
     override fun onStartNestedScroll(
         child: View,
@@ -479,7 +727,20 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         target: View,
         axes: Int,
         type: Int,
-    ) = Unit
+    ) {
+        scrollRevision += 1
+        nestedScrollingParentHelper.onNestedScrollAccepted(child, target, axes, type)
+        if (type == ViewCompat.TYPE_TOUCH) {
+            stopIndicatorFling()
+            nestedTouchTarget = target
+            touchInteractionBlocked = !isEnabled
+            nestedTouchStopPending = false
+            dragRemainder = 0f
+        } else if (type == ViewCompat.TYPE_NON_TOUCH) {
+            nestedNonTouchTarget = target
+            nonTouchInteractionBlocked = !isEnabled
+        }
+    }
 
     override fun onNestedPreScroll(
         target: View,
@@ -488,6 +749,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         consumed: IntArray,
         type: Int,
     ) {
+        if (isNestedInteractionBlocked(type)) return
         if (isBusyState()) {
             consumeBusyIndicatorPreScroll(target, dy, consumed)
             return
@@ -496,11 +758,15 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
 
         if (dy > 0 && contentOffset > 0) {
             val consumeY: Int = min(dy, contentOffset)
-            setContentOffset(contentOffset - consumeY)
+            cancelOffsetAnimations()
+            dragRemainder = 0f
+            setContentOffset(contentOffset - consumeY, fromDrag = true)
             consumed[1] += consumeY
         } else if (dy < 0 && contentOffset < 0) {
             val consumeY: Int = max(dy, contentOffset)
-            setContentOffset(contentOffset - consumeY)
+            cancelOffsetAnimations()
+            dragRemainder = 0f
+            setContentOffset(contentOffset - consumeY, fromDrag = true)
             consumed[1] += consumeY
         }
     }
@@ -514,22 +780,28 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         type: Int,
         consumed: IntArray,
     ) {
+        if (isNestedInteractionBlocked(type)) return
         if (isBusyState()) {
             followIndicatorWithContentScroll(
                 target = target,
                 dyUnconsumed = dyUnconsumed,
+                consumed = consumed,
             )
             return
         }
+        val revision: Long = scrollRevision
         if (dispatchAutoLoadMoreIfNeeded(target, dyConsumed, dyUnconsumed)) return
+        if (scrollRevision != revision || isNestedInteractionBlocked(type)) return
         if (type != ViewCompat.TYPE_TOUCH) return
 
         if (dyUnconsumed < 0 && canStartRefreshDrag(target)) {
-            moveOffsetBy(-dyUnconsumed.toFloat())
-            consumed[1] += dyUnconsumed
+            if (moveOffsetBy(-dyUnconsumed.toFloat(), target)) {
+                consumed[1] += dyUnconsumed
+            }
         } else if (dyUnconsumed > 0 && canStartLoadMoreDrag(target)) {
-            moveOffsetBy(-dyUnconsumed.toFloat())
-            consumed[1] += dyUnconsumed
+            if (moveOffsetBy(-dyUnconsumed.toFloat(), target)) {
+                consumed[1] += dyUnconsumed
+            }
         }
     }
 
@@ -554,16 +826,34 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     }
 
     override fun onStopNestedScroll(target: View, type: Int) {
+        scrollRevision += 1
+        nestedScrollingParentHelper.onStopNestedScroll(target, type)
         if (type == ViewCompat.TYPE_NON_TOUCH) {
+            nestedNonTouchTarget = null
             pendingIndicatorFlingVelocityY = 0f
             return
         }
         if (type != ViewCompat.TYPE_TOUCH) return
 
+        nestedTouchTarget = null
+        dragRemainder = 0f
+        if (!isEnabled || touchInteractionBlocked) return
+        // ViewGroup 内部清理子触摸目标时, CANCEL 会绕过本容器的 dispatchTouchEvent.
+        // 真实触摸序列只在收到 UP 后结算, 避免把这类嵌套停止当成释放.
+        if (touchSequenceActive) {
+            nestedTouchStopPending = true
+            return
+        }
         settleByCurrentOffset()
     }
 
     override fun onNestedPreFling(target: View, velocityX: Float, velocityY: Float): Boolean {
+        if (!isEnabled || touchInteractionBlocked) return false
+        scrollRevision += 1
+        if (isBusyState() && !isBusyIndicatorAvailable()) {
+            stopIndicatorFling()
+            return false
+        }
         pendingIndicatorFlingVelocityY = when {
             state == RefreshLoadState.Refreshing &&
                 velocityY < 0f &&
@@ -593,25 +883,28 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     /**
      * 设置刷新加载触发监听器.
      *
-     * @param listener 用户触发刷新或加载更多时的回调.
+     * @param listener 拖拽释放、自动加载或无障碍动作触发的回调; null 表示移除监听.
      */
     fun setOnRefreshLoadListener(listener: OnRefreshLoadListener?) {
         refreshLoadListener = listener
     }
 
     /**
-     * 设置内容是否还能继续向顶部滚动的外部判定.
+     * 设置内容是否还能继续向指定方向滚动的外部判定.
      *
      * 嵌套滚动层级复杂时, 直接 content child 的 [View.canScrollVertically] 可能无法代表真实列表边界.
+     * 自定义判定同时用于拖拽、自动加载和忙碌期间的头尾滚动交接, 不替代启用状态或触发距离检查.
      *
-     * @param callback 内容向上滚动能力判定, 传入 null 时恢复默认 View 判定.
+     * @param callback 内容滚动能力判定, 传入 null 时恢复当前滚动目标的默认 View 判定.
      */
-    fun setOnChildScrollUpCallback(callback: OnChildScrollUpCallback?) {
-        childScrollUpCallback = callback
+    fun setScrollBoundaryCallback(callback: ScrollBoundaryCallback?) {
+        scrollBoundaryCallback = callback
     }
 
     /**
-     * 结束刷新并收起 header.
+     * 结束刷新显示并收起 header, 也可取消该方向尚未提交的拖拽.
+     *
+     * 当前为加载更多任务时不处理; 调用方的业务请求仍由调用方结束或取消.
      *
      * @param animate 是否使用动画切换位置.
      */
@@ -620,7 +913,9 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     }
 
     /**
-     * 结束加载更多并收起 footer.
+     * 结束加载更多显示并收起 footer, 也可取消该方向尚未提交的拖拽.
+     *
+     * 当前为刷新任务时不处理; 调用方的业务请求仍由调用方结束或取消.
      *
      * @param animate 是否使用动画切换位置.
      */
@@ -628,18 +923,100 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         resetLoadMoreState(animate)
     }
 
+    /**
+     * 同步业务当前任务的显示状态, 不触发 [OnRefreshLoadListener].
+     *
+     * 不受交互启用开关限制. 相同忙碌状态保留当前位置和动画; null 在空闲或收起期间重复同步也不重启动画.
+     * 同步其它状态会结束未提交手势, null 会收起已有拖拽. 组件尚未布局、缺失或为 GONE 时等待尺寸可用后再定位.
+     * 不保存或恢复业务请求, 页面重建后应由调用方再次同步真实任务状态.
+     *
+     * @param action 当前任务, null 表示清除忙碌显示并收起指示器.
+     * @param animate 是否播放位置动画, 恢复或首次同步默认直接定位.
+     */
+    @JvmOverloads
+    fun setActiveAction(action: RefreshLoadAction?, animate: Boolean = false) {
+        if (action == null) {
+            if (state == RefreshLoadState.Idle || state == RefreshLoadState.Settling) return
+            startingAction = false
+            settleToRest(animate)
+            return
+        }
+        val busyState: RefreshLoadState = busyStateFor(action)
+        if (state == busyState) return
+
+        blockCurrentInteractions()
+        cancelOffsetAnimations()
+        stopIndicatorFling()
+        startingAction = false
+        pendingActionPosition = action
+        animatePendingActionPosition = animate
+        if (!changeState(busyState)) return
+        positionPendingActionIfReady()
+        if (pendingActionPosition != null) requestLayout()
+    }
+
     private fun resetRefreshState(animate: Boolean = true) {
         if (!isHeaderState()) return
 
-        changeState(RefreshLoadState.Settling)
-        animateToOffset(0, animate)
+        settleToRest(animate)
     }
 
     private fun resetLoadMoreState(animate: Boolean = true) {
         if (!isFooterState()) return
 
-        changeState(RefreshLoadState.Settling)
-        animateToOffset(0, animate)
+        settleToRest(animate)
+    }
+
+    private fun beginTouchDrag() {
+        dragRemainder = 0f
+        dragging = true
+        takeOverOffsetAnimation()
+    }
+
+    private fun takeOverOffsetAnimation() {
+        cancelOffsetAnimations()
+        // 接管后的首帧可能没有有效位移, 仍需离开回弹状态以便松手时正常收尾.
+        if (state == RefreshLoadState.Settling) {
+            updatePullState()
+        }
+    }
+
+    private fun isNestedInteractionBlocked(type: Int): Boolean =
+        !isEnabled || if (type == ViewCompat.TYPE_NON_TOUCH) {
+            nonTouchInteractionBlocked
+        } else {
+            touchInteractionBlocked
+        }
+
+    private fun blockCurrentInteractions() {
+        scrollRevision += 1
+        touchInteractionBlocked = true
+        nonTouchInteractionBlocked = true
+        touchSequenceActive = false
+        nestedTouchStopPending = false
+        dragging = false
+        activePointerId = INVALID_POINTER_ID
+        dragRemainder = 0f
+    }
+
+    private fun cancelTouchInteraction(animate: Boolean) {
+        blockCurrentInteractions()
+        stopIndicatorFling()
+        if ((isBusyState() && !startingAction) || (state == RefreshLoadState.Idle && contentOffset == 0)) {
+            cancelOffsetAnimator()
+        } else {
+            settleToRest(animate)
+        }
+    }
+
+    private fun settleToRest(animate: Boolean) {
+        pendingActionPosition = null
+        blockCurrentInteractions()
+        stopIndicatorFling()
+        if (animate && state == RefreshLoadState.Settling && activeAnimator != null) return
+        if (changeState(RefreshLoadState.Settling)) {
+            animateToOffset(0, animate)
+        }
     }
 
     private fun setRefreshEnabled(value: Boolean, warnIfMissing: Boolean) {
@@ -668,16 +1045,20 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
 
     private fun fieldSetRefreshEnabled(value: Boolean) {
         refreshEnabledValue = value
-        if (!value && isHeaderState()) {
+        scrollRevision += 1
+        if (!value && isHeaderState() && (!refreshEnabledRequested || pendingActionPosition != RefreshLoadAction.Refresh)) {
             resetRefreshState()
         }
+        notifyAccessibilityStateChanged()
     }
 
     private fun fieldSetLoadMoreEnabled(value: Boolean) {
         loadMoreEnabledValue = value
-        if (!value && isFooterState()) {
+        scrollRevision += 1
+        if (!value && isFooterState() && (!loadMoreEnabledRequested || pendingActionPosition != RefreshLoadAction.LoadMore)) {
             resetLoadMoreState()
         }
+        notifyAccessibilityStateChanged()
     }
 
     private fun updateEnabledByChildAvailability() {
@@ -723,11 +1104,12 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         activePointerId = event.getPointerId(newPointerIndex)
         lastMotionY = event.getY(newPointerIndex)
         initialMotionY = lastMotionY
+        dragRemainder = 0f
     }
 
     private fun layoutHeader(child: View, layoutParams: LayoutParams) {
-        val childLeft: Int = paddingLeft + layoutParams.leftMargin
-        val childTop: Int = paddingTop + layoutParams.topMargin - child.measuredHeight
+        val childLeft: Int = child.left
+        val childTop: Int = paddingTop - child.measuredHeight - layoutParams.bottomMargin
         child.layout(
             childLeft,
             childTop,
@@ -737,19 +1119,8 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     }
 
     private fun layoutFooter(child: View, layoutParams: LayoutParams) {
-        val childLeft: Int = paddingLeft + layoutParams.leftMargin
-        val childTop: Int = measuredHeight - paddingBottom - layoutParams.bottomMargin
-        child.layout(
-            childLeft,
-            childTop,
-            childLeft + child.measuredWidth,
-            childTop + child.measuredHeight,
-        )
-    }
-
-    private fun layoutContent(child: View, layoutParams: LayoutParams) {
-        val childLeft: Int = paddingLeft + layoutParams.leftMargin
-        val childTop: Int = paddingTop + layoutParams.topMargin
+        val childLeft: Int = child.left
+        val childTop: Int = measuredHeight - paddingBottom + layoutParams.topMargin
         child.layout(
             childLeft,
             childTop,
@@ -829,29 +1200,32 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         }
 
     private fun canStartRefreshDrag(target: View?): Boolean =
-        refreshEnabled &&
-            !isBusyState() &&
-            state != RefreshLoadState.LoadingMore &&
-            !canChildScrollUp(target)
+        isAtScrollBoundary(target, -1) {
+            isActionInteractionEnabled(RefreshLoadAction.Refresh) && !isBusyState() && !touchInteractionBlocked
+        }
 
     private fun canStartLoadMoreDrag(target: View?): Boolean =
-        loadMoreEnabled &&
-            !isBusyState() &&
-            state != RefreshLoadState.Refreshing &&
-            (target == null || !target.canScrollVertically(1))
+        isAtScrollBoundary(target, 1) {
+            isActionInteractionEnabled(RefreshLoadAction.LoadMore) && !isBusyState() && !touchInteractionBlocked
+        }
 
     private fun canAutoLoadMore(target: View, dyConsumed: Int, dyUnconsumed: Int): Boolean =
-        autoLoadMoreEnabled &&
-            loadMoreEnabled &&
-            !isBusyState() &&
-            state == RefreshLoadState.Idle &&
-            contentOffset == 0 &&
-            (dyConsumed > 0 || dyUnconsumed > 0) &&
-            !target.canScrollVertically(1)
+        isAtScrollBoundary(target, 1) {
+            autoLoadMoreEnabled && isActionInteractionEnabled(RefreshLoadAction.LoadMore) &&
+                state == RefreshLoadState.Idle && contentOffset == 0 && (dyConsumed > 0 || dyUnconsumed > 0)
+        }
 
-    private fun canChildScrollUp(target: View?): Boolean {
-        return childScrollUpCallback?.canChildScrollUp(this, target)
-            ?: (target?.canScrollVertically(-1) == true)
+    private inline fun isAtScrollBoundary(target: View?, direction: Int, isAvailable: () -> Boolean): Boolean {
+        if (!isAvailable()) return false
+        val revision: Long = scrollRevision
+        val canScroll: Boolean = canChildScroll(target, direction)
+        // 边界查询允许同步结束任务或重建会话; 旧查询不能继续移动内容、消费滚动或启动惯性.
+        return scrollRevision == revision && !canScroll && isAvailable()
+    }
+
+    private fun canChildScroll(target: View?, direction: Int): Boolean {
+        return scrollBoundaryCallback?.canScrollVertically(this, target, direction)
+            ?: (target?.canScrollVertically(direction) == true)
     }
 
     private fun dispatchAutoLoadMoreIfNeeded(
@@ -869,29 +1243,66 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         state == RefreshLoadState.Refreshing || state == RefreshLoadState.LoadingMore
 
     private fun isHeaderState(): Boolean =
-        state == RefreshLoadState.PullingDown ||
-            state == RefreshLoadState.ReleaseToRefresh ||
-            state == RefreshLoadState.Refreshing ||
-            contentOffset > 0
+        if (isBusyState()) {
+            state == RefreshLoadState.Refreshing
+        } else {
+            state == RefreshLoadState.PullingDown || state == RefreshLoadState.ReleaseToRefresh || contentOffset > 0
+        }
 
     private fun isFooterState(): Boolean =
-        state == RefreshLoadState.PullingUp ||
-            state == RefreshLoadState.ReleaseToLoadMore ||
-            state == RefreshLoadState.LoadingMore ||
-            contentOffset < 0
-
-    private fun moveOffsetBy(deltaY: Float) {
-        if (deltaY == 0f) return
-
-        val adjustedDelta: Int = (deltaY / resolveDragResistance(deltaY)).roundToInt()
-        if (adjustedDelta == 0) return
-
-        val newOffset: Int = when {
-            adjustedDelta > 0 -> min(contentOffset + adjustedDelta, resolveMaxRefreshDistance())
-            adjustedDelta < 0 -> max(contentOffset + adjustedDelta, -resolveMaxLoadMoreDistance())
-            else -> contentOffset
+        if (isBusyState()) {
+            state == RefreshLoadState.LoadingMore
+        } else {
+            state == RefreshLoadState.PullingUp || state == RefreshLoadState.ReleaseToLoadMore || contentOffset < 0
         }
-        setContentOffset(newOffset)
+
+    private fun moveOffsetBy(deltaY: Float, target: View? = contentView): Boolean {
+        if (deltaY == 0f || !isEnabled || touchInteractionBlocked || isBusyState()) return false
+
+        takeOverOffsetAnimation()
+        if (!isEnabled || touchInteractionBlocked || isBusyState()) return false
+        val revision: Long = scrollRevision
+        val accumulatedDelta: Float = dragRemainder + deltaY / resolveDragResistance(deltaY)
+        val adjustedDelta: Int = accumulatedDelta.roundToInt()
+        if (adjustedDelta == 0) {
+            dragRemainder = accumulatedDelta
+            return true
+        }
+
+        val canLoadMore: Boolean = canStartLoadMoreDrag(target)
+        if (scrollRevision != revision) return false
+        val canRefresh: Boolean = canStartRefreshDrag(target)
+        if (scrollRevision != revision) return false
+
+        // 后一次边界查询可能隐藏前一方向, 最终按当前可用性限制展开, 但仍允许收回已有位移.
+        val loadMoreAvailable: Boolean = isActionInteractionEnabled(RefreshLoadAction.LoadMore)
+        val refreshAvailable: Boolean = isActionInteractionEnabled(RefreshLoadAction.Refresh)
+        val minOffset: Int = if (canLoadMore && loadMoreAvailable) {
+            -resolveMaxLoadMoreDistance()
+        } else {
+            min(0, contentOffset)
+        }
+        val maxOffset: Int = if (canRefresh && refreshAvailable) {
+            resolveMaxRefreshDistance()
+        } else {
+            max(0, contentOffset)
+        }
+        val requestedOffset: Long = contentOffset.toLong() + adjustedDelta
+        val newOffset: Int = requestedOffset.coerceIn(minOffset.toLong(), maxOffset.toLong()).toInt()
+        if (newOffset == contentOffset && ((deltaY < 0f && !loadMoreAvailable) || (deltaY > 0f && !refreshAvailable))) {
+            dragRemainder = 0f
+            return false
+        }
+        dragRemainder = if (
+            requestedOffset != newOffset.toLong() ||
+            (deltaY < 0f && newOffset == minOffset) || (deltaY > 0f && newOffset == maxOffset)
+        ) {
+            0f
+        } else {
+            accumulatedDelta - adjustedDelta
+        }
+        setContentOffset(newOffset, fromDrag = true)
+        return true
     }
 
     private fun resolveDragResistance(deltaY: Float): Float {
@@ -914,13 +1325,20 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         return dragResistance * (1f + progress * progress * EXTRA_DRAG_RESISTANCE_FACTOR)
     }
 
-    private fun setContentOffset(offset: Int) {
+    private fun setContentOffset(offset: Int, fromDrag: Boolean = false) {
         if (contentOffset == offset) return
 
+        val previousOffset: Int = contentOffset
         contentOffset = offset
+        scrollRevision += 1
+        val revision: Long = ++offsetRevision
         applyChildTranslations()
-        updatePullState()
-        notifyComponentsOffsetChanged()
+        if (fromDrag) {
+            updatePullState()
+        }
+        if (offsetRevision == revision) {
+            notifyComponentsOffsetChanged(previousOffset)
+        }
     }
 
     private fun applyChildTranslations() {
@@ -936,15 +1354,24 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     private fun followIndicatorWithContentScroll(
         target: View,
         dyUnconsumed: Int,
+        consumed: IntArray,
     ) {
+        if (!isBusyIndicatorAvailable()) {
+            stopIndicatorFling()
+            return
+        }
         when (state) {
-            RefreshLoadState.Refreshing -> followHeaderWithContentScroll(target, dyUnconsumed)
-            RefreshLoadState.LoadingMore -> followFooterWithContentScroll(target, dyUnconsumed)
+            RefreshLoadState.Refreshing -> followHeaderWithContentScroll(target, dyUnconsumed, consumed)
+            RefreshLoadState.LoadingMore -> followFooterWithContentScroll(target, dyUnconsumed, consumed)
             else -> Unit
         }
     }
 
     private fun consumeBusyIndicatorPreScroll(target: View, dy: Int, consumed: IntArray) {
+        if (!isBusyIndicatorAvailable()) {
+            stopIndicatorFling()
+            return
+        }
         when (state) {
             RefreshLoadState.Refreshing -> consumeRefreshingIndicatorPreScroll(target, dy, consumed)
             RefreshLoadState.LoadingMore -> consumeLoadingMoreIndicatorPreScroll(target, dy, consumed)
@@ -966,7 +1393,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
 
             dy < 0 &&
                 contentOffset < resolveRefreshHoldDistance() &&
-                !canChildScrollUp(target) -> {
+                canExpandBusyIndicator(target, RefreshLoadAction.Refresh) -> {
                 val consumeY: Int = max(dy, contentOffset - resolveRefreshHoldDistance())
                 cancelOffsetAnimations()
                 setContentOffset(contentOffset - consumeY)
@@ -990,7 +1417,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
 
             dy > 0 &&
                 contentOffset > -resolveLoadMoreHoldDistance() &&
-                !target.canScrollVertically(1) -> {
+                canExpandBusyIndicator(target, RefreshLoadAction.LoadMore) -> {
                 val consumeY: Int = min(dy, contentOffset + resolveLoadMoreHoldDistance())
                 cancelOffsetAnimations()
                 setContentOffset(contentOffset - consumeY)
@@ -1003,30 +1430,32 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     private fun followHeaderWithContentScroll(
         target: View,
         dyUnconsumed: Int,
+        consumed: IntArray,
     ) {
-        val deltaOffset: Int = when {
-            dyUnconsumed < 0 && !canChildScrollUp(target) -> -dyUnconsumed
-            else -> 0
-        }
-        if (deltaOffset == 0) return
+        if (dyUnconsumed >= 0 || !canExpandBusyIndicator(target, RefreshLoadAction.Refresh)) return
+        val holdDistance: Int = resolveRefreshHoldDistance()
+        if (contentOffset >= holdDistance) return
 
+        val consumeY: Int = max(dyUnconsumed, contentOffset - holdDistance)
         cancelOffsetAnimations()
-        setContentOffset((contentOffset + deltaOffset).coerceIn(0, resolveRefreshHoldDistance()))
+        consumed[1] += consumeY
+        setContentOffset(contentOffset - consumeY)
         startPendingIndicatorFlingIfNeeded(target)
     }
 
     private fun followFooterWithContentScroll(
         target: View,
         dyUnconsumed: Int,
+        consumed: IntArray,
     ) {
-        val deltaOffset: Int = when {
-            dyUnconsumed > 0 && !target.canScrollVertically(1) -> -dyUnconsumed
-            else -> 0
-        }
-        if (deltaOffset == 0) return
+        if (dyUnconsumed <= 0 || !canExpandBusyIndicator(target, RefreshLoadAction.LoadMore)) return
+        val holdDistance: Int = resolveLoadMoreHoldDistance()
+        if (contentOffset <= -holdDistance) return
 
+        val consumeY: Int = min(dyUnconsumed, contentOffset + holdDistance)
         cancelOffsetAnimations()
-        setContentOffset((contentOffset + deltaOffset).coerceIn(-resolveLoadMoreHoldDistance(), 0))
+        consumed[1] += consumeY
+        setContentOffset(contentOffset - consumeY)
         startPendingIndicatorFlingIfNeeded(target)
     }
 
@@ -1034,6 +1463,10 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
      * 内容惯性滚动到边界后, 用之前记录的 fling 速度继续拉出正在加载中的头尾.
      */
     private fun startPendingIndicatorFlingIfNeeded(target: View) {
+        if (!isBusyIndicatorAvailable()) {
+            stopIndicatorFling()
+            return
+        }
         when (state) {
             RefreshLoadState.Refreshing -> startPendingRefreshIndicatorFlingIfNeeded(target)
             RefreshLoadState.LoadingMore -> startPendingLoadMoreIndicatorFlingIfNeeded(target)
@@ -1049,7 +1482,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         val shouldContinueFling: Boolean =
             pendingIndicatorFlingVelocityY < 0f &&
                 contentOffset < holdDistance &&
-                !canChildScrollUp(target)
+                canExpandBusyIndicator(target, RefreshLoadAction.Refresh)
         if (!shouldContinueFling) return
 
         startIndicatorFling(
@@ -1067,7 +1500,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         val shouldContinueFling: Boolean =
             pendingIndicatorFlingVelocityY > 0f &&
                 contentOffset > -holdDistance &&
-                !target.canScrollVertically(1)
+                canExpandBusyIndicator(target, RefreshLoadAction.LoadMore)
         if (!shouldContinueFling) return
 
         startIndicatorFling(
@@ -1084,7 +1517,7 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     ) {
         if (maxDistance <= 0) return
 
-        activeAnimator?.cancel()
+        cancelOffsetAnimator()
         stopIndicatorFling(clearPendingVelocity = false)
         indicatorFlingMode = mode
         pendingIndicatorFlingVelocityY = 0f
@@ -1110,6 +1543,10 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
 
     private fun continueIndicatorFling() {
         val mode: IndicatorFlingMode = indicatorFlingMode ?: return
+        if (!isBusyIndicatorAvailable()) {
+            stopIndicatorFling()
+            return
+        }
         if (!indicatorScroller.computeScrollOffset()) {
             indicatorFlingMode = null
             return
@@ -1127,8 +1564,14 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     }
 
     private fun cancelOffsetAnimations() {
-        activeAnimator?.cancel()
+        cancelOffsetAnimator()
         stopIndicatorFling(clearPendingVelocity = false)
+    }
+
+    private fun cancelOffsetAnimator() {
+        val animator: ValueAnimator = activeAnimator ?: return
+        activeAnimator = null
+        animator.cancel()
     }
 
     private fun stopIndicatorFling(clearPendingVelocity: Boolean = true) {
@@ -1146,80 +1589,172 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         loadFooterView?.bringToFront()
     }
 
+    private fun onEffectiveDistancesChanged() {
+        synchronizedRefreshTriggerDistance = resolveRefreshTriggerDistance()
+        synchronizedLoadMoreTriggerDistance = resolveLoadMoreTriggerDistance()
+        synchronizedRefreshHoldDistance = resolveRefreshHoldDistance()
+        synchronizedLoadMoreHoldDistance = resolveLoadMoreHoldDistance()
+        scrollRevision += 1
+        val revision: Long = ++distanceRevision
+        if (!isBusyState() && state != RefreshLoadState.Settling) {
+            val updatedState: RefreshLoadState = resolvePullState()
+            if (state != updatedState && !changeState(updatedState)) return
+        }
+        if (distanceRevision == revision) {
+            notifyComponentsOffsetChanged(contentOffset, notifyBoth = true)
+        }
+    }
+
     private fun updatePullState() {
-        if (state == RefreshLoadState.Refreshing || state == RefreshLoadState.LoadingMore) return
+        if (isBusyState()) return
 
-        changeState(
-            when {
-                contentOffset > 0 && contentOffset >= resolveRefreshTriggerDistance() ->
-                    RefreshLoadState.ReleaseToRefresh
+        changeState(resolvePullState())
+    }
 
-                contentOffset > 0 -> RefreshLoadState.PullingDown
-                contentOffset < 0 && abs(contentOffset) >= resolveLoadMoreTriggerDistance() ->
-                    RefreshLoadState.ReleaseToLoadMore
-
-                contentOffset < 0 -> RefreshLoadState.PullingUp
-                else -> RefreshLoadState.Idle
-            },
-        )
+    private fun resolvePullState(): RefreshLoadState = when {
+        contentOffset > 0 && contentOffset >= resolveRefreshTriggerDistance() -> RefreshLoadState.ReleaseToRefresh
+        contentOffset > 0 -> RefreshLoadState.PullingDown
+        contentOffset < 0 && abs(contentOffset) >= resolveLoadMoreTriggerDistance() -> RefreshLoadState.ReleaseToLoadMore
+        contentOffset < 0 -> RefreshLoadState.PullingUp
+        else -> RefreshLoadState.Idle
     }
 
     private fun settleByCurrentOffset() {
-        if (state == RefreshLoadState.Refreshing || state == RefreshLoadState.LoadingMore) return
+        if (!isEnabled || touchInteractionBlocked || isBusyState() || state == RefreshLoadState.Settling) return
 
         when {
-            contentOffset >= resolveRefreshTriggerDistance() && refreshEnabled -> beginRefresh()
-            abs(contentOffset) >= resolveLoadMoreTriggerDistance() && loadMoreEnabled -> beginLoadMore()
-            contentOffset != 0 -> {
-                changeState(RefreshLoadState.Settling)
-                animateToOffset(0, animate = true)
-            }
+            contentOffset >= resolveRefreshTriggerDistance() &&
+                isActionInteractionEnabled(RefreshLoadAction.Refresh) -> beginRefresh()
+            contentOffset <= -resolveLoadMoreTriggerDistance() &&
+                isActionInteractionEnabled(RefreshLoadAction.LoadMore) -> beginLoadMore()
+            contentOffset != 0 -> settleToRest(animate = true)
         }
     }
 
     private fun beginRefresh() {
-        changeState(RefreshLoadState.Refreshing)
-        animateToOffset(resolveRefreshHoldDistance(), animate = true)
-        refreshLoadListener?.onRefreshLoad(RefreshLoadAction.Refresh)
+        beginAction(RefreshLoadAction.Refresh)
     }
 
     private fun beginLoadMore() {
-        changeState(RefreshLoadState.LoadingMore)
-        animateToOffset(-resolveLoadMoreHoldDistance(), animate = true)
-        refreshLoadListener?.onRefreshLoad(RefreshLoadAction.LoadMore)
+        beginAction(RefreshLoadAction.LoadMore)
+    }
+
+    private fun busyStateFor(action: RefreshLoadAction): RefreshLoadState = when (action) {
+        RefreshLoadAction.Refresh -> RefreshLoadState.Refreshing
+        RefreshLoadAction.LoadMore -> RefreshLoadState.LoadingMore
+    }
+
+    private fun beginAction(action: RefreshLoadAction) {
+        if (!isActionInteractionEnabled(action) || isBusyState()) return
+        val busyState: RefreshLoadState = busyStateFor(action)
+        startingAction = true
+        dragRemainder = 0f
+        pendingActionPosition = action
+        animatePendingActionPosition = true
+        try {
+            if (!changeState(busyState)) return
+            if (!isActionInteractionEnabled(action)) {
+                settleToRest(animate = true)
+                return
+            }
+            val revision: Long = stateRevision
+            positionPendingActionIfReady()
+            if (pendingActionPosition != null) requestLayout()
+            if (stateRevision != revision || state != busyState) return
+            // 状态和定位回调都可能隐藏组件, 尚未通知业务的动作必须收起, 避免留下空转的忙碌状态.
+            if (!isActionInteractionEnabled(action)) {
+                settleToRest(animate = true)
+                return
+            }
+            // 从业务回调开始算已提交任务; 之前的组件回调仍可同步取消此次操作.
+            startingAction = false
+            refreshLoadListener?.onRefreshLoad(action)
+        } finally {
+            startingAction = false
+        }
+    }
+
+    private fun positionPendingActionIfReady(fromLayout: Boolean = false) {
+        val action: RefreshLoadAction = pendingActionPosition ?: return
+        if (!fromLayout && (!isLaidOut || isLayoutRequested)) return
+        val indicator: View = when (action) {
+            RefreshLoadAction.Refresh -> refreshHeaderView
+            RefreshLoadAction.LoadMore -> loadFooterView
+        } ?: return
+        if (!isComponentLayoutReady(indicator) || indicator in pendingComponentStates) return
+
+        val targetOffset: Int = when (action) {
+            RefreshLoadAction.Refresh -> resolveRefreshHoldDistance()
+            RefreshLoadAction.LoadMore -> -resolveLoadMoreHoldDistance()
+        }
+        val animate: Boolean = animatePendingActionPosition
+        pendingActionPosition = null
+        animateToOffset(targetOffset, animate)
+    }
+
+    private fun canPerformAccessibilityAction(action: RefreshLoadAction): Boolean =
+        state == RefreshLoadState.Idle && isActionInteractionEnabled(action)
+
+    private fun isActionInteractionEnabled(action: RefreshLoadAction): Boolean =
+        isEnabled && when (action) {
+            RefreshLoadAction.Refresh -> refreshEnabled && refreshHeaderView?.isGone == false
+            RefreshLoadAction.LoadMore -> loadMoreEnabled && loadFooterView?.isGone == false
+        }
+
+    private fun isBusyIndicatorAvailable(): Boolean = when (state) {
+        RefreshLoadState.Refreshing -> refreshHeaderView?.isGone == false
+        RefreshLoadState.LoadingMore -> loadFooterView?.isGone == false
+        else -> false
+    }
+
+    private fun canExpandBusyIndicator(target: View, action: RefreshLoadAction): Boolean =
+        isAtScrollBoundary(target, if (action == RefreshLoadAction.Refresh) -1 else 1) {
+            isEnabled && state == busyStateFor(action) && isBusyIndicatorAvailable()
+        }
+
+    private fun notifyAccessibilityStateChanged() {
+        if (initialized) {
+            sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
+        }
     }
 
     private fun animateToOffset(targetOffset: Int, animate: Boolean) {
         stopIndicatorFling()
-        activeAnimator?.cancel()
-        if (!animate || animationDurationMillis <= 0L) {
+        cancelOffsetAnimator()
+        dragRemainder = 0f
+        val revision: Long = stateRevision
+        if (!animate || animationDurationMillis <= 0L || contentOffset == targetOffset) {
             setContentOffset(targetOffset)
-            if (targetOffset == 0 && state == RefreshLoadState.Settling) {
+            if (stateRevision == revision && targetOffset == 0 && state == RefreshLoadState.Settling) {
                 changeState(RefreshLoadState.Idle)
             }
             return
         }
 
         val startOffset: Int = contentOffset
-        activeAnimator = ValueAnimator.ofInt(startOffset, targetOffset).apply {
+        val animator: ValueAnimator = ValueAnimator.ofInt(startOffset, targetOffset).apply {
             duration = animationDurationMillis
             interpolator = settleInterpolator
             addUpdateListener { animator: ValueAnimator ->
-                setContentOffset(animator.animatedValue as Int)
+                if (activeAnimator === animator) {
+                    setContentOffset(animator.animatedValue as Int)
+                }
             }
             addListener(
                 object : AnimatorListenerAdapter() {
 
                     override fun onAnimationEnd(animation: Animator) {
-                        if (targetOffset == 0 && state == RefreshLoadState.Settling) {
+                        if (activeAnimator !== animation) return
+                        activeAnimator = null
+                        if (stateRevision == revision && targetOffset == 0 && state == RefreshLoadState.Settling) {
                             changeState(RefreshLoadState.Idle)
                         }
-                        activeAnimator = null
                     }
                 },
             )
-            start()
         }
+        activeAnimator = animator
+        animator.start()
     }
 
     private fun resolveRefreshTriggerDistance(): Int =
@@ -1229,10 +1764,17 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         triggerDistanceOrViewHeight(loadMoreTriggerDistance, loadFooterView?.measuredHeight)
 
     private fun resolveRefreshHoldDistance(): Int =
-        positiveOrFallback(refreshHeaderView?.measuredHeight ?: 0, resolveRefreshTriggerDistance())
+        resolveIndicatorHoldDistance(refreshHeaderView, resolveRefreshTriggerDistance())
 
     private fun resolveLoadMoreHoldDistance(): Int =
-        positiveOrFallback(loadFooterView?.measuredHeight ?: 0, resolveLoadMoreTriggerDistance())
+        resolveIndicatorHoldDistance(loadFooterView, resolveLoadMoreTriggerDistance())
+
+    private fun resolveIndicatorHoldDistance(indicator: View?, fallback: Int): Int {
+        val params: LayoutParams? = indicator?.layoutParams as? LayoutParams
+        val height: Long = (indicator?.measuredHeight ?: 0).toLong() +
+            (params?.topMargin ?: 0) + (params?.bottomMargin ?: 0)
+        return if (height > 0L) height.coerceAtMost(Int.MAX_VALUE.toLong()).toInt() else fallback
+    }
 
     private fun resolveMaxRefreshDistance(): Int =
         positiveOrFallback(maxDragDistance, resolveRefreshTriggerDistance() * MAX_DRAG_FACTOR)
@@ -1251,40 +1793,153 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         return max(1, viewHeight ?: 0)
     }
 
-    private fun changeState(newState: RefreshLoadState) {
-        if (state == newState) return
+    private fun changeState(newState: RefreshLoadState): Boolean {
+        scrollRevision += 1
+        val revision: Long = ++stateRevision
+        if (state == newState) return true
 
+        val previousState: RefreshLoadState = state
         state = newState
+        if (pendingActionPosition?.let(::busyStateFor) != newState) {
+            pendingActionPosition = null
+        }
         applyChildTranslations()
+        if (previousState == RefreshLoadState.Idle || newState == RefreshLoadState.Idle ||
+            previousState == RefreshLoadState.Refreshing || previousState == RefreshLoadState.LoadingMore || isBusyState()
+        ) {
+            notifyAccessibilityStateChanged()
+        }
         notifyComponentsStateChanged(newState)
+        return stateRevision == revision
     }
 
     private fun notifyComponentsStateChanged(state: RefreshLoadState) {
-        refreshHeaderView.asRefreshLoadComponent()?.onRefreshLoadStateChanged(this, state)
-        loadFooterView.asRefreshLoadComponent()?.onRefreshLoadStateChanged(this, state)
+        val revision: Long = stateRevision
+        val header: View? = refreshHeaderView
+        val footer: View? = loadFooterView
+        if (header != null && header !in pendingComponentStates) {
+            notifyComponentStateChanged(header, state)
+        }
+        if (stateRevision != revision) return
+        if (footer != null && footer.parent === this && footer !in pendingComponentStates) {
+            notifyComponentStateChanged(footer, state)
+        }
     }
 
-    private fun notifyComponentsOffsetChanged() {
-        if (contentOffset >= 0) {
-            refreshHeaderView.asRefreshLoadComponent()?.onRefreshLoadOffsetChanged(
-                layout = this,
-                offset = contentOffset,
-                triggerDistance = resolveRefreshTriggerDistance(),
-                holdDistance = resolveRefreshHoldDistance(),
-            )
+    private fun notifyComponentStateChanged(child: View, state: RefreshLoadState) {
+        val component: KitRefreshLoadComponent = child.asRefreshLoadComponent() ?: return
+        component.onRefreshLoadStateChanged(this, state)
+        if (child.parent === this && !isComponentLayoutReady(child)) {
+            pendingComponentSnapshots.add(child)
         }
-        if (contentOffset <= 0) {
-            loadFooterView.asRefreshLoadComponent()?.onRefreshLoadOffsetChanged(
-                layout = this,
-                offset = contentOffset,
-                triggerDistance = resolveLoadMoreTriggerDistance(),
-                holdDistance = resolveLoadMoreHoldDistance(),
+    }
+
+    private fun notifyComponentsOffsetChanged(previousOffset: Int, notifyBoth: Boolean = false) {
+        val currentStateRevision: Long = stateRevision
+        val currentOffsetRevision: Long = offsetRevision
+        val currentDistanceRevision: Long = distanceRevision
+        val header: View? = refreshHeaderView
+        val footer: View? = loadFooterView
+        // 跳过零点切换方向时, 退出方向也必须收到归零通知.
+        if (
+            (notifyBoth || contentOffset >= 0 || previousOffset > 0) &&
+            header != null && header !in pendingComponentSnapshots
+        ) {
+            notifyComponentOffsetChanged(header, ChildRole.Header)
+        }
+        if (
+            stateRevision != currentStateRevision || offsetRevision != currentOffsetRevision ||
+            distanceRevision != currentDistanceRevision
+        ) return
+        if (
+            (notifyBoth || contentOffset <= 0 || previousOffset < 0) &&
+            footer != null && footer.parent === this && footer !in pendingComponentSnapshots
+        ) {
+            notifyComponentOffsetChanged(footer, ChildRole.Footer)
+        }
+    }
+
+    private fun notifyComponentOffsetChanged(child: View, role: ChildRole, onlyIfChanged: Boolean = false) {
+        val component: KitRefreshLoadComponent = child.asRefreshLoadComponent() ?: return
+        if (!isComponentLayoutReady(child)) {
+            if (child.parent === this) {
+                pendingComponentSnapshots.add(child)
+            }
+            return
+        }
+        val snapshot: ComponentOffsetSnapshot = when (role) {
+            ChildRole.Header -> ComponentOffsetSnapshot(
+                role, child.width, child.height,
+                max(0, contentOffset), resolveRefreshTriggerDistance(), resolveRefreshHoldDistance(),
             )
+            ChildRole.Footer -> ComponentOffsetSnapshot(
+                role, child.width, child.height,
+                min(0, contentOffset), resolveLoadMoreTriggerDistance(), resolveLoadMoreHoldDistance(),
+            )
+            ChildRole.Content -> return
+        }
+        // 相同文案也可能请求布局; 补发只在实际尺寸或数据变化时通知, 避免循环阻塞初始定位.
+        if (onlyIfChanged && deliveredComponentSnapshots[child] == snapshot) return
+        // 回调可重入或移除组件, 必须先记录, 返回后不能覆盖重入产生的新快照或重新保留已移除的实例.
+        deliveredComponentSnapshots[child] = snapshot
+        component.onRefreshLoadOffsetChanged(this, snapshot.offset, snapshot.triggerDistance, snapshot.holdDistance)
+        if (child.parent === this && !isComponentLayoutReady(child)) {
+            pendingComponentSnapshots.add(child)
+        }
+    }
+
+    private fun isComponentLayoutReady(child: View): Boolean =
+        child.parent === this && !child.isGone && child.isLaidOut && !child.isLayoutRequested
+
+    private fun haveComponentDistancesChanged(): Boolean =
+        synchronizedRefreshTriggerDistance != resolveRefreshTriggerDistance() ||
+            synchronizedLoadMoreTriggerDistance != resolveLoadMoreTriggerDistance() ||
+            synchronizedRefreshHoldDistance != resolveRefreshHoldDistance() ||
+            synchronizedLoadMoreHoldDistance != resolveLoadMoreHoldDistance()
+
+    private fun synchronizeComponentDistances() {
+        if (haveComponentDistancesChanged()) {
+            // 在通知前更新快照; 回调再次请求布局时, 下一次只同步最终改变的距离.
+            onEffectiveDistancesChanged()
+        }
+    }
+
+    private fun synchronizePendingComponents() {
+        if (pendingComponentSnapshots.isEmpty()) return
+        // 回调可能移除或替换组件; 当前快照只覆盖已经完成此次布局的实例.
+        val pending: List<View> = pendingComponentSnapshots.toList()
+        for (child: View in pending) {
+            if (!isComponentLayoutReady(child)) continue
+            val role: ChildRole = (child.layoutParams as LayoutParams).role
+            if (role == ChildRole.Content) {
+                pendingComponentStates.remove(child)
+                pendingComponentSnapshots.remove(child)
+                deliveredComponentSnapshots.remove(child)
+                continue
+            }
+            if (pendingComponentStates.remove(child)) {
+                notifyComponentStateChanged(child, state)
+            }
+            if (isComponentLayoutReady(child) && (child.layoutParams as LayoutParams).role == role) {
+                // 状态回调可以同步完成或切换任务, 此处取回调后的最新位移和距离.
+                pendingComponentSnapshots.remove(child)
+                notifyComponentOffsetChanged(child, role, onlyIfChanged = true)
+            }
         }
     }
 
     private fun View?.asRefreshLoadComponent(): KitRefreshLoadComponent? =
         this as? KitRefreshLoadComponent
+
+    /** 组件实际接收的布局与位移数据, 用于判定重布局后的补发是否必要. */
+    private data class ComponentOffsetSnapshot(
+        val role: ChildRole,
+        val width: Int,
+        val height: Int,
+        val offset: Int,
+        val triggerDistance: Int,
+        val holdDistance: Int,
+    )
 
     /**
      * 指示器惯性滚动方向.
@@ -1390,7 +2045,10 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     fun interface OnRefreshLoadListener {
 
         /**
-         * 用户触发刷新或加载更多时回调.
+         * 拖拽释放、自动加载或无障碍动作提交刷新或加载更多时回调.
+         *
+         * 回调时已进入对应忙碌状态; 指示器可能仍在等待布局或执行展开动画.
+         * [KitRefreshLoadLayout.setActiveAction] 只同步显示, 不触发此回调.
          *
          * @param action 触发动作.
          */
@@ -1398,17 +2056,20 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
     }
 
     /**
-     * 内容是否还能继续向顶部滚动的外部判定.
+     * 内容是否还能继续向指定方向滚动的外部判定.
      */
-    fun interface OnChildScrollUpCallback {
+    fun interface ScrollBoundaryCallback {
 
         /**
-         * 返回 true 表示内容仍可向顶部滚动, 此时不应开始下拉刷新.
+         * 返回 true 表示内容仍可向指定方向滚动, 此时不应从该侧开始拖拽或展开忙碌中的指示器.
+         * 返回 false 只表示已到滚动边界, 不会立即发起刷新或加载.
+         * 回调中同步结束或切换任务后, 当前旧滚动处理不会继续移动指示器或提交动作.
          *
          * @param layout 当前刷新加载容器.
-         * @param target 当前滚动目标; 直接触摸拖拽时可能是 content child.
+         * @param target 当前嵌套滚动目标; 直接触摸拖拽时为 content child, 没有内容时为 null.
+         * @param direction 与 [View.canScrollVertically] 一致, -1 表示向顶部, 1 表示向底部.
          */
-        fun canChildScrollUp(layout: KitRefreshLoadLayout, target: View?): Boolean
+        fun canScrollVertically(layout: KitRefreshLoadLayout, target: View?, direction: Int): Boolean
     }
 
     /**
@@ -1436,6 +2097,8 @@ class KitRefreshLoadLayout @JvmOverloads constructor(
         constructor(source: ViewGroup.LayoutParams) : super(source)
 
         constructor(source: MarginLayoutParams) : super(source)
+
+        constructor(source: FrameLayout.LayoutParams) : super(source)
 
         constructor(source: LayoutParams) : super(source) {
             role = source.role

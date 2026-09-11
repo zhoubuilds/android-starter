@@ -4,6 +4,14 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-11      | whisper | 补充刷新内容数量、动画时长和业务回调时机说明 |
+| 2026-09-11      | whisper | 补充刷新组件更新文案后的布局快照去重语义 |
+| 2026-09-11      | whisper | 补充刷新组件 margin、尺寸更新及边界回调重入语义 |
+| 2026-09-11      | whisper | 补充 GONE 组件的交互限制及阻尼赋值异常说明 |
+| 2026-09-11      | whisper | 补充刷新加载运行时阈值、组件改尺寸及惯性中断语义 |
+| 2026-09-11      | whisper | 增加统一滚动边界、无障碍动作及 ViewModel 显示同步用法 |
+| 2026-09-11      | whisper | 补充原生 ScrollView 嵌套滚动接入与惯性能力边界 |
+| 2026-09-11      | whisper | 补充刷新加载取消、禁用、组件同步及布局用法 |
 | 2026-09-11      | whisper | 更新范围选择和刷新加载包路径及升级迁移说明 |
 | 2026-09-11      | whisper | 补充范围选择控件的默认焦点及显式配置语义 |
 | 2026-09-11      | whisper | 增加起点下限配置及不可选前缀接入说明 |
@@ -604,6 +612,7 @@ IME 可以继续在末尾输入和删除. 当前不提供自由选区, 逐字导
 需要下拉刷新和上拉加载的纵向内容可以使用 `KitRefreshLoadLayout` 包裹。容器只负责交互和回调,
 具体刷新、加载、点赞、删除等业务状态仍由页面 ViewModel 维护。header/footer 子 View 角色必须通过
 `app:kitLayoutRefreshLoadRole` 显式声明, 普通内容子 View 不需要声明角色。
+除 header/footer 外最多只能有一个直接内容子 View; 页面包含多个内容 View 时, 先用一个布局容器组合后再放入.
 
 应用可以在主题中统一配置默认 header/footer 和拖拽参数:
 
@@ -664,26 +673,79 @@ footer 仍会继续使用主题中的默认配置:
 header/footer 各允许 0 或 1 个。缺少 header 时下拉刷新会自动禁用, 缺少 footer 时上拉加载会自动禁用。
 如果调用方仍将对应开关设置为 `true`, 控件当前有效值会保持禁用并输出警告日志。该设置意图会被保留,
 后续运行时补充对应 header/footer 或通过默认样式补齐后, 控件会恢复对应能力。
+header 为 `GONE` 时不能通过手势或无障碍发起刷新, footer 为 `GONE` 时不能通过手势、自动加载或无障碍发起加载.
+拖拽中将对应组件设为 `GONE` 后, 松手也不会发起请求. 恢复非 `GONE` 后按现有开关及边界重新允许操作;
+可见性不会修改 `refreshEnabled` / `loadMoreEnabled` 的值. `INVISIBLE` 仍保留交互能力.
+隐藏组件不取消已经发起的任务, 请求完成后仍正常调用完成 API 或同步 ViewModel 状态.
+新加入或替换的组件会在尺寸可用后收到当前状态和所属方向的位移快照, 刷新或加载中更换组件也会同步现有状态.
+组件首次响应状态时可以更新文案或尺寸. 如果触发重新布局, 容器会等待新尺寸再同步位移和初始展开位置,
+不会因为等待布局而重复通知同一状态.
+位移回调中也可以更新文案. 如果更新请求重新布局, 但相对该组件上次收到的快照, 尺寸、角色、位移及有效距离均未变化,
+容器不会再次补发相同快照; 实际变化后仍同步新快照, 初始展开会等待所需布局完成.
+
+普通内容支持 `android:layout_gravity`, 例如固定尺寸内容可以设置 `center` 居中. header/footer 的纵向位置由角色固定,
+横向支持 `start`、`end`、`center_horizontal` 等 gravity 配置, 并遵守 RTL 布局方向.
+Kotlin 动态添加内容时传入的 `FrameLayout.LayoutParams` 也保留 gravity 和 margin.
+header/footer 的上下 margin 计入忙碌时的展开距离, 正 margin 不会导致空闲时指示器露出.
+例如高度为 40 px、上下 margin 各为 10 px 的 header, 默认触发距离仍为 40 px, 展开距离为 60 px.
+负 margin 仍可造成重叠布局; 高度与 margin 总和非正时, 展开距离使用有效触发距离兜底.
 
 内容 View 的滚动能力决定边界衔接效果。普通 `LinearLayout` 等不滚动 View 可以直接通过手势拉出 header/footer。
-容器直接处理的拖拽如果收到系统取消事件, 会收起尚未提交的拖拽, 不触发刷新或加载回调.
 `RecyclerView`、`NestedScrollView` 等支持 NestedScrolling 的内容可以在滚到顶部或底部后连续把剩余滚动交给容器。
+原生 `android.widget.ScrollView` 也支持这种手指拖拽交接, 需在 XML 中显式设置
+`android:nestedScrollingEnabled="true"`, 或通过 Kotlin 设置 `scrollView.isNestedScrollingEnabled = true`.
+原生 `ScrollView` 的惯性及程序滚动不发送嵌套增量, 无法仅靠该桥接保证惯性到底自动加载或指示器惯性衔接;
+需要这些能力时使用 AndroidX `NestedScrollView` 或 `RecyclerView`.
 可滚动但不支持 NestedScrolling 的自定义 View 可能需要松手后重新拖拽才能拉出 header/footer, 也可能无法触发滚动到底自动加载。
+直接拖拽或 AndroidX NestedScrolling 交接的触摸如果收到系统取消事件, 会收起尚未提交的拖拽, 不触发刷新或加载回调.
+下拉只触发刷新, 上拉只触发加载; 拖拽反向越过原位时, 另一侧也必须已启用且内容已到达对应边界.
+
+容器默认调用当前滚动目标的 `canScrollVertically(direction)` 判断边界. 普通列表通常无需配置;
+内容外层是组合容器、实际滚动列表位于内部时, 可以统一指定上下边界的判定:
+
+```kotlin
+binding.refreshLoadLayout.setScrollBoundaryCallback { _, _, direction ->
+    binding.recyclerView.canScrollVertically(direction)
+}
+```
+
+`direction = -1` 表示向顶部, `1` 表示向底部. 返回 true 表示还能继续滚动, false 只表示到达边界,
+仍需满足开关及对应触发条件才会请求刷新或加载. 回调的第二个参数是当前嵌套滚动目标, 直接拖拽时是普通内容子 View.
+此判定同时用于拖拽、自动加载和忙碌期间的头尾滚动交接. `setScrollBoundaryCallback(null)` 恢复默认判定.
+回调中同步结束或切换任务时, 当前旧滚动处理会终止, 不再按原任务继续移动内容或发起请求.
+旧 `setOnChildScrollUpCallback()` / `OnChildScrollUpCallback` 已移除, 调用方应迁移到新的双向判定.
+
+设置容器 `isEnabled = false` 或将其移出窗口会清理尚未提交的拖拽及回弹. 已发起的刷新或加载保持任务状态,
+业务请求仍由调用方管理, 请求结束后照常调用 `finishRefresh()` 或 `finishLoadMore()`.
 
 `kitRefreshLoadRefreshTriggerDistance` 和 `kitRefreshLoadLoadMoreTriggerDistance` 默认值为 `-1`。
 在 XML 样式中配置负数哨兵值时仍按 dimension 写法保留单位, 例如 `-1dp`。所有负数值都表示触发距离分别使用 header/footer 自身高度。
 只有需要提前或延后触发时, 才配置具体 dimension 值; 配置 0 时按最小 1 px 处理。
+运行时修改 `refreshTriggerDistance` / `loadMoreTriggerDistance` 会立即更新拖拽阶段和组件距离信息,
+松手按更新后的阈值判定. 修改配置本身不会触发刷新或加载, 也不会重启忙碌或收起动画;
+相同或等效的阈值赋值不重复通知组件.
+默认阈值也会跟随组件高度变化, 完成重新布局后更新拖拽阶段与组件距离快照; 显式配置的触发距离不随高度改变.
+即使只改变展开距离, 组件仍收到更新后的距离信息. 这些更新不重新定位已经展开的忙碌指示器, 也不重启现有动画.
 
 刷新中或加载中, header/footer 会作为 content 的附加部分跟随列表滚动。用户继续滚动 RecyclerView 或列表进入惯性滚动时,
 header/footer 会像列表条目一样逐步离开屏幕。
+指示器惯性移动期间重新按住内容会停止旧惯性, 当前刷新或加载任务继续保持.
+对应组件设为 `GONE` 后停止该指示器的滚动消费和惯性, 任务状态保留; 未提交拖拽仍可收起已有位移.
 
 启用 `kitRefreshLoadAutoLoadMoreEnabled` 或运行时设置 `autoLoadMoreEnabled = true` 后,
 内容向下滚动到底部时会自动进入加载更多状态, 并触发和手动上拉相同的 `RefreshLoadAction.LoadMore` 回调。
-自动加载只依赖内容 View 的 `canScrollVertically(1)`, 不绑定 RecyclerView 或具体 LayoutManager。
+自动加载使用相同的底部边界判定, 默认依赖内容 View 的 `canScrollVertically(1)`, 不绑定 RecyclerView 或具体 LayoutManager.
 如果需要没有更多数据时停止自动触发, 页面应在 ViewModel 状态中将 `loadMoreEnabled` 设置为 `false`。
 
 `kitRefreshLoadDragResistance` 是基础拖拽阻尼。实际阻尼会随 header/footer 拉出距离增加, 越接近最大拖拽距离阻力越大。
-回弹和完成收起动画使用减速曲线, 越接近目标位置速度越慢。
+XML 配置与运行时 `dragResistance` 均只接受有限值, 默认 2, 小于 1 的有限值按 1 处理.
+传入 `NaN`、`Float.POSITIVE_INFINITY` 或 `Float.NEGATIVE_INFINITY` 会抛出 `IllegalArgumentException`, 旧值保持不变.
+参数注解用于 IDE / Android Lint 提示, 动态计算得到的非法值仍由 setter 在运行时拒绝.
+慢速的小幅移动也会累计生效. 回弹和完成收起动画使用减速曲线, 越接近目标位置速度越慢。
+`kitRefreshLoadAnimationDuration` / `animationDurationMillis` 控制展开和收起的位置动画, 单位为毫秒,
+默认 240, 小于等于 0 时直接定位; 方法参数 `animate = false` 也会直接定位.
+完成后收起期间状态保持为 `Settling`, 不会因原手势随后停止再次触发请求; 新触摸手势可以接管回弹.
+完成或取消后的新非触摸滚动会话仍可触发自动加载, 不需要先触摸页面.
 
 header/footer View 如需根据拖拽状态更新文案或动画, 可以实现 `KitRefreshLoadComponent`:
 
@@ -718,7 +780,13 @@ class DebugRefreshHeader @JvmOverloads constructor(
 }
 ```
 
-页面监听用户手势, 再转交给 ViewModel:
+容器空闲、全局和对应方向启用且组件可用时, 无障碍服务可执行刷新或加载更多动作.
+显式动作可以从内容任意位置发起, 不改变列表滚动位置. 忙碌时提供正在刷新或加载的状态描述;
+内容和 header/footer 的无障碍节点保持独立, 调用方已有的 `contentDescription` / `stateDescription` 不会被覆盖.
+容器不截获列表方向键, 页面需要键盘刷新入口时可以提供普通操作按钮并调用 ViewModel.
+
+页面监听手势、自动加载或无障碍发起的动作, 再转交给 ViewModel.
+业务回调发生时已经进入对应忙碌状态, 但指示器可能仍在等待布局或展开动画, 回调不代表动画结束.
 
 ```kotlin
 binding.refreshLoadLayout.setOnRefreshLoadListener { action ->
@@ -729,20 +797,33 @@ binding.refreshLoadLayout.setOnRefreshLoadListener { action ->
 }
 ```
 
-页面收集 ViewModel 状态后同步列表, 并在刷新或加载请求结束时收起 header/footer:
+页面收集 ViewModel 状态后同步列表及当前任务显示. 刷新与加载更多应由业务维持互斥:
 
 ```kotlin
 adapter.submitList(state.items)
 binding.refreshLoadLayout.loadMoreEnabled = state.hasMore
 binding.refreshLoadLayout.autoLoadMoreEnabled = state.autoLoadMore
 
-if (!state.refreshing) {
-    binding.refreshLoadLayout.finishRefresh()
+val activeAction = when {
+    state.refreshing -> KitRefreshLoadLayout.RefreshLoadAction.Refresh
+    state.loadingMore -> KitRefreshLoadLayout.RefreshLoadAction.LoadMore
+    else -> null
 }
-if (!state.loadingMore) {
-    binding.refreshLoadLayout.finishLoadMore()
-}
+binding.refreshLoadLayout.setActiveAction(activeAction)
 ```
+
+`setActiveAction()` 只同步显示, 不触发 `OnRefreshLoadListener`, 默认不播放动画; 需要位置过渡时传 `animate = true`.
+相同忙碌状态重复同步不会重新拉出已随列表滚动隐藏的指示器, 也不会重启已有动画. 切换任务时旧手势失效;
+传 null 会收起拖拽或忙碌显示, 空闲及正在收起时重复传 null 不重新执行.
+首次布局前调用或对应组件暂时缺失、`GONE` 时, 控件等待尺寸可用后定位; 期间新的同步结果会替代旧结果.
+
+显示同步不受 `isEnabled`、`refreshEnabled` 或 `loadMoreEnabled` 限制, 也不会启用这些开关.
+关闭方向开关本身仍会收起该侧显示, 动画期间为 `Settling`, 收起完成后才回到 `Idle`;
+此操作不取消业务请求. 同一轮状态渲染应先设置交互开关, 再同步真实任务, 如上例所示.
+仅需结束某一侧任务时仍可使用 `finishRefresh()` / `finishLoadMore()`, 默认播放收起动画.
+
+控件不会通过 View 的 `SavedState` 保存或恢复业务请求. 页面重建后重新收集 ViewModel 状态并调用 `setActiveAction()`,
+即可恢复已有任务的显示而不重复发起请求. 进程重建后是否重新请求仍由业务判断, 不恢复旧触点和动画.
 
 没有更多数据的文案或分割展示应由列表自身处理, 例如在列表末尾 item 或 RecyclerView decoration 中绘制。
 

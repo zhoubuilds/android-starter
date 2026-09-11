@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kit_refresh_load_action_refresh">刷新</string>
+    <string name="kit_refresh_load_action_load_more">加载更多</string>
+    <string name="kit_refresh_load_state_refreshing">正在刷新</string>
+    <string name="kit_refresh_load_state_loading_more">正在加载更多</string>
+</resources>
