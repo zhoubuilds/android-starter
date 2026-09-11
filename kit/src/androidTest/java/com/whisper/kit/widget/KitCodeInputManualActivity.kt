@@ -17,6 +17,7 @@ import android.widget.FrameLayout
 import android.widget.RadioGroup
 import android.widget.TextView
 import com.whisper.kit.test.R
+import com.whisper.kit.widget.rangeselection.KitRangeBar
 import kotlin.math.roundToInt
 
 /**

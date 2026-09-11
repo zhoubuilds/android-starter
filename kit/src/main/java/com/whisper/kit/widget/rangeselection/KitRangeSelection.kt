@@ -1,4 +1,4 @@
-package com.whisper.kit.widget
+package com.whisper.kit.widget.rangeselection
 
 /**
  * 范围选择控件归一化后的有序整数端点.

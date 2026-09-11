@@ -1,4 +1,4 @@
-package com.whisper.kit.widget
+package com.whisper.kit.widget.rangeselection
 
 import android.content.Intent
 import android.graphics.Bitmap

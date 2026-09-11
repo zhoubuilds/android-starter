@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-11      | whisper | 更新范围选择和刷新加载包路径及升级迁移说明 |
 | 2026-09-11      | whisper | 补充范围选择控件的默认焦点及显式配置语义 |
 | 2026-09-11      | whisper | 增加起点下限配置及不可选前缀接入说明 |
 | 2026-09-11      | whisper | 明确 Drawable 原实例共享、独立动画与同值回写语义 |
@@ -197,19 +198,24 @@ Dialog Binding 在首次访问后按 Dialog 对象生命周期缓存, `dismiss()
 
 ## 4. 基础控件与迁移
 
-基础控件统一位于 `com.whisper.kit.widget`, 提供线条绘制, 范围选择, 分格输入和刷新加载交互. 调用方负责配置样式,
-组合界面内容并处理业务状态.
+基础控件位于 `com.whisper.kit.widget` 及其职责子包. 根包提供线条绘制和分格输入,
+`com.whisper.kit.widget.rangeselection` 提供范围选择, `com.whisper.kit.widget.refreshloadlayout` 提供刷新加载交互.
+调用方负责配置样式, 组合界面内容并处理业务状态.
 
 从旧版本升级时, 同步更新 Kotlin / Java import, XML 控件标签和使用完整类名的反射或混淆配置:
 
 | 旧类型路径 | 当前类型路径 |
 |------------|--------------|
 | `com.whisper.kit.view.input.KitCodeInputEditText` | `com.whisper.kit.widget.KitCodeInputEditText` |
-| `com.whisper.kit.view.refresh.KitRefreshLoadLayout` | `com.whisper.kit.widget.KitRefreshLoadLayout` |
-| `com.whisper.kit.view.refresh.KitRefreshLoadComponent` | `com.whisper.kit.widget.KitRefreshLoadComponent` |
+| `com.whisper.kit.view.refresh.KitRefreshLoadLayout` | `com.whisper.kit.widget.refreshloadlayout.KitRefreshLoadLayout` |
+| `com.whisper.kit.view.refresh.KitRefreshLoadComponent` | `com.whisper.kit.widget.refreshloadlayout.KitRefreshLoadComponent` |
+| `com.whisper.kit.widget.KitRangeBar` | `com.whisper.kit.widget.rangeselection.KitRangeBar` |
+| `com.whisper.kit.widget.KitRefreshLoadLayout` | `com.whisper.kit.widget.refreshloadlayout.KitRefreshLoadLayout` |
+| `com.whisper.kit.widget.KitRefreshLoadComponent` | `com.whisper.kit.widget.refreshloadlayout.KitRefreshLoadComponent` |
 
-旧包路径不再提供兼容类型, 使用它们的外部模块需要重新编译. `KitLineView` 和 `KitRangeBar` 保持现有 `widget` 包路径.
-控件包合并保留 XML 属性与样式入口, 分格输入的当前长度和绘制规则见第 6 节.
+旧包路径不再提供兼容类型, 使用它们的外部模块需要更新引用并重新编译. `KitLineView` 和 `KitCodeInputEditText`
+保持现有 `widget` 包路径. 包整理保留 XML 属性、样式入口及控件行为, 分格输入的当前长度和绘制规则见第 6 节.
+`KitRangeBar.SavedState` 的完整类名随包路径变化, 不支持恢复迁移前版本保存的 View 状态; 升级后应重新创建页面状态.
 
 `view.feed` 的 `KitContentFeedCardUi`, `KitContentFeedCardViewHolder`, `KitContentFeedCoverHeight`,
 `KitContentFeedImageLoader` 以及 `view.share.KitShareSheetDialog` 不再提供, 对应专属资源一并移除.
@@ -323,7 +329,7 @@ line.lineColors = requireNotNull(AppCompatResources.getColorStateList(line.conte
 在 RTL 页面中向左递增, 起点始终表示较小数值.
 
 ```xml
-<com.whisper.kit.widget.KitRangeBar
+<com.whisper.kit.widget.rangeselection.KitRangeBar
     android:id="@+id/range"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -380,6 +386,8 @@ XML 及直接设置端点限制时, 参数限制在 `-1..total`; 最小间隔的
 例如 `total=100`, `step=30` 时设置 `endMin=100` 会被拒绝, 因为最大的合法刻度只有 90.
 
 ```kotlin
+import com.whisper.kit.widget.rangeselection.KitRangeBar
+
 val range = view.findViewById<KitRangeBar>(R.id.range)
 range.setTotal(100)
 range.setSelectedRange(20, 60)
@@ -620,7 +628,7 @@ IME 可以继续在末尾输入和删除. 当前不提供自由选区, 逐字导
 使用统一默认样式时, 页面只需要声明内容:
 
 ```xml
-<com.whisper.kit.widget.KitRefreshLoadLayout
+<com.whisper.kit.widget.refreshloadlayout.KitRefreshLoadLayout
     android:id="@+id/refreshLoadLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -629,14 +637,14 @@ IME 可以继续在末尾输入和删除. 当前不提供自由选区, 逐字导
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
-</com.whisper.kit.widget.KitRefreshLoadLayout>
+</com.whisper.kit.widget.refreshloadlayout.KitRefreshLoadLayout>
 ```
 
 单个页面需要特殊 header 或 footer 时, 可以显式声明对应 child 覆盖默认布局。只声明 header 时,
 footer 仍会继续使用主题中的默认配置:
 
 ```xml
-<com.whisper.kit.widget.KitRefreshLoadLayout
+<com.whisper.kit.widget.refreshloadlayout.KitRefreshLoadLayout
     android:id="@+id/refreshLoadLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -650,7 +658,7 @@ footer 仍会继续使用主题中的默认配置:
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
-</com.whisper.kit.widget.KitRefreshLoadLayout>
+</com.whisper.kit.widget.refreshloadlayout.KitRefreshLoadLayout>
 ```
 
 header/footer 各允许 0 或 1 个。缺少 header 时下拉刷新会自动禁用, 缺少 footer 时上拉加载会自动禁用。
@@ -680,8 +688,8 @@ header/footer 会像列表条目一样逐步离开屏幕。
 header/footer View 如需根据拖拽状态更新文案或动画, 可以实现 `KitRefreshLoadComponent`:
 
 ```kotlin
-import com.whisper.kit.widget.KitRefreshLoadComponent
-import com.whisper.kit.widget.KitRefreshLoadLayout
+import com.whisper.kit.widget.refreshloadlayout.KitRefreshLoadComponent
+import com.whisper.kit.widget.refreshloadlayout.KitRefreshLoadLayout
 
 class DebugRefreshHeader @JvmOverloads constructor(
     context: Context,

@@ -1,4 +1,4 @@
-package com.whisper.kit.widget
+package com.whisper.kit.widget.rangeselection
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows

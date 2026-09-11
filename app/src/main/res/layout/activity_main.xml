@@ -36,7 +36,7 @@
         app:kitDotWidth="2dp"
         app:kitGapWidth="4dp" />
 
-    <com.whisper.kit.widget.KitRangeBar
+    <com.whisper.kit.widget.rangeselection.KitRangeBar
         android:id="@+id/range"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

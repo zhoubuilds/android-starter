@@ -30,7 +30,7 @@
         android:textColor="#17221B"
         android:textSize="16sp" />
 
-    <com.whisper.kit.widget.KitRangeBar
+    <com.whisper.kit.widget.rangeselection.KitRangeBar
         android:id="@+id/kit_test_manual_range"
         android:layout_width="match_parent"
         android:layout_height="64dp"

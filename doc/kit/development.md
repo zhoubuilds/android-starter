@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-11      | whisper | 同步范围选择和刷新加载子包及测试结构 |
 | 2026-09-11      | whisper | 补充范围焦点初始化和无障碍父坐标的兼容维护规则 |
 | 2026-09-11      | whisper | 补齐范围起点下限的统一约束与手动禁用前缀示例 |
 | 2026-09-11      | whisper | 统一原 Drawable 状态管理并补齐同值赋值锚点回归 |
@@ -115,9 +116,13 @@ kit/
    |  |  `- widget/
    |  |     |- KitCodeInputEditText.kt
    |  |     |- KitLineView.kt
-   |  |     |- KitRangeBar.kt
-   |  |     |- KitRefreshLoadComponent.kt
-   |  |     `- KitRefreshLoadLayout.kt
+   |  |     |- rangeselection/
+   |  |     |  |- KitRangeBar.kt
+   |  |     |  |- KitRangeSelection.kt
+   |  |     |  `- KitRangeAccessibilityHelper.kt
+   |  |     `- refreshloadlayout/
+   |  |        |- KitRefreshLoadComponent.kt
+   |  |        `- KitRefreshLoadLayout.kt
    |  |- AndroidManifest.xml
    |  |- keepRules/rules.keep
    |  `- res/
@@ -128,8 +133,11 @@ kit/
    |  |  |- holder/
    |  |  `- listener/
    |  `- widget/
+   |     |- rangeselection/
+   |     `- refreshloadlayout/
    `- androidTest/java/com/whisper/kit/
       `- widget/
+         `- rangeselection/
 ```
 
 | 包                        | 职责                                |
@@ -140,7 +148,9 @@ kit/
 | `recyclerview.holder`     | RecyclerView ViewHolder 通用封装    |
 | `recyclerview.listener`   | RecyclerView item 内点击与长按分发工具 |
 | `utils`                   | 客户端标识, 窗口等 Android 平台工具 |
-| `widget`                  | 线条绘制, 范围选择, 分格输入和刷新加载等基础控件及其回调契约 |
+| `widget`                  | 线条绘制和分格输入等独立基础控件 |
+| `widget.rangeselection`   | 整数范围选择控件及其约束计算、无障碍辅助类型 |
+| `widget.refreshloadlayout` | 刷新加载容器及其头尾组件回调契约 |
 
 ## 3. 依赖边界
 
@@ -194,8 +204,12 @@ CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
 
 ## 5. 基础控件
 
-`widget` 统一提供业务无关的基础控件与回调契约: `KitLineView`, `KitRangeBar`, `KitCodeInputEditText`,
-`KitRefreshLoadLayout` 和 `KitRefreshLoadComponent`. 不再维护语义重叠的 `view` 包, 也不为单个控件建立子包.
+`widget` 及其子包统一提供业务无关的基础控件与回调契约, 不再维护语义重叠的 `view` 包.
+`KitLineView` 和 `KitCodeInputEditText` 保留在根包. `KitRangeBar` 与仅服务该控件的 `KitRangeSelection`、
+`KitRangeAccessibilityHelper` 位于 `widget.rangeselection`; `KitRefreshLoadLayout` 与
+`KitRefreshLoadComponent` 位于 `widget.refreshloadlayout`. 辅助类型与所属控件就近维护, 不移入通用工具包,
+不因包拆分扩大可见性. 对应单元测试保持相同包路径, 范围设备测试与专用 Activity 同样位于 `widget.rangeselection`;
+跨控件手动测试入口 `KitCodeInputManualActivity` 保留在 `widget` 根包.
 
 控件应围绕独立的绘制, 输入或交互能力维护, 应用样式和内容组合由调用方负责. 内容卡片和分享面板固化整套展示结构,
 不作为 Kit 的公共控件提供; 实际使用它们的应用应在自己的业务模块或 `foundation` 中维护相应界面和资源.

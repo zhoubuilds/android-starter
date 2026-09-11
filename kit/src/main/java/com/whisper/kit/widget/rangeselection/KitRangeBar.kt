@@ -1,4 +1,4 @@
-package com.whisper.kit.widget
+package com.whisper.kit.widget.rangeselection
 
 import android.annotation.SuppressLint
 import android.content.Context

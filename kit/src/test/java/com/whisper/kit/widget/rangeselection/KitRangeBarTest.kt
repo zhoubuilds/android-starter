@@ -1,4 +1,4 @@
-package com.whisper.kit.widget
+package com.whisper.kit.widget.rangeselection
 
 import android.graphics.drawable.GradientDrawable
 import android.view.InputDevice
