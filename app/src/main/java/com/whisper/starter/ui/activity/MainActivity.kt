@@ -58,7 +58,7 @@ class MainActivity : ArchitectureActivity<GettingViewModel>() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
-        _viewBinding.range.setOnRangeChangedListener { _, s, e ->
+        _viewBinding.range.setOnRangeChangedListener { s, e ->
             Quill.i("range") { "start: $s, end: $e" }
         }
         _viewBinding.range.start = 30

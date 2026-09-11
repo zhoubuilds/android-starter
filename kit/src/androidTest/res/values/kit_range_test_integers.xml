@@ -1,0 +1,4 @@
+<resources>
+    <integer name="kit_test_range_available_start">20</integer>
+    <integer name="kit_test_range_total">100</integer>
+</resources>

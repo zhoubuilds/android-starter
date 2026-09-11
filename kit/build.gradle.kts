@@ -41,6 +41,7 @@ dependencies {
     api(libs.androidx.recyclerview)
     api(libs.androidx.viewbinding)
     implementation(libs.androidx.window)
+    implementation(libs.androidx.customview)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

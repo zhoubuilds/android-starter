@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="24dp"
+    android:orientation="vertical">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/kit_test_manual_range_title"
+        android:textColor="#17221B"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/kit_test_manual_range_available"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="#52615A"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/kit_test_manual_range_value"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textColor="#17221B"
+        android:textSize="16sp" />
+
+    <com.whisper.kit.widget.KitRangeBar
+        android:id="@+id/kit_test_manual_range"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:gravity="center_vertical"
+        app:kitBarBackground="@color/kit_test_range_track_available"
+        app:kitBarForeground="@color/kit_test_range_track_selected"
+        app:kitBarSize="4dp"
+        app:kitEnd="80"
+        app:kitEndThumbLabel="@string/kit_test_manual_range_end_label"
+        app:kitStart="@integer/kit_test_range_available_start"
+        app:kitStartMin="@integer/kit_test_range_available_start"
+        app:kitStartThumbLabel="@string/kit_test_manual_range_start_label"
+        app:kitStep="1"
+        app:kitThumb="@drawable/kit_test_range_thumb"
+        app:kitTotal="@integer/kit_test_range_total" />
+
+    <TextView
+        android:id="@+id/kit_test_manual_range_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="24dp"
+        android:text="@string/kit_test_manual_range_idle"
+        android:textColor="#52615A"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/kit_test_manual_range_overlap"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/kit_test_manual_range_overlap" />
+
+        <Button
+            android:id="@+id/kit_test_manual_range_reset"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:text="@string/kit_test_manual_range_reset" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <CheckBox
+            android:id="@+id/kit_test_manual_range_enabled"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:checked="true"
+            android:minHeight="48dp"
+            android:text="@string/kit_test_manual_range_enabled" />
+
+        <CheckBox
+            android:id="@+id/kit_test_manual_range_rtl"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="48dp"
+            android:text="@string/kit_test_manual_range_rtl" />
+    </LinearLayout>
+</LinearLayout>

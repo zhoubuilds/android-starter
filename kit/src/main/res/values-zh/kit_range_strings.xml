@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kit_range_start_label">起点</string>
+    <string name="kit_range_end_label">终点</string>
+    <string name="kit_range_accessibility_description">%1$s, %2$d, 可用范围 %3$d 到 %4$d</string>
+</resources>

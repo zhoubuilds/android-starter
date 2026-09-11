@@ -1,0 +1,5 @@
+<resources>
+    <color name="kit_test_range_track_available">#D5DADC</color>
+    <color name="kit_test_range_track_unavailable">#C98986</color>
+    <color name="kit_test_range_track_selected">#26885A</color>
+</resources>

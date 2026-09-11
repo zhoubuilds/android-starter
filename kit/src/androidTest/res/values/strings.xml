@@ -13,4 +13,21 @@
     <string name="kit_test_manual_line_vertical">纵向</string>
     <string name="kit_test_manual_line_enabled">启用</string>
     <string name="kit_test_manual_line_selected">选中</string>
+    <string name="kit_test_manual_range_title">KitRangeBar</string>
+    <string name="kit_test_manual_range_available">可选范围 %1$d-%2$d</string>
+    <string name="kit_test_manual_range_value">"起点 %1$d    终点 %2$d"</string>
+    <string name="kit_test_manual_range_idle">待操作</string>
+    <string name="kit_test_manual_range_active">调整中</string>
+    <string name="kit_test_manual_range_ended">已结束</string>
+    <string name="kit_test_manual_range_cancelled">已取消</string>
+    <string name="kit_test_manual_range_overlap">重合</string>
+    <string name="kit_test_manual_range_reset">重置</string>
+    <string name="kit_test_manual_range_enabled">启用</string>
+    <string name="kit_test_manual_range_rtl">RTL 镜像</string>
+    <string name="kit_test_manual_range_start_label">起点</string>
+    <string name="kit_test_manual_range_end_label">终点</string>
+    <string name="kit_test_range_start_label">Lower limit</string>
+    <string name="kit_test_range_end_label">Upper limit</string>
+    <string name="kit_test_range_before">Before range</string>
+    <string name="kit_test_range_after">After range</string>
 </resources>

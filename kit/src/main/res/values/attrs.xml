@@ -19,19 +19,37 @@
     <declare-styleable name="KitRangeBar">
 
         <attr name="android:enabled" />
+        <attr name="android:focusable" />
+        <!-- 端点无障碍名称, 缺省使用通用起点/终点名称. -->
+        <attr name="kitStartThumbLabel" format="string" />
+        <attr name="kitEndThumbLabel" format="string" />
+        <!-- 默认随 RTL 镜像数值方向; false 仅固定数值方向为 LTR. -->
+        <attr name="kitRtlMirroringEnabled" format="boolean" />
 
-        <!-- 条的宽度 -->
+        <!-- 水平轨道的厚度 -->
         <attr name="kitBarSize" format="dimension" />
 
-        <!-- 条背景, 未选中部分 -->
+        <!-- 条前景, 选中部分 -->
         <attr name="kitBarForeground" format="reference|color" />
 
-        <!-- 条前景, 选中部分 -->
+        <!-- 条背景, 未选中部分 -->
         <attr name="kitBarBackground" format="reference|color" />
 
         <!-- 拖动按钮图标 -->
         <!-- 支持state_drag_hovered和state_enabled状态 -->
         <attr name="kitThumb" format="reference" />
+
+        <!-- 起点独立外观优先; 缺省或 inherit 继承通用 kitThumb, none 清空. -->
+        <attr name="kitStartThumb" format="reference|enum">
+            <enum name="inherit" value="-1" />
+            <enum name="none" value="0" />
+        </attr>
+
+        <!-- 终点独立外观优先; 缺省或 inherit 继承通用 kitThumb, none 清空. -->
+        <attr name="kitEndThumb" format="reference|enum">
+            <enum name="inherit" value="-1" />
+            <enum name="none" value="0" />
+        </attr>
 
         <!-- 拖动按钮宽度 -->
         <attr name="kitThumbWidth" format="dimension">
@@ -54,11 +72,16 @@
         <!-- 绘制重力方向 -->
         <attr name="android:gravity" />
 
-        <!-- 分度 -->
+        <!-- 正整数步长, XML、赋值和拖动均对齐; 从 0 开始, 不补齐不能整除步长的总长度端点. -->
         <attr name="kitStep" format="integer" />
 
         <!-- 总长度 -->
         <attr name="kitTotal" format="integer" />
+
+        <!-- 起点下限, 包含边界; 步长仍从 0 起算, 两端都不能进入下限之前的范围. -->
+        <attr name="kitStartMin" format="integer">
+            <enum name="unlimited" value="-1" />
+        </attr>
 
         <!-- 开始位置最大范围限制 -->
         <attr name="kitStartMax" format="integer">

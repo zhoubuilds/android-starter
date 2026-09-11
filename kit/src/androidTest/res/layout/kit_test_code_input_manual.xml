@@ -24,6 +24,8 @@
             android:textSize="24sp"
             android:textStyle="bold" />
 
+        <include layout="@layout/kit_test_range_manual" />
+
         <include layout="@layout/kit_test_line_manual" />
 
         <TextView

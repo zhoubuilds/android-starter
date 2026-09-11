@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kit_range_start_label">Start</string>
+    <string name="kit_range_end_label">End</string>
+    <string name="kit_range_accessibility_description">%1$s, %2$d, range %3$d to %4$d</string>
+</resources>

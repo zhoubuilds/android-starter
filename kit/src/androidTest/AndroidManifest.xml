@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <application android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+    <application
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
         <activity
             android:name="com.whisper.kit.widget.KitCodeInputManualActivity"
             android:enableOnBackInvokedCallback="true"
@@ -18,6 +20,10 @@
             android:exported="false" />
         <activity
             android:name="com.whisper.kit.widget.KitLineViewTestActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true" />
+        <activity
+            android:name="com.whisper.kit.widget.KitRangeBarTestActivity"
             android:exported="false"
             android:hardwareAccelerated="true" />
     </application>

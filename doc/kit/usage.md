@@ -4,6 +4,14 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-11      | whisper | 补充范围选择控件的默认焦点及显式配置语义 |
+| 2026-09-11      | whisper | 增加起点下限配置及不可选前缀接入说明 |
+| 2026-09-11      | whisper | 明确 Drawable 原实例共享、独立动画与同值回写语义 |
+| 2026-09-10      | whisper | 补充单触点取消与组合 Drawable 尺寸保留说明 |
+| 2026-09-10      | whisper | 补充范围最终抬起值、按键拦截与 Drawable 尺寸保留说明 |
+| 2026-09-10      | whisper | 更新范围与交互监听并补充无障碍、键盘、恢复和 RTL 用法 |
+| 2026-09-09      | whisper | 补充范围自动对齐及滑块清空、继承和共享用法 |
+| 2026-09-09      | whisper | 增加整数范围选择与两端独立 Drawable 配置用法 |
 | 2026-09-09      | whisper | 补充标准分割线与 KitLineView 的选型建议 |
 | 2026-09-09      | whisper | 补充线条低版本硬件加速兼容说明 |
 | 2026-09-09      | whisper | 补充线条默认实线、状态色与运行时配置用法 |
@@ -307,6 +315,171 @@ line.lineColors = requireNotNull(AppCompatResources.getColorStateList(line.conte
 
 默认行为也发生变化: 未配置点划长度和间隔的实例现在显示实线, 颜色从纯白改为主题状态色.
 旧代码若通过全 0 线型隐藏控件, 应改用 `visibility` 或透明色; 需要固定白色时显式配置 `android:color`.
+
+### 4.2 整数范围选择
+
+`KitRangeBar` 选择从 0 到 `total` 的水平整数区间, 允许两端重合, 不允许交叉. 可以用两根手指同时调整两个端点;
+重合时先按住, 向数值减小方向拖动调整起点, 向数值增大方向拖动调整终点. 默认在 LTR 页面中向右递增,
+在 RTL 页面中向左递增, 起点始终表示较小数值.
+
+```xml
+<com.whisper.kit.widget.KitRangeBar
+    android:id="@+id/range"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:kitBarSize="4dp"
+    app:kitBarBackground="@drawable/range_track"
+    app:kitBarForeground="@drawable/range_selected_track"
+    app:kitThumb="@drawable/range_thumb"
+    app:kitStartThumb="@drawable/range_start_thumb"
+    app:kitStartThumbLabel="@string/range_start_label"
+    app:kitEndThumbLabel="@string/range_end_label"
+    app:kitThumbWidth="inner"
+    app:kitThumbHeight="inner"
+    app:kitTotal="100"
+    app:kitStep="10"
+    app:kitStart="20"
+    app:kitEnd="60" />
+```
+
+示例 Drawable 和字符串资源均由应用提供, `app` 使用 `http://schemas.android.com/apk/res-auto` 命名空间.
+`kitBarBackground` 绘制整个轨道, `kitBarForeground` 只覆盖选区. 至少配置一种轨道外观和所需滑块外观,
+控件没有内置图形. 上例起点使用 `range_start_thumb`, 终点回退到通用 `range_thumb`; 也可用
+`kitEndThumb` 单独配置终点. XML 属性可以集中配置到 `kitRangeBarStyle` 对应的样式.
+独立滑块属性省略或使用 `inherit` 时继承通用外观; 使用 `none` 或 `@empty` 时明确清空该端,
+例如 `app:kitEndThumb="none"`. 不使用 `@null` 表达清空, 因为资源解析后可能无法区分它与缺省配置.
+
+`kitThumbWidth` / `kitThumbHeight` 默认 `inner`, 各端分别使用自身 Drawable 的固有尺寸; 没有固有尺寸时应显式配置尺寸.
+显式宽高会同时应用于两个端点. `kitBarSize` 表示轨道厚度, 默认 8px, 建议应用按视觉需要配置 dp 值.
+`kitStartThumbEnable` / `kitEndThumbEnable` 默认 `true`, 可以在 XML 中分别禁用端点拖动;
+整个控件通过原生 `isEnabled` 控制. 滑块 selector 可以使用 `state_enabled`, `state_pressed`,
+`state_drag_hovered` 和 `state_focused`, 两端拖动和焦点状态独立. 隐藏某端外观不会自动关闭该端交互配置.
+
+数值配置均为整数, `kitStep` 必须为正数, 默认 1; `kitTotal` 默认 100, 小于 1 按 1 处理.
+XML、代码赋值和拖动都只能选择从 0 开始的步长整数倍. 例如 `total=100`, `step=30` 时合法刻度为
+`0, 30, 60, 90`, 100 始终无法选中; 给定 100 会调整到最近的合法刻度.
+
+| 配置 | 作用 |
+|------|------|
+| `kitStartMin` / `setStartMin()` | 起点下限, 包含边界, 默认 `unlimited` / `THUMB_UNLIMITED`, 0 是有效下限 |
+| `kitStartMax` / `setStartMax()` | 起点上限, 默认 `unlimited` / `THUMB_UNLIMITED`, 0 是有效上限 |
+| `kitEndMin` / `setEndMin()` | 终点下限, 默认 `unlimited` / `THUMB_UNLIMITED` |
+| `kitMinSpan` / `setMinSpan()` | 两端最小数值差, 默认 0, 此时允许重合 |
+
+XML 及直接设置端点限制时, 参数限制在 `-1..total`; 最小间隔的负值按 0 处理.
+`getStartMin()` 返回配置的下限, `THUMB_UNLIMITED` 表示未限制. 例如 XML 设置 `app:kitStartMin="20"`,
+或调用 `range.setStartMin(20)`, 表示小于 20 的部分不可选, 20 在对齐步长时仍可选择.
+两个端点都不能进入这一前缀; `setEndMin(20)` 则只限制终点, 起点仍可以小于 20.
+下限不改变轨道的 0 到 `total` 数值域或从 0 起算的刻度: `startMin=20`, `step=30` 时最小可选值是 30,
+不是从 20 起算新的刻度. 控件不会自动着色不可选前缀, 需要这种提示时由应用提供对应轨道 Drawable.
+这些限制对所有赋值入口生效, 限制值本身不需要对齐步长. 例如 `step=10`, `minSpan=15` 时,
+两端实际至少相差 20. 修改限制或 `total` 后, 控件自动将已有选区调整到最近可用范围:
+最小化两端移动距离的平方和, 等距时优先较小的起点, 再选择较小的终点.
+例如 `[20,60]` 在 `step=10` 下设置 `minSpan=70`, 会调整为 `[0,70]`.
+新约束无可行范围时抛出 `IllegalArgumentException`, 保留旧配置和选区; 缩小 `total` 不会偷偷放宽既有下限或最小间隔.
+例如 `total=100`, `step=30` 时设置 `endMin=100` 会被拒绝, 因为最大的合法刻度只有 90.
+
+```kotlin
+val range = view.findViewById<KitRangeBar>(R.id.range)
+range.setTotal(100)
+range.setSelectedRange(20, 60)
+range.setMinSpan(10)
+range.setOnRangeChangedListener { start, end ->
+    // 使用最终合法范围更新业务状态.
+}
+```
+
+`start` 和 `end` 可读写, 单端赋值固定另一端, 在当前全部约束下选择该端的最近合法刻度, 不交换端点身份.
+XML 初始范围和 `setSelectedRange()` 先排序两个原始参数, 再联合选择最近合法范围.
+范围监听器仅在最终合法选区变化时回调, 包括程序赋值、`setTotal()`、约束调整和状态恢复引起的变化.
+同一次触摸事件只通知两个端点都处理完成后的范围. 重复赋值、调整后范围不变或注册监听器本身均不通知;
+初始值通过 `range.start` / `range.end` 读取. 普通赋值归一化后选区相同时也不会重置拖动锚点,
+可以在业务状态同步时原样回写选区, 不改变后续拖动结果. 重复设置相同约束同样保持拖动连续性;
+约束、数值域或布局几何实际变化时, 控件会更新活动锚点.
+
+需要区分用户操作开始、正常结束和取消时, 单独注册交互监听器. 三个方法均有默认空实现, 可只覆盖需要的事件:
+
+```kotlin
+range.setOnInteractionListener(object : KitRangeBar.OnInteractionListener {
+    override fun onInteractionEnd(start: Int, end: Int) {
+        // 在用户正常结束操作后处理当前选区.
+    }
+
+    override fun onInteractionCancel(start: Int, end: Int) {
+        // 当前选区保留实时变化, 由业务决定是否需要其它处理.
+    }
+})
+```
+
+`onInteractionStart(start, end)` 提供开始时的选区. 双指触摸从首次有效按下到最后一根手指抬起是一次操作,
+期间增加、移除或切换触点不会拆成多次操作. 正常松手会先应用抬起位置, 再通知结束时的最终选区;
+Android 13 及以上系统取消单个触点时, 不使用该触点的新坐标, 已应用的值仍保留, 其他手指可以继续拖动或接管空出的滑块.
+单触点取消不会触发交互结束或取消回调, 仍等到最后一指正常抬起时结束操作.
+键盘调节从按键按下到松开为一次操作, 长按重复包含在内; 每次有效无障碍调节动作各形成一次操作.
+整次触摸取消、禁用、隐藏或移出窗口会取消活动操作, 保留实时选区, 不使用取消事件的坐标,
+并且不再通知正常结束. 程序赋值和状态恢复不会产生交互事件.
+操作进行中替换交互监听器只影响下一次操作, 当前操作的结束或取消仍通知开始时的监听器.
+
+旧版 `release` 参数和 `setOnRangeChangedListener(invokeImmediately, listener)` 重载已移除.
+原先在 `release=true` 时处理完成逻辑的调用方应迁移到交互监听器, 并分别处理正常结束和取消;
+范围监听器改用两个参数. 外部消费者需要重新编译.
+
+运行时可以更新通用或独立滑块外观, 独立配置优先, 清空与继承分别表达:
+
+```kotlin
+val thumb = AppCompatResources.getDrawable(range.context, R.drawable.range_thumb)?.mutate()
+thumb?.alpha = 192 // 先隔离资源共享配置, 再应用实例外观.
+range.setThumb(thumb)
+range.setStartThumb(AppCompatResources.getDrawable(range.context, R.drawable.range_start_thumb)?.mutate())
+range.setEndThumb(AppCompatResources.getDrawable(range.context, R.drawable.range_end_thumb)?.mutate())
+range.setEndThumb(null) // 清空终点外观, 不回退到通用外观.
+range.setEndThumb(KitRangeBar.INHERIT_THUMB) // 恢复继承通用外观.
+```
+
+上述资源同样由应用提供. `setThumb(null)` 只清除通用外观, 不影响已有独立覆盖.
+程序配置直接使用传入的 Drawable, 不调用 `newDrawable()` 或 `mutate()`,
+保留原实例的透明度、滤镜、tint、密度及组合图层外观. 从资源加载时, 应按上例先调用 `mutate()`,
+再设置透明度、滤镜、tint 或密度等实例配置, 最后传给控件; 延后调用 `mutate()` 可能重建组合 Drawable 的子项并丢失配置.
+代码直接新建的独占实例不需要 `mutate()`. XML 加载的外观由控件在加载时完成资源隔离.
+
+通用外观可以只传一个实例供两端使用, 控件在绘制和测量时临时应用各端状态和 bounds, 完成后恢复.
+轨道与滑块复用同一个实例时采用同样处理.
+共享实例只保证静态状态外观及其固有尺寸, 状态切换时通过 `jumpToCurrentState()` 直接显示目标状态;
+已有的动画调度会在进入共享时取消, 共享期间不调度动画, 外部直接请求刷新仍有效.
+其颜色、透明度和私有动画状态仍是同一份. 需要分别改色或独立动画时, 使用 `setStartThumb()` / `setEndThumb()`
+分别传入不同实例; 可以分别加载同一个 Drawable 资源, XML 也可为两个独立属性指定相同资源.
+独占实例正常接收状态和生命周期变化, 控件不会在测量或绘制时强制跳过其过渡动画.
+需要动态改色或启动动画时, 通过 `getStartThumb()` / `getEndThumb()` 获取当前实际绘制实例,
+共享时两个 getter 返回同一对象, 修改会影响使用它的所有角色. 替换外观后重新获取,
+控件负责状态、尺寸和绘制刷新. 传入的实例交由该控件管理, 不要同时交给其它 View 使用, 因为 `Drawable.callback` 只能有一个.
+轨道可以通过 `setBarBackground()` / `setBarForeground()` 替换, 传入 `null` 关闭对应层绘制.
+
+旧版本公开的 `mContentVerticalStart`, `mBarLength`, `mBarCenterX`, `mBarCenterY` 属于内部几何, 现已移除.
+外部调用方应通过标准 View 布局、padding 和控件配置调整展示, 不再直接读写这些字段.
+
+无障碍将两个端点表达为独立节点, 包含名称、整数当前值和合法范围. 两端重合时仍可分别聚焦,
+通过增减动作按步长调整. 键盘 Tab / Shift+Tab 可在端点之间导航并离开控件, 左右键调整当前端点.
+控件默认可聚焦, 保留显式设置的 `android:focusable` 和 `android:focusableInTouchMode`;
+`android:focusable="false"` 关闭键盘焦点入口, API 26 及以上的 `auto` 保留平台自动判断语义.
+可以使用原生 `setOnKeyListener()` 优先处理按键; 监听器返回 `true` 时控件不再执行对应调整或导航.
+控件不使用浮点范围或任意进度设置动作, 大整数仍保持原有精度.
+
+默认端点名称为通用名称, 业务可通过示例中的 `kitStartThumbLabel` / `kitEndThumbLabel` 字符串资源提供更具体的语义.
+运行时使用 `startThumbLabel` / `endThumbLabel`:
+
+```kotlin
+range.startThumbLabel = range.context.getString(R.string.range_start_label)
+range.endThumbLabel = range.context.getString(R.string.range_end_label)
+range.startThumbLabel = null // 恢复通用默认名称.
+```
+
+为 View 设置稳定且唯一的 `android:id` 并保持原生状态保存开启后, 页面重建会恢复 `start`, `end`, `total`,
+`step`, `startMin`, `startMax`, `endMin` 和 `minSpan` 的一致快照. 外观、动画和未结束的操作不恢复,
+也不会因为恢复而产生交互事件. 若恢复改变当前选区, 范围监听器会收到一次最终范围通知.
+
+RTL 镜像默认开启, 同时影响外观位置、触摸方向和键盘方向. 需要在 RTL 页面保持数值从左到右递增时,
+在 XML 设置 `app:kitRtlMirroringEnabled="false"`, 或运行时设置 `range.isRtlMirroringEnabled = false`.
+这只关闭数值方向镜像, 不改变 View 自身的布局方向或平台解析的 padding 和 Drawable 方向.
 
 ## 5. 富文本扩展
 

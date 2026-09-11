@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="kit_test_range_blue">#FF0000FF</color>
+    <color name="kit_test_range_red">#FFFF0000</color>
+    <color name="kit_test_range_green">#FF00FF00</color>
+
+    <style name="kit_test_range_common">
+        <item name="kitThumb">@color/kit_test_range_blue</item>
+    </style>
+
+    <style name="kit_test_range_cleared" parent="kit_test_range_common">
+        <item name="kitStartThumb">none</item>
+        <item name="kitEndThumb">@empty</item>
+    </style>
+
+    <style name="kit_test_range_overridden" parent="kit_test_range_common">
+        <item name="kitStartThumb">@color/kit_test_range_red</item>
+        <item name="kitEndThumb">@color/kit_test_range_green</item>
+    </style>
+
+    <style name="kit_test_range_inherited" parent="kit_test_range_overridden">
+        <item name="kitStartThumb">inherit</item>
+        <item name="kitEndThumb">inherit</item>
+    </style>
+
+    <style name="kit_test_range_step_seven">
+        <item name="kitStep">7</item>
+    </style>
+</resources>
