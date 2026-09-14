@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-09-14 | whisper | 补充系统 Splash 向量资源, 动画维护和冷启动回归要求 |
 | 2026-09-11 | whisper | 接入 monochrome 启动器主题图标并更新生成与验证规则 |
 | 2026-09-11 | whisper | 记录固定品牌图标对 monochrome 建议检查的局部抑制 |
 | 2026-09-11 | whisper | 明确传统 WebP 与 Adaptive Icon 的资源目录约束 |
@@ -21,6 +22,9 @@
 | 共享固定配色和主题 | `foundation/src/main/res/` |
 | App 主题入口 | `app/src/main/res/values/themes.xml` |
 | 启动图标 | `app/src/main/res/` 中的 drawable 和 mipmap 资源 |
+| 系统 Splash 绑定 | `app/src/main/res/values-v31/themes.xml` |
+| 系统 Splash 图标 | `app/src/main/res/drawable/ic_splash_screen.xml` 与 `ic_splash_screen_vector.xml` |
+| Splash 动画与时长 | `app/src/main/res/animator/splash_accent_alpha.xml` 与 `values/integers.xml` |
 | 图标设计输入与预览 | `design/brand/icon.json` 及同目录 SVG / PNG |
 | 图标生成工具 | `scripts/generate-brand-icon.mjs` |
 | 品牌种子配置 | `design/brand/theme-seed.properties` |
@@ -74,6 +78,24 @@ Android 13+ 需要启动器支持并由用户启用主题图标, 才使用 monoc
 `design/brand/icon-monochrome.svg` 是实际单色 Adaptive Icon 图层的设计备份, 与 Android 单色资源一起生成.
 `icon-play-store.png` 保留完整正方形背景, 不将启动器的圆角遮罩烘焙到商店素材中.
 生成命令和可选栅格工具依赖见 [App 使用文档](usage.md#3-替换应用品牌).
+
+### 3.1 系统 Splash 维护
+
+API 31+ 通过 `android:windowSplashScreenAnimatedIcon` 直接引用 `ic_splash_screen`, 不用单独的启动
+Activity 承载系统 Splash. 该 AnimatedVectorDrawable 与 `ic_splash_screen_vector` 及
+`design/brand/icon-splash.svg` 由 `generate-brand-icon.mjs` 生成, 图标几何继续来自 `design/brand/icon.json`.
+手动维护 `animator/splash_accent_alpha.xml`, `values/integers.xml` 中的时长和 `values-v31/themes.xml`
+中的系统绑定, 不在生成输出上单独修改形状.
+
+保持以下关系:
+
+* 底图为 288dp, viewport 为 108, 与彩色前景使用相同的几何和位置. 石墨背景填满画布, 遮罩由系统应用.
+* 两片电青 target 共用 `splash_accent_alpha`, 仅动画化 `fillAlpha`, 从 `0.65` 到 `1`.
+* `splash_icon_animation_duration` 统一为 180ms, animator 和 `windowSplashScreenAnimationDuration`
+  引用同一整数资源. 该时长不是 app 最短展示或等待时间, 实际显示取决于系统与启动进度.
+* 调整 Splash 时分别检查 launcher, Adaptive Icon 和 monochrome 资源, 避免混淆不同平台入口的图层用途.
+* 不为播放动画阻塞 Application 初始化, 延迟 Activity 绘制或增加等待逻辑. 共享日夜配色继续由 Foundation
+  提供, Splash 配置留在 app.
 
 ## 4. 初始化与保护范围
 
@@ -131,6 +153,19 @@ git diff --check
 在支持动态取色的设备上更换壁纸, 确认应用内语义色不变化. 检查启动器图标, 应用启动, 页面文字对比度,
 系统栏明暗与 Insets, 以及现有首页交互.
 编译通过不能代替这些界面验证; 未验证的平台或模式应在交付中明确说明.
+
+Splash 修改还需执行冷启动回归:
+
+* 在 API 31+ 真机或模拟器上结束应用进程, 从启动器重新打开, 覆盖浅色和深色模式. 优先复核曾出现模糊的
+  OPPO API 34 设备, 再扩大到其它系统实现.
+* 使用设备原生尺寸录屏逐帧检查, 同时观察图标进入过程和停稳阶段. 检查边缘清晰度, 系统遮罩, 图标位置
+  和尺度, 避免把过渡缩放或录屏二次缩放造成的模糊误认为静态绘制问题.
+* 检查两片电青色块的透明度过渡, 以及窗口背景和进入 Activity 时的衔接, 确认没有增加等待或出现第二个
+  启动画面. 单独校验动画文件的 180ms 不能证明系统会完整展示同样时长.
+* 在 API 30 及以下验证应用仍正常启动. 分别按对应平台能力检查普通图标和主题图标, 确认其显示不受
+  Splash 专用资源影响.
+
+截图, 录屏和 A/B 结论只说明实际验证过的设备与系统版本, 不作为所有厂商绘制结果的保证.
 
 后续新增 feature 时扩大验证到 Aster Registry 生成与 merged manifest, 两个入口导航及返回行为. 新增
 GitHub 请求时覆盖响应解析, 错误与限流, 取消传播, 重试, 缓存和离线展示.

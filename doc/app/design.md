@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-09-14 | whisper | 使用独立向量动画作为系统 Splash 图标并明确资源归属 |
 | 2026-09-11 | whisper | 支持启动器主题图标, 保持应用内固定日夜配色 |
 | 2026-09-11 | whisper | 传统启动图标改用多密度 WebP, 修正 mipmap 中的向量资源组织 |
 | 2026-09-11 | whisper | 确定原创 S 图标和固定品牌配色, 将共享设计系统归入 Foundation |
@@ -54,6 +55,25 @@ Color Utilities 的 `SchemeTonalSpot` 按对比度级别 `0.0` 生成. 生成配
 在 Android 13+ 上, 用户在支持的启动器中启用主题图标后, 启动器根据壁纸和系统主题重新着色.
 普通图标继续使用品牌原色. 启动器主题图标与应用内配色分别配置, 不需要为此在 Foundation 或 Application
 接入 `DynamicColors`.
+
+### 3.1 系统 Splash 图标
+
+Android 12+, API 31+ 的系统 Splash 使用 app 独立提供的 AnimatedVectorDrawable. OPPO API 34 的冷启动
+录屏发现, 之前的静态图标在停稳后边缘仍然模糊; 独立矢量动画资源用于改善这个启动阶段的绘制问题.
+系统 Splash 的实际显示由平台实现决定, 不将单个系统的处理路径推论为所有厂商的清晰度保证.
+
+`values-v31/themes.xml` 将 `android:windowSplashScreenAnimatedIcon` 直接绑定到
+`drawable/ic_splash_screen.xml`, 其底图为 `drawable/ic_splash_screen_vector.xml`. 底图尺寸为 288dp,
+viewport 为 108, 沿用 Adaptive Icon 前景几何, 并提供石墨色满画布背景供系统遮罩裁切.
+启动窗口背景使用 `colorSurface`, 随应用的浅色和深色模式变化.
+
+动画只将两片电青色块的 `fillAlpha` 从 `0.65` 变化到 `1`, 时长为 180ms. 两个 target 共用同一 animator,
+动画和系统 Splash 时长配置共用 `splash_icon_animation_duration`. app 不新增启动 Activity 或等待逻辑,
+也不等待动画结束才进入首页.
+
+Splash 是 app 的应用身份和平台启动资源, 不进入 Foundation 共享主题. 它与桌面 launcher, Adaptive Icon,
+monochrome 的用途分别维护; 图标几何仍由同一设计输入生成. 静态设计备份为
+[`design/brand/icon-splash.svg`](../../design/brand/icon-splash.svg), 该 SVG 不记录动画时间线.
 
 ## 4. 组合根边界
 

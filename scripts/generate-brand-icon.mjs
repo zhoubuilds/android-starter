@@ -93,9 +93,11 @@ function svg(layers, viewport = config.viewport) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${viewport}" height="${viewport}" viewBox="0 0 ${viewport} ${viewport}">\n${paths}\n</svg>\n`;
 }
 
-function vector(layers, viewport, dimension) {
-    const paths = layers.map(layer => `    <path\n        android:fillColor="${layer.color}"\n        android:pathData="${layer.path}" />`).join('\n');
-    return `<?xml version="1.0" encoding="utf-8"?>\n<vector xmlns:android="http://schemas.android.com/apk/res/android"\n    android:width="${dimension}dp"\n    android:height="${dimension}dp"\n    android:viewportWidth="${viewport}"\n    android:viewportHeight="${viewport}">\n${paths}\n</vector>\n`;
+function vector(layers, viewport, dimension, rasterWarningReason) {
+    const paths = layers.map(layer => `    <path\n${layer.name ? `        android:name="${layer.name}"\n` : ''}        android:fillColor="${layer.color}"\n        android:pathData="${layer.path}" />`).join('\n');
+    const comment = rasterWarningReason ? `<!-- ${rasterWarningReason} -->\n` : '';
+    const tools = rasterWarningReason ? '\n    xmlns:tools="http://schemas.android.com/tools"\n    tools:ignore="VectorRaster"' : '';
+    return `<?xml version="1.0" encoding="utf-8"?>\n${comment}<vector xmlns:android="http://schemas.android.com/apk/res/android"${tools}\n    android:width="${dimension}dp"\n    android:height="${dimension}dp"\n    android:viewportWidth="${viewport}"\n    android:viewportHeight="${viewport}">\n${paths}\n</vector>\n`;
 }
 
 async function output(path, contents) {
@@ -140,6 +142,18 @@ await output('app/src/main/res/drawable/ic_launcher_background.xml', vector([
 const adaptiveIcon = `<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n    <background android:drawable="@drawable/ic_launcher_background" />\n    <foreground android:drawable="@drawable/ic_launcher_foreground" />\n    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />\n</adaptive-icon>\n`;
 await output('app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', adaptiveIcon);
 await output('app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml', adaptiveIcon);
+
+// Splash 直接使用 AnimatedVectorDrawable, 避免系统将静态图标先栅格化到较小尺寸再放大.
+const splashLayers = [
+    { color: config.colors.background, path: 'M0,0H108V108H0Z' },
+    ...foreground(true).map((layer, index) => ({ ...layer, name: `splash_layer_${index}` })),
+];
+await output('app/src/main/res/drawable/ic_splash_screen_vector.xml', vector(
+    splashLayers, config.adaptive.viewport, 288,
+    '系统 Splash 使用 288dp 画布, 由 AVD 按最终图标尺寸绘制; 不用于普通页面图标.',
+));
+await output('app/src/main/res/drawable/ic_splash_screen.xml', `<?xml version="1.0" encoding="utf-8"?>\n<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"\n    android:drawable="@drawable/ic_splash_screen_vector">\n    <target android:name="splash_layer_1" android:animation="@animator/splash_accent_alpha" />\n    <target android:name="splash_layer_3" android:animation="@animator/splash_accent_alpha" />\n</animated-vector>\n`);
+await output('design/brand/icon-splash.svg', svg(splashLayers, config.adaptive.viewport));
 
 if (raster) {
     for (const [density, size] of Object.entries(config.legacyDensities)) {

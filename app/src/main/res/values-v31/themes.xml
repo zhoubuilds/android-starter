@@ -2,6 +2,7 @@
 <resources>
     <style name="Theme.Androidstarter" parent="Base.Theme.Androidstarter">
         <item name="android:windowSplashScreenBackground">?attr/colorSurface</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_screen</item>
+        <item name="android:windowSplashScreenAnimationDuration">@integer/splash_icon_animation_duration</item>
     </style>
 </resources>
