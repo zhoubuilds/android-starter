@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Foundation.Theme.Base" parent="Theme.Material3Expressive.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/foundation_primary</item>
+        <item name="colorOnPrimary">@color/foundation_on_primary</item>
+        <item name="colorPrimaryContainer">@color/foundation_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/foundation_on_primary_container</item>
+        <item name="colorPrimaryInverse">@color/foundation_inverse_primary</item>
+        <item name="colorSecondary">@color/foundation_secondary</item>
+        <item name="colorOnSecondary">@color/foundation_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/foundation_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/foundation_on_secondary_container</item>
+        <item name="colorTertiary">@color/foundation_tertiary</item>
+        <item name="colorOnTertiary">@color/foundation_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/foundation_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/foundation_on_tertiary_container</item>
+
+        <item name="colorPrimaryFixed">@color/foundation_primary_fixed</item>
+        <item name="colorPrimaryFixedDim">@color/foundation_primary_fixed_dim</item>
+        <item name="colorOnPrimaryFixed">@color/foundation_on_primary_fixed</item>
+        <item name="colorOnPrimaryFixedVariant">@color/foundation_on_primary_fixed_variant</item>
+        <item name="colorSecondaryFixed">@color/foundation_secondary_fixed</item>
+        <item name="colorSecondaryFixedDim">@color/foundation_secondary_fixed_dim</item>
+        <item name="colorOnSecondaryFixed">@color/foundation_on_secondary_fixed</item>
+        <item name="colorOnSecondaryFixedVariant">@color/foundation_on_secondary_fixed_variant</item>
+        <item name="colorTertiaryFixed">@color/foundation_tertiary_fixed</item>
+        <item name="colorTertiaryFixedDim">@color/foundation_tertiary_fixed_dim</item>
+        <item name="colorOnTertiaryFixed">@color/foundation_on_tertiary_fixed</item>
+        <item name="colorOnTertiaryFixedVariant">@color/foundation_on_tertiary_fixed_variant</item>
+
+        <item name="android:colorBackground">@color/foundation_background</item>
+        <item name="colorOnBackground">@color/foundation_on_background</item>
+        <item name="android:windowBackground">?attr/colorSurface</item>
+        <item name="colorSurface">@color/foundation_surface</item>
+        <item name="colorOnSurface">@color/foundation_on_surface</item>
+        <item name="colorSurfaceVariant">@color/foundation_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/foundation_on_surface_variant</item>
+        <item name="colorSurfaceDim">@color/foundation_surface_dim</item>
+        <item name="colorSurfaceBright">@color/foundation_surface_bright</item>
+        <item name="colorSurfaceContainerLowest">@color/foundation_surface_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/foundation_surface_container_low</item>
+        <item name="colorSurfaceContainer">@color/foundation_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/foundation_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/foundation_surface_container_highest</item>
+        <item name="colorSurfaceInverse">@color/foundation_inverse_surface</item>
+        <item name="colorOnSurfaceInverse">@color/foundation_inverse_on_surface</item>
+        <item name="colorOutline">@color/foundation_outline</item>
+        <item name="colorOutlineVariant">@color/foundation_outline_variant</item>
+        <item name="colorError">@color/foundation_error</item>
+        <item name="colorOnError">@color/foundation_on_error</item>
+        <item name="colorErrorContainer">@color/foundation_error_container</item>
+        <item name="colorOnErrorContainer">@color/foundation_on_error_container</item>
+
+        <item name="android:textColorPrimary">@color/foundation_text_primary</item>
+        <item name="android:textColorSecondary">@color/foundation_text_secondary</item>
+        <item name="android:textColorTertiary">@color/foundation_text_secondary</item>
+        <item name="android:textColorPrimaryInverse">@color/foundation_text_primary_inverse</item>
+        <item name="android:textColorSecondaryInverse">@color/foundation_text_secondary_inverse</item>
+        <item name="android:textColorTertiaryInverse">@color/foundation_text_secondary_inverse</item>
+        <item name="android:textColorPrimaryDisableOnly">@color/foundation_text_disable_only</item>
+        <item name="android:textColorPrimaryInverseDisableOnly">@color/foundation_text_disable_only_inverse</item>
+        <item name="android:textColorHint">@color/foundation_text_hint</item>
+        <item name="android:textColorHintInverse">@color/foundation_text_hint_inverse</item>
+        <item name="android:textColorHighlight">@color/foundation_text_highlight</item>
+        <item name="android:textColorHighlightInverse">@color/foundation_text_highlight_inverse</item>
+        <item name="android:textColorAlertDialogListItem">@color/foundation_text_primary</item>
+
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
+        <!-- 浅色导航栏的 XML 明暗属性从 API 27 起可用. -->
+        <item name="android:navigationBarColor">@android:color/black</item>
+    </style>
+
+    <style name="Foundation.Theme.Platform" parent="Foundation.Theme.Base" />
+    <style name="Foundation.Theme" parent="Foundation.Theme.Platform" />
+</resources>

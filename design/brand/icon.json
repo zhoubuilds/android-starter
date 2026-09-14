@@ -1,0 +1,32 @@
+{
+  "name": "Starter",
+  "version": 1,
+  "colors": {
+    "background": "#1B2025",
+    "foreground": "#EAF1F5",
+    "accent": "#006A86"
+  },
+  "viewport": 96,
+  "rotationCenter": [48, 54],
+  "tiltDegrees": 6,
+  "bodyRadius": 1.5,
+  "accentRadius": 0.6,
+  "legacyBackgroundRadius": 23,
+  "bodyPolygon": [
+    [31, 24], [79, 24], [68.5, 38], [36, 38], [36, 46],
+    [51, 46], [39, 62], [30, 62], [18, 50], [18, 37]
+  ],
+  "accentPolygon": [[36, 49], [47, 49], [39.5, 59], [28.5, 59]],
+  "adaptive": {
+    "viewport": 108,
+    "scale": 0.72,
+    "safeRadius": 33
+  },
+  "legacyDensities": {
+    "mdpi": 48,
+    "hdpi": 72,
+    "xhdpi": 96,
+    "xxhdpi": 144,
+    "xxxhdpi": 192
+  }
+}

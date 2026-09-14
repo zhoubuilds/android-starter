@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                    |
 |-----------------|---------|-----------------------------|
+| 2026-09-11      | whisper | 明确 Foundation 共享主题职责并补充模块文档入口 |
+| 2026-09-11      | whisper | 增加 App 图标主题和示例规划文档入口 |
 | 2026-09-01      | whisper | 明确 Kit 定位和设计文档入口 |
 | 2026-08-31      | whisper | 统一 Prism 文档入口         |
 | 2026-08-31      | whisper | 区分项目规范与智能体规则    |
@@ -19,7 +21,7 @@ release tag.
 
 * `app` 是组合根, 负责选择环境, Endpoint 和应用级实现.
 * `architecture` 只提供通用技术抽象, 不解释具体业务响应, 错误码, Meta 或域名.
-* `foundation` 承载应用业务基座中的响应映射, Meta 建模和领域转换.
+* `foundation` 承载应用业务基座中的响应映射, Meta 建模, 领域转换和跨页面共享设计系统.
 * 下层模块不读取 app `BuildConfig`, 也不感知 product flavor.
 * Prism, Aster 和 Habitat 通过独立插件接入, 不应成为所有项目的隐式前提.
 
@@ -29,7 +31,7 @@ release tag.
 |---------------------------------------------------------|--------------------------------------------------------|
 | [`app`](app/)                                           | 示例应用和最终装配入口                                 |
 | [`architecture`](architecture/)                         | Business 管线, Architecture UI 和网络创建骨架          |
-| [`foundation`](foundation/)                             | 应用业务基座及 architecture 抽象的应用级实现           |
+| [`foundation`](foundation/)                             | 应用业务基座, 共享主题及 architecture 抽象的应用级实现 |
 | [`kit`](kit/)                                           | 业务无关的 Android 工具, 扩展和通用 UI 组件            |
 | [`quill`](quill/)                                       | 可插拔, 延迟构建消息的日志能力                         |
 | [`aster`](aster/)                                       | Activity 路由和 Capability 发现的 runtime / compiler   |
@@ -91,6 +93,9 @@ Prism 的配置契约和完整退出步骤见 [Prism 使用文档](doc/prism/usa
 
 ## 文档
 
+* App: [设计](doc/app/design.md), [开发](doc/app/development.md), [使用](doc/app/usage.md).
+* Foundation: [设计](doc/foundation/design.md), [开发](doc/foundation/development.md),
+  [使用](doc/foundation/usage.md).
 * Architecture: [设计](doc/architecture/design.md), [开发](doc/architecture/development.md),
   [使用](doc/architecture/usage.md).
 * Network: [设计](doc/network/design.md), [开发](doc/network/development.md), [使用](doc/network/usage.md).

@@ -4,6 +4,7 @@ plugins {
 
 android {
     namespace = "com.whisper.foundation"
+    resourcePrefix = "foundation_"
     compileSdk = 37
 
     defaultConfig {
