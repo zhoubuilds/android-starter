@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                   |
 |-----------------|---------|----------------------------|
+| 2026-09-17      | whisper | 增加基于目标 View 实时分发的 Insets padding 扩展 |
 | 2026-09-11      | whisper | 明确刷新组件重布局后的相同位移快照去重 |
 | 2026-09-11      | whisper | 明确刷新组件 margin、布局尺寸同步及边界回调重入规则 |
 | 2026-09-11      | whisper | 明确 GONE 组件的请求限制及阻尼有限值契约 |
@@ -203,6 +204,11 @@ View 原生点击和无障碍链路提供; listener 不通过侵入 item 层级�
 安全内容区域不是稳定的 Context 属性. 状态栏、导航栏、IME、display cutout 的 Insets 会随窗口模式、可见性和目标 View
 的分发状态动态变化, 必须由界面层基于目标 View 的实时 `WindowInsetsCompat` 处理. Kit 不把这些 Insets 静态扣减成一个
 “可用窗口尺寸”, 避免 edge-to-edge 下重复扣减或丢失动态变化.
+
+界面层可以使用 `View.applyWindowInsetsPadding()` 复用实时 Insets 到 padding 的处理. 该扩展属于通用平台能力,
+保留 View 初始 padding, 默认避让系统栏和 display cutout, 向子 View 继续分发未处理区域. 页面显式选择处理的物理边与
+Insets 类型; IME 是否加入、底部是否交给导航组件由页面决定. 它不启用 edge-to-edge、不选择系统栏外观、不持有 Activity,
+也不改变 `WindowUtils` 的完整窗口边界契约.
 
 显示方向表示传入 Context 当前资源配置的 `Configuration.orientation`, 不表示设备自然方向或 Display rotation.
 布局资源适配仍由 Android 资源限定符和响应式布局负责; 方向查询只服务无法由资源系统表达的命令式分支.

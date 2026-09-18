@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-17      | whisper | 增加实时 Insets padding、剩余分发与低版本刘海处理 |
 | 2026-09-11      | whisper | 校准刷新组件外观来源及布局快照比较基准 |
 | 2026-09-11      | whisper | 补齐刷新组件布局补发去重及实例快照生命周期规则 |
 | 2026-09-11      | whisper | 补齐刷新边界重入、有效距离布局同步及 margin 外包尺寸规则 |
@@ -210,6 +211,22 @@ CharSequence 富文本扩展包含绝对字号、相对字号、前景色、
 同时设置时合并为 `BOLD_ITALIC`; `NORMAL` 显式重置已有字形. API 24 及以上使用同一组合算法, 但不承诺不同系统版本的
 字体 fallback, 字形栅格和像素指标完全一致. 自定义字体 Span 只用于进程内渲染, 不承诺经过 Bundle, SavedState 或 IPC 后保留.
 `TextView` 是否启用 `LinkMovementMethod` 仍由承载点击文本的组件或调用方负责.
+
+### 4.1 窗口 Insets padding
+
+`View.applyWindowInsetsPadding()` 在目标 View 上安装唯一 Insets listener, 默认处理 `systemBars | displayCutout`.
+调用方按页面选择物理边和 `typeMask`; 输入页面显式加入 `ime`, 首页可用 `bottom = false` 将底部留给导航组件.
+四边均以首次安装时的 padding 为基线; 私有 View tag 保存基线, 重复分发或安装不得累加. 安装后不要再由其它代码修改
+同一 View 的 padding 或覆盖 listener. 安装后在 View 附着时请求分发, 不持有任何全局窗口或 Activity 状态.
+
+多种 Insets 在同一边取最大值, 不累加 IME 与导航栏高度. 返回值扣除实际应用的 Insets, 不扣除页面自身的初始 padding,
+未处理边继续交给子 View. API 28-29 读取当前分发的 `displayCutout` 安全区, 避免 AndroidX 的按类型查询回读根窗口.
+API 28 的 `inset()` 不扣减刘海, 完整避让后使用该版本稳定的 `consumeDisplayCutout()` 消费, 局部抑制其废弃提示;
+API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一层完整处理. API 29 起由平台完成逐边扣减.
+
+窗口 edge-to-edge、IME 的 `adjustResize`、系统栏外观和具体页面的滚动策略仍由宿主配置. 本扩展不修改
+`WindowUtils`、Architecture Activity 生命周期或应用主题. 测试覆盖初始 padding、重复安装、父子剩余分发、
+刘海、IME 显示与隐藏以及物理左右边的 RTL 语义.
 
 ## 5. 基础控件
 

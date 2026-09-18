@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-17      | whisper | 说明实时 Insets padding 与页面处理边的选择 |
 | 2026-09-11      | whisper | 补充刷新内容数量、动画时长和业务回调时机说明 |
 | 2026-09-11      | whisper | 补充刷新组件更新文案后的布局快照去重语义 |
 | 2026-09-11      | whisper | 补充刷新组件 margin、尺寸更新及边界回调重入语义 |
@@ -1183,3 +1184,28 @@ val isPortrait: Boolean = WindowUtils.isPortrait(context)
 
 结果表示传入 Context 当前资源配置的方向, 不表示设备的自然方向或物理旋转角度. 配置方向未定义或为方形时,
 两个方法都会返回 `false`. 布局适配仍应优先使用 Android 的 `land` 资源限定符和响应式布局, 不依赖运行时分支复制资源系统能力.
+
+## 14. 窗口 Insets padding
+
+Activity 启用 edge-to-edge 后, 在新建 View 上安装一次通用 padding 扩展:
+
+```kotlin
+import com.whisper.kit.extension.applyWindowInsetsPadding
+
+root.applyWindowInsetsPadding()
+```
+
+默认避让系统栏和刘海, 保留 XML 中的初始 padding. 通过当前 View 的实时 Insets 更新, 不读取静态屏幕尺寸.
+底部由导航组件处理时使用 `root.applyWindowInsetsPadding(bottom = false)`, 其余方向同样可显式关闭.
+左右参数表示物理边. 输入页面可以合并 IME, 键盘与导航栏取较大值而非相加:
+
+```kotlin
+root.applyWindowInsetsPadding(
+    typeMask = WindowInsetsCompat.Type.systemBars() or
+        WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime(),
+)
+```
+
+旧版系统的 IME 分发需要 Activity 使用 `adjustResize`. 可滚动页面仍应使用合适的滚动容器保证输入区域可达.
+该扩展占用目标 View 的 Insets listener, 安装后不要覆盖 listener 或直接改其 padding. 重复安装复用首次保存的 padding
+基线. 已处理区域从后续分发中扣除, 未处理边留给子 View; API 28 的同一刘海必须由单层完整处理, 不在嵌套 View 间分摊.
