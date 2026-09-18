@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 连续分段按钮只切换颜色, 不使用 Expressive 的选中态形变. -->
+    <style name="Foundation.Widget.SegmentedButton" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+        <item name="shapeAppearanceOverlay">@null</item>
+    </style>
+
+    <style name="Foundation.Widget.SegmentedButtonGroup" parent="Widget.Material3.MaterialButtonToggleGroup">
+        <item name="innerCornerSize">0dp</item>
+    </style>
+</resources>

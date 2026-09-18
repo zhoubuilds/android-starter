@@ -4,6 +4,12 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-09-17 | whisper | 指向 Kit 的窗口 Insets 接入方式 |
+| 2026-09-17 | whisper | 说明连续分段按钮共享样式及页面扩展方式 |
+| 2026-09-15 | whisper | 说明顶层标题使用 Starter Mono SemiBold |
+| 2026-09-14 | whisper | 说明 Starter Mono 全局中英文字体行为 |
+| 2026-09-14 | whisper | 同步 Project 与应用设置页面的主题接入 |
+| 2026-09-14 | whisper | 同步首页功能模块的接入状态 |
 | 2026-09-11 | whisper | 说明启动器主题图标不改变共享主题接入 |
 | 2026-09-11 | whisper | 说明共享固定主题的接入, 品牌替换和资源使用 |
 
@@ -34,9 +40,19 @@ app 使用自己的主题入口继承共享主题:
 ```
 
 在 app Manifest 中设置 `android:theme="@style/Theme.Androidstarter"`. Activity 通过应用主题获得固定
-浅色和深色配色. 主题继承 `Theme.Material3Expressive.DayNight.NoActionBar`, 明暗模式跟随系统,
-不需要注册 `DynamicColors`. 共享主题没有强制页面使用某一种布局或导航结构.
-启动器主题图标由 app 的 monochrome 资源提供, 用户启用后仅改变启动器中的图标着色, 应用内配色保持不变.
+浅色和深色配色. 主题继承 `Theme.Material3Expressive.DayNight.NoActionBar`, 默认跟随系统;
+app 可通过 AppCompat 固定浅色或深色, 不需要注册 `DynamicColors`.
+共享主题没有强制页面使用某一种布局或导航结构. 启动器主题图标由 app 的 monochrome 资源提供,
+用户启用后仅改变启动器中的图标着色,
+应用内配色保持不变.
+
+Foundation 同时提供 Starter Mono 全局字体. 页面使用 Material 3 的 `textAppearanceDisplay*`、
+`textAppearanceHeadline*`、`textAppearanceTitle*`、`textAppearanceBody*` 和 `textAppearanceLabel*`
+语义属性即可, 不需要单独设置 `fontFamily`. JetBrains Mono 提供拉丁字符、数字、符号和编程连字,
+Noto Sans Mono CJK SC 提供内置 CJK 字形, 因此中文不依赖设备厂商的系统字体回退.
+字体族提供原生 Regular 400 和 SemiBold 600. 顶层目的地 Toolbar 使用
+`@style/Foundation.TextAppearance.TopLevelTitle`; 其它页面继续优先使用 Material 3 语义排版属性,
+需要斜体或其它字重时由 Android 按字体族和标准 `textStyle` 解析.
 
 在布局中引用语义属性:
 
@@ -53,7 +69,15 @@ app 使用自己的主题入口继承共享主题:
 ColorStateList, 不用固定颜色覆盖所有状态. 常用背景包括 `colorSurface`, `colorSurfaceContainer` 和
 `colorSurfaceContainerHigh`; 描边使用 `colorOutline` 或 `colorOutlineVariant`.
 
+连续分段选择在 `MaterialButtonToggleGroup` 上设置
+`style="@style/Foundation.Widget.SegmentedButtonGroup"`, 每个子 `MaterialButton` 使用
+`style="@style/Foundation.Widget.SegmentedButton"`. 单选并且始终保留选中项时, 在组上声明
+`app:singleSelection="true"` 和 `app:selectionRequired="true"`.
+这组样式保持两端外圆角和内部直角, 切换选中项只改变颜色. 页面仍负责至少 48dp 的触控尺寸和具体布局;
+需要额外内边距或文本缩放时, 以 `Foundation.Widget.SegmentedButton` 为 parent 定义页面子样式.
+
 新 Activity 仍需按 AndroidX 方式启用 edge-to-edge 并处理窗口 Insets. 继承主题不等于布局已经避开系统栏.
+实时 padding 处理可复用 [Kit 窗口 Insets 扩展](../kit/usage.md#14-窗口-insets-padding), 页面显式选择处理边与 IME.
 
 ## 3. 替换品牌
 
@@ -101,4 +125,4 @@ adb shell cmd uimode night no
 ```
 
 确认同一页面在两种模式下内容清晰, 控件状态正确且系统栏不遮挡内容. 更换桌面壁纸后, 应用配色保持不变.
-当前示例首页仍包含测试控件, Function 和 About 功能模块尚未实现.
+当前示例首页的 Function、Project 和 Settings 页面均通过应用主题使用 Foundation 的共享配色.

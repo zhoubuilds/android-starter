@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Foundation.TextAppearance.DisplayLarge" parent="TextAppearance.Material3.DisplayLarge">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.DisplayLarge.Emphasized"
+        parent="TextAppearance.Material3.DisplayLarge.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.DisplayMedium" parent="TextAppearance.Material3.DisplayMedium">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.DisplayMedium.Emphasized"
+        parent="TextAppearance.Material3.DisplayMedium.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.DisplaySmall" parent="TextAppearance.Material3.DisplaySmall">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.DisplaySmall.Emphasized"
+        parent="TextAppearance.Material3.DisplaySmall.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.HeadlineLarge" parent="TextAppearance.Material3.HeadlineLarge">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.HeadlineLarge.Emphasized"
+        parent="TextAppearance.Material3.HeadlineLarge.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.HeadlineMedium" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.HeadlineMedium.Emphasized"
+        parent="TextAppearance.Material3.HeadlineMedium.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.HeadlineSmall" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.HeadlineSmall.Emphasized"
+        parent="TextAppearance.Material3.HeadlineSmall.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.TitleLarge" parent="TextAppearance.Material3.TitleLarge">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.TopLevelTitle" parent="Foundation.TextAppearance.TitleLarge">
+        <item name="fontFamily">@font/foundation_starter_mono_semibold</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono_semibold</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.TitleLarge.Emphasized"
+        parent="TextAppearance.Material3.TitleLarge.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.TitleMedium" parent="TextAppearance.Material3.TitleMedium">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.TitleMedium.Emphasized"
+        parent="TextAppearance.Material3.TitleMedium.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.TitleSmall" parent="TextAppearance.Material3.TitleSmall">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.TitleSmall.Emphasized"
+        parent="TextAppearance.Material3.TitleSmall.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.BodyLarge" parent="TextAppearance.Material3.BodyLarge">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.BodyLarge.Emphasized" parent="TextAppearance.Material3.BodyLarge.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.BodyMedium" parent="TextAppearance.Material3.BodyMedium">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.BodyMedium.Emphasized"
+        parent="TextAppearance.Material3.BodyMedium.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.BodySmall" parent="TextAppearance.Material3.BodySmall">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.BodySmall.Emphasized" parent="TextAppearance.Material3.BodySmall.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.LabelLarge" parent="TextAppearance.Material3.LabelLarge">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.LabelLarge.Emphasized"
+        parent="TextAppearance.Material3.LabelLarge.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.LabelMedium" parent="TextAppearance.Material3.LabelMedium">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.LabelMedium.Emphasized"
+        parent="TextAppearance.Material3.LabelMedium.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Foundation.TextAppearance.LabelSmall" parent="TextAppearance.Material3.LabelSmall">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style
+        name="Foundation.TextAppearance.LabelSmall.Emphasized"
+        parent="TextAppearance.Material3.LabelSmall.Emphasized">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+</resources>

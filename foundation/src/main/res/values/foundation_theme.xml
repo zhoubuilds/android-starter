@@ -1,6 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Foundation.Theme.Base" parent="Theme.Material3Expressive.DayNight.NoActionBar">
+        <item name="fontFamily">@font/foundation_starter_mono</item>
+        <item name="android:fontFamily">@font/foundation_starter_mono</item>
+
+        <item name="textAppearanceDisplayLarge">@style/Foundation.TextAppearance.DisplayLarge</item>
+        <item name="textAppearanceDisplayMedium">@style/Foundation.TextAppearance.DisplayMedium</item>
+        <item name="textAppearanceDisplaySmall">@style/Foundation.TextAppearance.DisplaySmall</item>
+        <item name="textAppearanceHeadlineLarge">@style/Foundation.TextAppearance.HeadlineLarge</item>
+        <item name="textAppearanceHeadlineMedium">@style/Foundation.TextAppearance.HeadlineMedium</item>
+        <item name="textAppearanceHeadlineSmall">@style/Foundation.TextAppearance.HeadlineSmall</item>
+        <item name="textAppearanceTitleLarge">@style/Foundation.TextAppearance.TitleLarge</item>
+        <item name="textAppearanceTitleMedium">@style/Foundation.TextAppearance.TitleMedium</item>
+        <item name="textAppearanceTitleSmall">@style/Foundation.TextAppearance.TitleSmall</item>
+        <item name="textAppearanceBodyLarge">@style/Foundation.TextAppearance.BodyLarge</item>
+        <item name="textAppearanceBodyMedium">@style/Foundation.TextAppearance.BodyMedium</item>
+        <item name="textAppearanceBodySmall">@style/Foundation.TextAppearance.BodySmall</item>
+        <item name="textAppearanceLabelLarge">@style/Foundation.TextAppearance.LabelLarge</item>
+        <item name="textAppearanceLabelMedium">@style/Foundation.TextAppearance.LabelMedium</item>
+        <item name="textAppearanceLabelSmall">@style/Foundation.TextAppearance.LabelSmall</item>
+
+        <item name="textAppearanceDisplayLargeEmphasized">
+            @style/Foundation.TextAppearance.DisplayLarge.Emphasized
+        </item>
+        <item name="textAppearanceDisplayMediumEmphasized">
+            @style/Foundation.TextAppearance.DisplayMedium.Emphasized
+        </item>
+        <item name="textAppearanceDisplaySmallEmphasized">
+            @style/Foundation.TextAppearance.DisplaySmall.Emphasized
+        </item>
+        <item name="textAppearanceHeadlineLargeEmphasized">
+            @style/Foundation.TextAppearance.HeadlineLarge.Emphasized
+        </item>
+        <item name="textAppearanceHeadlineMediumEmphasized">
+            @style/Foundation.TextAppearance.HeadlineMedium.Emphasized
+        </item>
+        <item name="textAppearanceHeadlineSmallEmphasized">
+            @style/Foundation.TextAppearance.HeadlineSmall.Emphasized
+        </item>
+        <item name="textAppearanceTitleLargeEmphasized">@style/Foundation.TextAppearance.TitleLarge.Emphasized</item>
+        <item name="textAppearanceTitleMediumEmphasized">@style/Foundation.TextAppearance.TitleMedium.Emphasized</item>
+        <item name="textAppearanceTitleSmallEmphasized">@style/Foundation.TextAppearance.TitleSmall.Emphasized</item>
+        <item name="textAppearanceBodyLargeEmphasized">@style/Foundation.TextAppearance.BodyLarge.Emphasized</item>
+        <item name="textAppearanceBodyMediumEmphasized">@style/Foundation.TextAppearance.BodyMedium.Emphasized</item>
+        <item name="textAppearanceBodySmallEmphasized">@style/Foundation.TextAppearance.BodySmall.Emphasized</item>
+        <item name="textAppearanceLabelLargeEmphasized">@style/Foundation.TextAppearance.LabelLarge.Emphasized</item>
+        <item name="textAppearanceLabelMediumEmphasized">@style/Foundation.TextAppearance.LabelMedium.Emphasized</item>
+        <item name="textAppearanceLabelSmallEmphasized">@style/Foundation.TextAppearance.LabelSmall.Emphasized</item>
+
         <item name="colorPrimary">@color/foundation_primary</item>
         <item name="colorOnPrimary">@color/foundation_on_primary</item>
         <item name="colorPrimaryContainer">@color/foundation_primary_container</item>
