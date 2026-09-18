@@ -11,8 +11,11 @@ import kotlin.reflect.KClass
  * Architecture 只读取 API 接口声明, app 通过本接口决定实例来源、生命周期、域名、
  * 序列化和安全策略. 所有方法都在 API 构建锁内串行执行, 不得反向调用 ApiFactory,
  * 不得等待可能创建 API 的任务. 返回的 OkHttp 组件仍必须满足运行期线程安全要求.
+ * 拦截器与两类 Customizer 的创建和复用策略均由实现方决定: 无依赖的无参组件可以反射创建,
+ * 需要依赖注入或特殊生命周期的组件可以显式装配, 本接口不要求额外的组件注册机制.
  *
  * @aegis 保护组件解析 API, 默认配置顺序和构建期并发/递归约束.
+ * @aegis-audit 2026-09-16 | whisper | 经授权统一组件实例来源与生命周期说明, 不强制显式注册, 保持方法签名和执行顺序.
  *
  * @author whisper
  * @since 2026/07/23
@@ -21,7 +24,9 @@ interface NetworkComponentManager {
 
     companion object {
 
-        /** Retrofit 使用运行期 Endpoint 路由时可配置的占位 BaseUrl. */
+        /**
+         * Retrofit 使用运行期 Endpoint 路由时可配置的占位 BaseUrl.
+         */
         const val ROUTING_PLACEHOLDER_BASE_URL: String = "https://placeholder.invalid/"
     }
 

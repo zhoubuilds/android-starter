@@ -4,6 +4,11 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-09-16 | whisper | 增加 GitHub Endpoint TOML 配置并同步集中创建入口 |
+| 2026-09-16 | whisper | 同步占位地址与统一组件解析接入方式 |
+| 2026-09-16 | whisper | 说明网络组件通过统一实例池按需复用 |
+| 2026-09-16 | whisper | 简化组件管理器安装为仅传入 Application |
+| 2026-09-15 | whisper | 增加 GitHub Endpoint 与系统参数拦截器示例 |
 | 2026-09-01 | whisper | 强调 ApiFactory 每进程严格单次安装 |
 | 2026-08-28 | whisper | 默认禁用 cleartext 网络流量 |
 | 2026-08-27 | whisper | 说明网络组件 keep rule 归属 |
@@ -12,16 +17,27 @@
 | 2026-08-26 | whisper | API 使用显式 Business Meta/数据类型 |
 | 2026-08-25 | whisper | 增加单域名 app 组合根接入示例 |
 
-## 1. 配置域名
+## 1. 占位地址与目标 Endpoint
 
-根目录 `app-config.toml` 使用 Prism 生成唯一的 `BuildConfig.API_HOST`：
+Starter 默认 Retrofit 直接使用框架的安全占位地址:
+
+```kotlin
+retrofitBuilder.baseUrl(NetworkComponentManager.ROUTING_PLACEHOLDER_BASE_URL)
+```
+
+该常量为 `https://placeholder.invalid/`, 不需要在 `app-config.toml` 中重复声明 `API_HOST`.
+Project 通过 API 级 Endpoint 拦截器访问 GitHub, 实际地址由 app 注入, 不写入默认 base URL.
+根目录 `app-config.toml` 使用 Prism 生成 app 的 `BuildConfig.GITHUB_API_ENDPOINT`:
 
 ```toml
 [default]
-buildConfig.API_HOST = "https://api.example.com/"
+buildConfig.GITHUB_API_ENDPOINT = "https://api.github.com/"
 ```
 
-模板没有 product flavor 时只需要这一份回退配置。实际项目启用环境变体后，可以让 Prism 为 app 的不同 variant 生成不同 `API_HOST`，下层模块仍无需感知变体。
+`StarterNetworkComponentManager` 将该值解析为 `HttpUrl` 并注入 GitHub 路由拦截器. 当前只使用 Endpoint 的
+scheme、host 和 port, 原请求的 path、query 和 fragment 保持不变; 不通过此值添加 API 路径前缀.
+这是构建配置, 修改后需要重新构建安装, 不提供运行时环境切换. 启用环境变体后, 可以由 Prism 为 app 生成不同的
+Endpoint 值, 下层模块仍无需感知变体. 具体配置规则见 [Prism 使用文档](../prism/usage.md).
 
 示例回退地址使用不可访问的 HTTPS 占位值, app 的示例网络安全配置默认禁止 cleartext. 实际项目确需访问本地 HTTP
 服务时, 应在 `starter_network_security_config.xml` 中增加只覆盖必要域名的受限例外, 不将 base config 改为全局允许.
@@ -31,15 +47,14 @@ buildConfig.API_HOST = "https://api.example.com/"
 Application 启动时完成唯一装配：
 
 ```kotlin
-ApiFactory.install(
-    StarterNetworkComponentManager(
-        apiHost = BuildConfig.API_HOST,
-        requestHeadersInterceptor = StarterRequestHeadersInterceptor(
-            StarterRequestHeadersProvider(this),
-        ),
-    )
-)
+ApiFactory.install(StarterNetworkComponentManager(this))
 ```
+
+管理器使用框架占位地址, 并创建、持有公共 Header 和 GitHub 专属拦截器, 无需在 Application 中逐项装配.
+传入的 `Application` 用于公共 Header 的包名和当前资源 Locale; GitHub `User-Agent` 由应用 ID 与版本构建配置生成.
+组件按声明类型保存在管理器的统一实例池中, 首次使用时创建, 后续不同 API 使用同一声明类型时复用同一实例.
+新增带依赖组件时扩展管理器 `createComponentInstance()` 的分支即可, 具体维护约束见 [组件解析](development.md#4-组件解析).
+默认配置中的公共 Header 与 API 注解中的拦截器使用同一解析入口, 缓存与构造逻辑由管理器集中处理.
 
 必须在首次调用 `ApiFactory.create()` 前安装, 且每个进程生命周期内只能成功调用一次. 任何顺序或并发的重复调用都会立即抛出
 `IllegalStateException`; 首次安装的组件管理器和 API 缓存保持不变. 不得使用重复安装恢复错误或切换运行期环境.
@@ -141,14 +156,17 @@ interface UploadApi
 少一项能力时直接省略对应声明。不使用 Customizer 从 Builder 中删除默认或已声明的普通拦截器,
 也不增加 `ExcludeInterceptor` 之类的反向配置。如果某项默认能力需要被部分 API 移除, 应将它改为接口级声明。
 
-注解中的类型应使用稳定契约或 marker。当 API 位于 `*-api` 模块时, 不得引用 `*-impl` 中的具体组件。带依赖的实现由 app 在
-`resolveInterceptor()`、`resolveOkHttpCustomizer()` 或 `resolveRetrofitCustomizer()` 中显式返回; 模板的无参反射只是无依赖组件的便利回退。
-`UseRetrofitCustomizer` 必须由 app 显式映射并审查, 不使用无参反射回退。
+注解中的类型应使用稳定契约或 marker。当 API 位于 `*-api` 模块时, 不得引用 `*-impl` 中的具体组件。
+app 通过 `resolveInterceptor()`、`resolveOkHttpCustomizer()` 或 `resolveRetrofitCustomizer()` 决定生命周期;
+当前统一从实例池获取, 池内缺项时由 `createComponentInstance()` 集中构造, 调用方无需传入构造 lambda.
+三类组件均允许对无依赖且符合无参构造约定的实现使用反射回退; 实例来源与生命周期由管理器决定.
+需要注入配置、Provider 或特殊生命周期时使用显式工厂或 DI, 不单独要求 `UseRetrofitCustomizer` 必须注册.
 
 模板无参反射依赖 `app/proguard-rules.pro` 中的组件构造器规则。Architecture 只保证 API 声明注解可在运行时读取,
 不会替实现层保留构造器。实际项目改用 DI 或全部显式映射后, 应删除或收窄 app 的通用反射规则。
 
-Customizer 不应重新管理普通拦截器。`RetrofitCustomizer` 虽然技术上可以替换 client 或 callFactory, 但业务 API 不得因此绕过 app 提供的证书、
+显式注册不构成权限边界, 审查应关注实际行为. Customizer 不应重新管理普通拦截器。
+`RetrofitCustomizer` 虽然技术上可以替换 client 或 callFactory, 但业务 API 不得因此绕过 app 提供的证书、
 鉴权和公共拦截器。需要完全独立网络栈的链路应使用专用工厂, 不通过业务 `ApiFactory` 创建。
 
 注解作用于整个 API 接口。同一接口中的方法需要不同网络组合时, 将它们拆分为不同 Retrofit API 接口。
@@ -170,3 +188,19 @@ class ServiceEndpointRoutingInterceptor(
 
 默认实现只替换 scheme、host 和 port, 原请求的 path、query 和 fragment 保持不变。如果网关 Endpoint 含 path 前缀,
 覆写 `buildTargetUrl()` 并明确测试路径拼接规则。应用组合根再将稳定的 API 声明类型映射到该实例。
+
+Starter 的 Project 示例采用同一套机制:
+
+```kotlin
+@ApplicationInterceptors(
+    GithubEndpointRoutingInterceptor::class,
+    GithubSystemParametersInterceptor::class,
+)
+internal interface GithubProjectApi
+```
+
+两个声明类型自身实现拦截行为. `StarterNetworkComponentManager` 分别通过
+`GithubEndpointRoutingInterceptor(endpoint)` 与 `GithubSystemParametersInterceptor(userAgent)` 注入配置,
+无需再声明 app 子类. Retrofit 初始请求使用框架占位地址; Endpoint 拦截器改写为 TOML 配置的目标 origin,
+当前为 `https://api.github.com/`, 并保留接口相对路径.
+系统参数拦截器统一覆盖 `Accept`、`X-GitHub-Api-Version` 和 `User-Agent`.

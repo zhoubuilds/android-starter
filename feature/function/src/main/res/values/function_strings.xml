@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="function_title">演示</string>
+    <string name="function_back">返回演示列表</string>
+    <string name="function_range_title">整数范围选择</string>
+    <string name="function_range_component" translatable="false">KitRangeBar</string>
+    <string name="function_range_value_label">当前范围</string>
+    <string name="function_range_value">当前范围: %1$d - %2$d</string>
+    <string name="function_code_input_title">分格输入</string>
+    <string name="function_code_input_component" translatable="false">KitCodeInputEditText</string>
+    <string name="function_code_input_progress_label">输入进度</string>
+    <string name="function_code_input_count">已输入 %1$d / 6 位</string>
+    <string name="function_code_input_hint">-</string>
+    <string name="function_line_title">线条样式</string>
+    <string name="function_line_component" translatable="false">KitLineView</string>
+    <string name="function_line_solid">实线</string>
+    <string name="function_line_dashed">虚线</string>
+    <string name="function_line_dash_dot">点划线</string>
+    <string name="function_recycler_title">列表分割线</string>
+    <string name="function_recycler_component" translatable="false">RecyclerView.ItemDecoration</string>
+    <string name="function_recycler_linear">列表</string>
+    <string name="function_recycler_grid">网格</string>
+    <string name="function_recycler_staggered">瀑布流</string>
+    <string name="function_recycler_vertical">纵向</string>
+    <string name="function_recycler_horizontal">横向</string>
+    <string name="function_recycler_dividers">分割线</string>
+    <string name="function_recycler_item_index">列表项 %1$02d</string>
+    <string-array name="function_recycler_item_names" translatable="false">
+        <item>Adapter</item>
+        <item>ViewHolder</item>
+        <item>Layout</item>
+        <item>Span</item>
+        <item>Insets</item>
+        <item>Binding</item>
+        <item>State</item>
+        <item>Diff</item>
+        <item>Recycle</item>
+        <item>Gesture</item>
+        <item>Scroll</item>
+        <item>Divider</item>
+    </string-array>
+</resources>

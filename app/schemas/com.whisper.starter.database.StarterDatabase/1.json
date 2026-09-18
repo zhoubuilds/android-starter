@@ -1,0 +1,105 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "c481cfabb09275567eec2014a270c0d5",
+    "entities": [
+      {
+        "tableName": "about_github_project",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`repository_id` INTEGER NOT NULL, `full_name` TEXT NOT NULL, `description` TEXT, `html_url` TEXT NOT NULL, `star_count` INTEGER, `fork_count` INTEGER, `open_item_count` INTEGER, `language` TEXT, `license_name` TEXT, `default_branch` TEXT, `pushed_at` TEXT, `private_repository` INTEGER, `cached_at` INTEGER NOT NULL, PRIMARY KEY(`repository_id`))",
+        "fields": [
+          {
+            "fieldPath": "repositoryId",
+            "columnName": "repository_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fullName",
+            "columnName": "full_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "htmlUrl",
+            "columnName": "html_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "starCount",
+            "columnName": "star_count",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "forkCount",
+            "columnName": "fork_count",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "openItemCount",
+            "columnName": "open_item_count",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "language",
+            "columnName": "language",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "licenseName",
+            "columnName": "license_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "defaultBranch",
+            "columnName": "default_branch",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pushedAt",
+            "columnName": "pushed_at",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "privateRepository",
+            "columnName": "private_repository",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cachedAt",
+            "columnName": "cached_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "repository_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_about_github_project_full_name",
+            "unique": true,
+            "columnNames": [
+              "full_name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_about_github_project_full_name` ON `${TABLE_NAME}` (`full_name`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c481cfabb09275567eec2014a270c0d5')"
+    ]
+  }
+}

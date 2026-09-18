@@ -4,6 +4,11 @@
 
 | 修订时间（CST） | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-09-16 | whisper | 集中组件创建并使用 TOML 提供 GitHub Endpoint |
+| 2026-09-16 | whisper | 统一组件解析契约并复用框架占位地址 |
+| 2026-09-16 | whisper | 使用管理器级实例池统一复用网络组件 |
+| 2026-09-16 | whisper | 收敛网络管理器构造入口并内聚应用组件装配 |
+| 2026-09-15 | whisper | 使用 API 级拦截器演示 Endpoint 与系统参数装配 |
 | 2026-09-01 | whisper | ApiFactory 改为严格单次安装 |
 | 2026-08-28 | whisper | 默认禁用 cleartext 网络流量 |
 | 2026-08-28 | whisper | 明确 Endpoint 改写后的 Host Header 契约 |
@@ -26,7 +31,7 @@ feature / repository
     -> NetworkComponentManager contract
 
 app
-    -> BuildConfig.API_HOST
+    -> Endpoint 配置与组件依赖
     -> StarterNetworkComponentManager
     -> ApiFactory.install(...)
 ```
@@ -36,7 +41,7 @@ app
 * `architecture` 固定 API 创建流程、注解语义、组件解析契约和通用 Header / Endpoint 改写机制。
 * `foundation` 提供公共响应转换和业务 Flow CallAdapter。
 * `app` 决定域名、Converter、超时、请求头内容、安全策略和组件实例来源。
-* feature、repository 和 foundation 不读取 flavor 或 `BuildConfig.API_HOST`。
+* feature、repository 和 foundation 不读取 app flavor 或 BuildConfig。
 
 `NetworkComponentManager` 的默认配置只包含所有 API 都必须具备的能力。API 注解声明的是相对默认值的有序增量:
 
@@ -62,10 +67,17 @@ ApiFactory.create(UserApi::class)
 
 默认 Retrofit 配置由 `StarterNetworkComponentManager` 提供：
 
-* `BuildConfig.API_HOST` 作为 base URL。
+* 直接使用 `NetworkComponentManager.ROUTING_PLACEHOLDER_BASE_URL` 作为默认 base URL, 不重复配置占位地址。
 * `BusinessFlowCallAdapterFactory` 支持 `Flow<Business<BusinessMetadata, T>>`。
 * Gson 负责 `ApiResponse<T>` 转换。
 * 每个 API 使用从 baseline client 派生的 OkHttp Builder。
+
+`StarterNetworkComponentManager` 只接收 `Application`, 在内部读取 app `BuildConfig` 并创建、持有公共 Header
+和 GitHub 专属拦截器. `Application` 仅用于公共 Header 的包名与每次请求时读取的资源 Locale, 不作为全局 Holder 暴露.
+公共 Header、GitHub 拦截器和 Customizer 共用管理器级实例池, 按声明类型延迟创建并跨 API 复用.
+默认配置与 API 注解中的拦截器均经过同一解析入口. 解析方法决定生命周期, 当前统一通过实例池获取;
+实例池缺项时调用管理器的集中创建入口, 在其中选择依赖注入或无参反射兜底, 调用方不传入构造函数.
+不再为每个单例添加成员字段; 不同管理器之间不共享实例, 创建失败也不写入缓存.
 
 ## 3. API 声明
 
@@ -95,10 +107,14 @@ interface UserApi
 | `ApplicationInterceptors` | 常规的 API 级请求能力 | 按声明顺序增量添加 |
 | `NetworkInterceptors` | 低频的真实网络交换观察能力 | 不承担必须每次执行的业务逻辑 |
 | `UseOkHttpCustomizer` | 拦截器无法表达的 OkHttp 高级配置 | 每个 API 最多一个, 不用于增删普通拦截器 |
-| `UseRetrofitCustomizer` | Retrofit 高级配置逃生口 | 只使用 app 显式映射并审查的受信任实现 |
+| `UseRetrofitCustomizer` | Retrofit 高级配置逃生口 | 每个 API 最多一个, 必须保持公共网络策略生效 |
 
 注解只声明类型, 实例由 app 的 `NetworkComponentManager` 解析。声明类型应是稳定契约或 marker;
 当 API 位于 `*-api` 模块时, 不得在注解中反向引用 `*-impl` 具体实现。这样可避免 Architecture 反射决定业务组件的依赖和生命周期。
+
+Interceptor、OkHttpCustomizer 和 RetrofitCustomizer 使用相同的实例解析契约: 管理器决定实例来源与生命周期.
+无依赖且满足无参构造约定的组件可以使用反射, 需要注入配置、Provider 或特殊生命周期的组件使用显式工厂或 DI.
+显式注册是应用可选的装配策略, 不是权限边界; 无论如何创建, Customizer 都必须遵守固定执行顺序和公共网络策略.
 
 混淆规则遵循实例化职责归属。Architecture consumer rules 只保留 `ApiFactory` 读取声明所需的运行时注解信息;
 无参反射、DI 容器或其它实例化策略所需的 keep rules 由选择该策略的 app 或实现模块提供。Starter app 保留无参反射兜底,
@@ -118,8 +134,15 @@ Architecture 提供两类不包含应用值的请求改写机制:
 Endpoint 改写导致 origin 的 scheme、host 或 port 变化时, 拦截器移除请求中显式设置的 `Host` Header, 由 OkHttp
 根据最终 URL 重新生成. 如果只调整 path、query 或 fragment 而 origin 不变, 则保留已有的显式 `Host` Header.
 
-两者都不读取 BuildConfig、flavor、登录态或真实域名。Header 和 Endpoint 值由 app 的具体子类提供;
+两者都不读取 BuildConfig、flavor、登录态或真实域名。Header 和 Endpoint 值由应用实现或注入的配置提供;
 目标 Endpoint 含特殊 path 前缀时, 项目必须覆写 `buildTargetUrl()` 明确路径组合契约。
+
+Starter 的 Project 示例在 `GithubProjectApi` 上声明 GitHub Endpoint 与系统参数两个 application interceptor 类型.
+这两个类型自身提供具体拦截行为, app 分别注入 `BuildConfig.GITHUB_API_ENDPOINT` 与应用 `User-Agent`, 不再增加只承担
+配置转发的 app 子类. 系统参数拦截器统一提供 GitHub 推荐的 media type、固定 REST API 版本和必需的 `User-Agent`.
+这些参数适用于接口内所有 GitHub 请求, 因此不使用方法级 `@Headers` 重复维护.
+[GitHub REST 请求头文档](https://docs.github.com/en/rest/using-the-rest-api/getting-started-with-the-rest-api#headers)
+要求所有请求包含有效的 `User-Agent`, 并建议使用 `application/vnd.github+json` 与明确的 API 版本.
 
 网络地址命名统一遵守以下语义:
 
@@ -128,11 +151,17 @@ Endpoint 改写导致 origin 的 scheme、host 或 port 变化时, 拦截器移�
 * `Host` 只表示不含 scheme、port 和 path 的主机名。
 * `Gateway` 只在服务端拓扑中确实存在 API Gateway 时使用, 不作为 Endpoint 的通用同义词。
 
-## 5. 单域名与多域名
+## 5. 默认域名与 API 级路由
 
-Starter 默认只有一个 `API_HOST`，不内置租户、Profile 或动态路由。对于多数应用，这是最小且可验证的默认值。
+Starter 直接使用框架提供的 `NetworkComponentManager.ROUTING_PLACEHOLDER_BASE_URL`, 不再通过 app BuildConfig
+重复声明安全占位地址, 也不内置租户或运行期 Profile. 该值只用于 Retrofit 初始化, 不是 Project 的 GitHub Endpoint.
+真实 GitHub Endpoint 在根目录 `app-config.toml` 的 `[default]` 中通过 `buildConfig.GITHUB_API_ENDPOINT` 配置,
+当前值为 `https://api.github.com/`. Prism 在构建时生成 app 的 `BuildConfig`; 只有 app 读取并注入路由拦截器,
+下层模块不感知 TOML 或构建变体. 修改配置需要重新构建, 不构成运行时设置. 当前路由只使用 Endpoint 的 origin.
+虽然示例当前只有 GitHub 一个真实服务, Project 仍有意通过 API 注解和
+`EndpointRoutingInterceptor` 展示多 Endpoint 装配链路; 没有声明路由能力的 API 会继续停留在占位 origin 并快速失败.
 
-出现真实的多域名需求后，可在 app 层选择以下扩展方式：
+后续出现更多真实 Endpoint 或动态路由需求时，可在 app 层选择以下扩展方式：
 
 * 为少量特殊 API 使用 `@UseRetrofitCustomizer` 设置另一个 base URL。
 * 通过 application interceptor 在请求运行期路由域名。

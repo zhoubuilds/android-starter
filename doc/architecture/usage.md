@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                              |
 |-----------------|---------|---------------------------------------|
+| 2026-09-16      | whisper | 说明网络组件解析和占位 URL 的统一契约 |
+| 2026-09-16      | whisper | 同步应用网络管理器的 Application 入参 |
 | 2026-09-01      | whisper | 强调 ApiFactory 每进程单次安装        |
 | 2026-08-27      | whisper | 区分单轮与多轮 Business 进度用法      |
 | 2026-08-27      | whisper | 说明 BusinessException 类型语义       |
@@ -146,10 +148,10 @@ override fun boundNoticeUiEffects(): Iterable<NoticeUiEffect> =
 
 ## 4. Network
 
-业务 API 不直接构造 Retrofit。应用启动后安装网络组件管理器:
+业务 API 不直接构造 Retrofit. 在 `Application.onCreate()` 中安装网络组件管理器:
 
 ```kotlin
-ApiFactory.install(StarterNetworkComponentManager())
+ApiFactory.install(StarterNetworkComponentManager(this))
 ```
 
 每个进程必须在首次创建 API 前完成且仅完成一次安装. 重复调用会立即抛出 `IllegalStateException`,
@@ -164,7 +166,10 @@ val api: UserApi = ApiFactory.create(UserApi::class)
 `ApiFactory` 内部已经缓存 API 实例, 业务侧不要再做一层静态缓存。
 
 Architecture 同时提供 `RequestHeadersInterceptor` 和 `EndpointRoutingInterceptor` 两类抽象请求改写模板。
-具体 Header、Endpoint 和运行期选择策略继续由 app 子类提供; Provider 如有需要也只属于实现层;
+具体 Header、Endpoint 和运行期选择策略由 app 装配, 可以通过构造参数注入业务组件; Provider 如有需要也只属于实现层.
+使用运行期 Endpoint 路由时, Retrofit 可直接使用 `NetworkComponentManager.ROUTING_PLACEHOLDER_BASE_URL` 初始化.
+所有注解只声明组件类型, 由管理器决定实例来源和生命周期. Starter 对无依赖的无参组件提供反射兜底,
+带依赖或特殊生命周期的组件使用显式工厂; `RetrofitCustomizer` 不额外要求显式注册.
 详细执行顺序和接入方式见 [Network 使用文档](../network/usage.md)。
 
 ## 5. 放置建议

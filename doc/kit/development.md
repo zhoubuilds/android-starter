@@ -5,6 +5,7 @@
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
 | 2026-09-17      | whisper | 增加实时 Insets padding、剩余分发与低版本刘海处理 |
+| 2026-09-14      | whisper | 移除全局 Application 持有器       |
 | 2026-09-11      | whisper | 校准刷新组件外观来源及布局快照比较基准 |
 | 2026-09-11      | whisper | 补齐刷新组件布局补发去重及实例快照生命周期规则 |
 | 2026-09-11      | whisper | 补齐刷新边界重入、有效距离布局同步及 margin 外包尺寸规则 |
@@ -115,7 +116,6 @@ kit/
 `- src/
    |- main/
    |  |- java/com/whisper/kit/
-   |  |  |- KitApplicationHolder.kt
    |  |  |- extension/
    |  |  |- recyclerview/
    |  |  |  |- decoration/
@@ -152,7 +152,6 @@ kit/
 
 | 包                        | 职责                                |
 |---------------------------|-------------------------------------|
-| 根包                      | Application 等模块级 Android 工具   |
 | `extension`               | 通用 Android, 文本和 ViewBinding 扩展 |
 | `recyclerview.decoration` | RecyclerView item 间距和分割线工具  |
 | `recyclerview.holder`     | RecyclerView ViewHolder 通用封装    |

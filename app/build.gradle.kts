@@ -1,12 +1,9 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.ksp)
-    id("com.whisper.aster")
+    alias(libs.plugins.androidx.room)
+    id("com.whisper.habitat")
     id("com.whisper.prism")
-}
-
-aster {
-    segment = "app"
 }
 
 android {
@@ -45,6 +42,10 @@ android {
     }
 }
 
+room {
+    schemaDirectory("$projectDir/schemas")
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -57,14 +58,26 @@ dependencies {
     implementation(project(":foundation"))
     implementation(project(":kit"))
     implementation(project(":architecture"))
-    implementation(project(":aster:aster-runtime"))
+    implementation(project(":feature:function"))
+    implementation(project(":feature:project"))
+    implementation(project(":habitat:habitat-runtime"))
 
+    implementation(libs.androidx.room.runtime)
     implementation(libs.retrofit.converter.gson)
     implementation(libs.gson)
 
-    ksp(project(":aster:aster-compiler"))
+    ksp(libs.androidx.room.compiler)
+    ksp(project(":habitat:habitat-compiler"))
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.room.testing)
+
+    constraints {
+        // AndroidTest 与目标 APK 复用运行时版本, 仅为 Room 迁移测试对齐 Debug 已有的传递依赖.
+        debugImplementation(libs.kotlinx.serialization.core) {
+            because("Room 2.8.4 migration tests require the serialization 1.8.1 runtime ABI.")
+        }
+    }
 }

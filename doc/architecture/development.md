@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                         |
 |-----------------|---------|----------------------------------|
+| 2026-09-16      | whisper | 明确网络组件由管理器统一选择实例策略 |
 | 2026-09-01      | whisper | 收敛 ApiFactory 为严格单次安装   |
 | 2026-08-31      | whisper | 区分项目规范与智能体保护规则     |
 | 2026-08-28      | whisper | 补齐 ApiFactory 并发测试并清理依赖 |
@@ -97,6 +98,9 @@ Java target: 17
 * `BusinessException` 保持普通异常的实例身份, 不实现基于消息的值相等、复制或解构契约。
 * 不在网络层内置 token、登录态或真实域名。
 * consumer rules 只保留 Architecture 自身运行时反射所需内容, 不承担 app 的组件实例化策略。
+* 拦截器与两类 Customizer 的实例来源、缓存和生命周期均交由 `NetworkComponentManager` 实现方选择,
+  不对 `RetrofitCustomizer` 单独强制注册. 无依赖的无参实现可以反射创建, 有依赖或特殊生命周期时显式装配.
+* 两类 Customizer 都可以修改完整 Builder. 审查其实际配置行为是否保持公共网络策略, 不以是否显式注册代替行为检查.
 * 不在 Architecture UI 状态、Effect 或 Owner 中绑定具体页面文案。
 * 不放仅表达 Android 控件行为的通用工具; 这类能力归属 `kit`。
 

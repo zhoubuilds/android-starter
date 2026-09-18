@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/function_demo_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/function_demo_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorSurface"
+        app:navigationContentDescription="@string/function_back"
+        app:navigationIcon="@drawable/function_ic_arrow_back"
+        app:navigationIconTint="?attr/colorOnSurface"
+        app:titleTextAppearance="?attr/textAppearanceTitleLarge"
+        app:titleTextColor="?attr/colorOnSurface" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="24dp"
+            android:paddingBottom="40dp">
+
+            <LinearLayout
+                android:id="@+id/function_range_demo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/function_range_value_label"
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <TextView
+                    android:id="@+id/function_range_value"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <com.whisper.kit.widget.rangeselection.KitRangeBar
+                    android:id="@+id/function_range"
+                    android:layout_width="match_parent"
+                    android:layout_height="72dp"
+                    android:layout_marginTop="24dp"
+                    app:kitBarBackground="@drawable/function_range_bar_background"
+                    app:kitBarForeground="?attr/colorPrimary"
+                    app:kitEnd="70"
+                    app:kitStart="20"
+                    app:kitStep="5"
+                    app:kitThumb="@drawable/function_range_thumb"
+                    app:kitTotal="100" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/function_code_input_demo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/function_code_input_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:labelFor="@id/function_code_input"
+                    android:text="@string/function_code_input_progress_label"
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <TextView
+                    android:id="@+id/function_code_input_count"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <com.whisper.kit.widget.KitCodeInputEditText
+                    android:id="@+id/function_code_input"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="32dp"
+                    android:autofillHints="smsOTPCode"
+                    android:background="@android:color/transparent"
+                    android:digits="0123456789"
+                    android:hint="@string/function_code_input_hint"
+                    android:importantForAutofill="yes"
+                    android:inputType="number"
+                    android:maxLength="6"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textColorHint="?attr/colorOutline"
+                    android:textSize="22sp"
+                    app:kitCodeHintFontFamily="sans-serif"
+                    app:kitCodeItemBackground="@drawable/function_code_item_background"
+                    app:kitCodeItemHeight="52dp"
+                    app:kitCodeItemSpacing="8dp"
+                    app:kitCodeItemWidth="40dp" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/function_line_demo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/function_line_solid"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <com.whisper.kit.widget.KitLineView
+                    android:layout_width="match_parent"
+                    android:layout_height="2dp"
+                    android:layout_marginTop="12dp"
+                    android:color="?attr/colorPrimary" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="32dp"
+                    android:text="@string/function_line_dashed"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <com.whisper.kit.widget.KitLineView
+                    android:layout_width="match_parent"
+                    android:layout_height="2dp"
+                    android:layout_marginTop="12dp"
+                    android:color="?attr/colorSecondary"
+                    app:kitDashWidth="10dp"
+                    app:kitGapWidth="6dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="32dp"
+                    android:text="@string/function_line_dash_dot"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <com.whisper.kit.widget.KitLineView
+                    android:layout_width="match_parent"
+                    android:layout_height="2dp"
+                    android:layout_marginTop="12dp"
+                    android:color="?attr/colorTertiary"
+                    app:kitDashWidth="10dp"
+                    app:kitDotWidth="2dp"
+                    app:kitGapWidth="5dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>

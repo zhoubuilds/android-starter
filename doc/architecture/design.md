@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-09-16      | whisper | 统一网络组件实例来源与生命周期契约 |
 | 2026-09-01      | whisper | 明确 ApiFactory 严格单次安装契约    |
 | 2026-08-28      | whisper | 明确 Architecture UI 绑定不变量  |
 | 2026-08-27      | whisper | 拆分单轮与多轮 Business 进度语义  |
@@ -137,6 +138,9 @@ API 接口注解
 `EndpointRoutingInterceptor` 只提供公共 Header 注入与 Endpoint 改写算法, 不持有真实 Header、域名、网关或环境值。
 应用层通过具体拦截器子类和 `NetworkComponentManager` 提供真实值与取值策略。Provider 如有需要，也只属于实现层。
 Architecture consumer rules 只保护运行时网络声明的读取, 不替实现层规定反射构造、DI 或组件生命周期策略。
+拦截器与两类 Customizer 均由 `NetworkComponentManager` 决定创建和复用方式. 无依赖的无参实现可以反射创建,
+需要依赖注入或特殊生命周期的组件使用显式工厂或 DI; `RetrofitCustomizer` 不要求额外显式注册.
+显式装配提供应用管理入口, 不限制 Builder 的能力. 实现方仍需保证最终配置满足公共网络策略.
 
 ## 4. 模块边界
 

@@ -4,6 +4,21 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-09-17 | whisper | 限定 Debug 序列化运行时约束以兼容 Room 迁移测试 |
+| 2026-09-17 | whisper | 接入共享分段样式、Kit Insets 和版本化 Room 迁移校验 |
+| 2026-09-17 | whisper | 修正应用语言 Header 来源并约束首页 Insets 的单次处理 |
+| 2026-09-16 | whisper | 同步集中组件创建职责与 GitHub Endpoint 配置来源 |
+| 2026-09-16 | whisper | 统一组件解析与生命周期决策, 移除重复占位地址配置 |
+| 2026-09-16 | whisper | 将网络组件单例统一交由管理器实例池持有 |
+| 2026-09-16 | whisper | 明确仅传 Application 的网络管理器初始化约束 |
+| 2026-09-15 | whisper | 显式映射 GitHub Endpoint 与系统参数拦截器 |
+| 2026-09-15 | whisper | 规范顶层标题、项目重试和设置分区样式 |
+| 2026-09-14 | whisper | 使用 Foundation 提供的全局 Starter Mono 排版 |
+| 2026-09-14 | whisper | 固定设置分段控件的连续形状与选中行为 |
+| 2026-09-14 | whisper | 增加数据库版本 1 到 2 的真实迁移验证要求 |
+| 2026-09-14 | whisper | 接入三 Tab、多 Activity、颜色模式和应用语言设置 |
+| 2026-09-14 | whisper | 装配 GitHub API、Room 数据库与 Habitat Dao 提供链路 |
+| 2026-09-14 | whisper | 接入底部 Tab 与两个 feature Fragment |
 | 2026-09-14 | whisper | 补充系统 Splash 向量资源, 动画维护和冷启动回归要求 |
 | 2026-09-11 | whisper | 接入 monochrome 启动器主题图标并更新生成与验证规则 |
 | 2026-09-11 | whisper | 记录固定品牌图标对 monochrome 建议检查的局部抑制 |
@@ -29,12 +44,18 @@
 | 图标生成工具 | `scripts/generate-brand-icon.mjs` |
 | 品牌种子配置 | `design/brand/theme-seed.properties` |
 | 应用和 Activity 声明 | `app/src/main/AndroidManifest.xml` |
+| 首页 Tab 组合 | `MainActivity` 与 `activity_main.xml` |
+| 应用设置与偏好 | app 的 `settings` 包与 `settings_fragment.xml` |
+| 应用语言声明 | `app/src/main/res/xml/locales_config.xml` 与 AppCompat Locale metadata |
 | 组件初始化 | `StarterApplication` |
-| 域名和构建配置 | 根目录 `app-config.toml` |
-| Retrofit, OkHttp 和请求头装配 | app 的 `network` 包 |
+| 应用构建配置 | 根目录 `app-config.toml` |
+| GitHub Endpoint 配置 | `app-config.toml` 的 `buildConfig.GITHUB_API_ENDPOINT` |
+| Retrofit 占位 base URL | `NetworkComponentManager.ROUTING_PLACEHOLDER_BASE_URL` |
+| Retrofit、OkHttp、具体 Endpoint 和请求头装配 | app 的 `network` 包 |
+| RoomDatabase 装配 | app 的 `database` 包 |
 
-当前首页仍为已有测试页面. Function/About 模块和 GitHub 网络示例尚未接入; 扩展这些功能时应同步更新
-本组文档的实现状态和接入步骤.
+当前首页由 app 维护底部 Tab, 页面内容分别由 Function、Project 和 Settings Fragment 提供. GitHub 网络模型与缓存逻辑归
+Project, app 维护设置、应用信息、Endpoint、唯一 RoomDatabase 和进程初始化顺序.
 
 ## 2. 主题维护
 
@@ -44,11 +65,23 @@
   见 [Foundation 开发文档](../foundation/development.md), 不在 app 维护第二套颜色表.
 * app 的 `Theme.Androidstarter` 继承 `Foundation.Theme`. 应用入口或平台专用配置留在 app, 跨页面主题,
   颜色和设计 token 放在 foundation. 不为 Starter 品牌修改 Architecture, Kit 或 Aster 的公共契约.
-* 页面和组件引用主题语义属性, 不硬编码品牌色. 字体, 形状和组件状态优先继承 Material 默认样式.
-* 不调用 `DynamicColors.applyToActivitiesIfAvailable()` 或接入动态颜色 overlay. 浅色和深色跟随系统
-  明暗模式, 不从壁纸获取颜色.
-* 当前 MainActivity 已调用 `enableEdgeToEdge()` 并处理系统栏 Insets. 后续 Activity 继续按屏幕布局处理
-  Insets, 不用主题色或隐藏系统栏规避遮挡. 系统栏图标明暗应与实际背景匹配.
+* 页面和组件引用主题语义属性, 不硬编码品牌色或单独指定字体. Starter Mono 字体族和 Material 3 Typography 由
+  Foundation 统一提供, 顶层目的地 Toolbar 使用 `Foundation.TextAppearance.TopLevelTitle` 的原生 600;
+  字号、行高、形状和组件状态优先继承 Material 默认样式.
+* 设置页的主题和语言选择直接使用 Foundation 的 `Foundation.Widget.SegmentedButtonGroup` 与
+  `Foundation.Widget.SegmentedButton`, 保持连续分段轮廓. 不使用
+  Expressive 的选中态 shape state list, 避免选择变化时改变分段边角和组内间距.
+* 设置页不同配置区之间保持 24dp 垂直间距, 不添加贯穿内容区的分隔线. Project 错误态的重试操作使用
+  OutlinedButton 和错误语义色, 不退化为弱提示式 TextButton.
+* 不调用 `DynamicColors.applyToActivitiesIfAvailable()` 或接入动态颜色 overlay. 颜色模式默认跟随系统,
+  也允许用户固定浅色或深色; 三种模式均使用 Foundation 的固定配色, 不从壁纸获取颜色.
+* 四个 Activity 均调用 `enableEdgeToEdge()` 并使用 Kit `applyWindowInsetsPadding()` 处理实时系统栏与刘海 Insets.
+  MainActivity 使用 `bottom = false`, 底部继续由 BottomNavigationView 处理; 普通详情处理四边,
+  FunctionDemoActivity 加入 IME 并声明 `adjustResize`. 不用主题色或隐藏系统栏规避遮挡.
+  页面在设置初始 padding 后安装一次扩展, 不覆盖其 listener; API 28 刘海由根 View 完整处理, 不分摊给嵌套 View.
+  系统栏图标明暗仍由 Activity 的 edge-to-edge 接入与实际背景匹配.
+* 交互组件使用 Material 默认状态和最小 48dp 触控目标. 手机布局以 16dp 水平间距、24dp 图标和主题文字样式为基线;
+  只有具体组件规范或内容密度需要时才偏离, 并在布局中说明理由.
 
 ## 3. 图标维护
 
@@ -99,33 +132,84 @@ Activity 承载系统 Splash. 该 AnimatedVectorDrawable 与 `ic_splash_screen_v
 
 ## 4. 初始化与保护范围
 
-app 继续承担 `Aster.initialize()` 和 `ApiFactory.install()` 的组合根职责. 网络工厂每进程只能成功安装
-一次, 不通过重复安装来刷新页面, 恢复请求或切换运行期环境.
+app 当前承担颜色模式、数据库、Habitat、`ApiFactory.install()` 和 Quill writer 的组合根职责. `StarterApplication`
+先应用已保存的颜色模式; 数据组件顺序必须保持为 `StarterDatabase.initialize()`、`HabitatFactory.initialize()`、`ApiFactory.install()`, 避免 Habitat 生成的 Dao provider
+在数据库实例可用前被消费. Kit 不持有全局 Application, app 不需要执行 Kit 初始化. 当前没有跨模块路由或
+Capability, 因此 app 和两个 feature 均不接入 Aster.
+网络工厂每进程只能成功安装一次, 不通过重复安装来刷新页面, 恢复请求或切换运行期环境.
+
+网络安装使用 `ApiFactory.install(StarterNetworkComponentManager(this))`. 管理器只接收 `Application`, 默认 Retrofit
+直接使用 `NetworkComponentManager.ROUTING_PLACEHOLDER_BASE_URL`, 不再读取 `BuildConfig.API_HOST` 或自行规范化占位地址.
+默认 OkHttp 配置只调用 `resolveInterceptor` 取得公共 Header 拦截器, 与 API 注解解析共用同一内部入口,
+不在配置方法中重复构造组件或访问实例池. 公共 Header 的 Locale 在每次请求时优先读取
+`AppCompatDelegate.getApplicationLocales()` 的首选项; 跟随系统时回退 `ClientInfoUtils.getPrimaryAppLocale(context)`.
+Android 24-32 的 Application 资源不会随 AppCompat 显式语言选择更新, 不能只读取该资源作为应用语言;
+也不缓存 Locale 或依赖异步持久化完成后才生效. Kit 工具继续表达传入 Context 的资源 Locale, 不改变其通用契约.
+
+组件的 `resolve*` 方法决定实例复用或每次创建. 当前统一调用 `getOrCreateComponent()` 从实例池获取,
+不传构造 lambda; 池内缺项时由 `createComponentInstance()` 集中构造带依赖组件, 未匹配类型交给
+`createComponentReflectively()` 无参反射创建, 包括符合构造约定的 `RetrofitCustomizer`.
+当前无参兜底与三个拦截器均按声明类型在当前管理器中延迟创建并复用, 创建失败不写入缓存,
+不为每个单例增加成员字段. 共享实例必须满足并发使用要求,
+有可变调用状态的组件应按实际作用域调整解析策略. 实例池的并发和工厂约束见
+[Network 组件解析](../network/development.md#4-组件解析).
+
+`StarterNetworkComponentManager` 直接创建 Project 提供的 `GithubEndpointRoutingInterceptor(endpoint)` 和
+`GithubSystemParametersInterceptor(userAgent)`, 分别注入 `BuildConfig.GITHUB_API_ENDPOINT` 与由构建配置中应用 ID、版本组成的
+`User-Agent`. 这两个组件需要应用配置, 使用显式工厂, 不额外建立 app 子类. GitHub 的固定协议 Header 归 Project
+拦截器维护. 组件是否显式注册不能代替实际行为审查; Customizer 调整 client、callFactory 或其它网络配置时,
+仍需确保公共 Header、路由和网络策略不会被意外绕过.
+
+`GITHUB_API_ENDPOINT` 在根目录 `app-config.toml` 的 `[default]` 中声明, 当前为 `https://api.github.com/`,
+由 Prism 生成 app 的 `BuildConfig`. 修改后需要重新构建安装, 不作为运行时设置; feature 不读取 app 构建配置.
+当前路由只使用 Endpoint 的 scheme、host 和 port, 原请求 path、query 和 fragment 保持不变.
 
 当前 app 源码没有单独声明的 `@aegis` 保护类型. 调用下层 API 不代表可以修改下层契约; 涉及公共能力时
-仍须检查源码标记及 [Architecture 开发文档](../architecture/development.md) 和
-[Aster 开发文档](../aster/development.md) 的保护范围.
+仍须检查源码标记及对应模块开发文档的保护范围.
 
-## 5. 后续模块接入约束
+## 5. Feature 组合约束
 
-以下规则用于后续实施, 当前没有对应 feature 模块:
+当前 feature 遵守以下规则:
 
-* 首先新增 `:feature:function` 与 `:feature:about`, 由 app 引入并完成最终装配, 两个 feature 不反向依赖 app.
-* 声明 Aster Activity 的模块依次应用 Android library, KSP 和 Aster 插件, 配置唯一 segment 和 compiler
-  依赖. Activity 仍需在模块 Manifest 中声明.
-* 入口使用 `/function/home` 与 `/about/home`; 跨模块只依赖必要的路由和参数契约, 不直接引用 Activity
-  实现类. 后续契约增长时再评估独立 API 模块.
-* 需要 instrumentation tests 时按 [Aster 使用文档](../aster/usage.md) 向生产 Variant 配置 processor,
-  避免 androidTest 生成同名 Registry.
+* `:feature:function` 与 `:feature:project` 由 app 引入并完成最终装配, 两个 feature 不反向依赖 app, 也不互相依赖.
+* `MainActivity` 使用 add/show/hide 切换三个根 Fragment, 避免 Tab 往返时重复创建页面并丢失 View 状态.
+* Fragment 是 app 组合根直接使用的实现入口, 不声明路由字符串、Capability 或跨 feature 参数契约.
+* Function 的组件详情和 app 的“关于 Starter”使用独立且未导出的 Activity. 模块内部显式 Intent 不需要注册 Aster;
+  任何外部模块可访问的页面仍必须先在对应 `*-api` 中声明稳定路由.
+* 出现真实跨模块路由或 Capability 后, 先建立对应 `*-api` 模块暴露稳定契约, 调用方只依赖 API 模块;
+  实现模块再按 [Aster 使用文档](../aster/usage.md) 接入插件、compiler 和唯一 segment.
+* 演示项目允许为了展示 Android Starter 能力引入较完整的分层, 但不要在需求出现前创建空 API 模块或无消费者契约.
 
-About 的 GitHub API 使用普通 suspend 返回类型, 避免 `BusinessFlowCallAdapterFactory` 将原生 JSON
+Project 的 GitHub API 使用普通 suspend 返回类型, 避免 `BusinessFlowCallAdapterFactory` 将原生 JSON
 错误解析为 `ApiResponse<T>`. Repository 映射成功, HTTP 错误, 网络错误和空字段; 协程取消必须继续传播.
 不伪造 GitHub 未返回的业务响应码. `description` 等可空字段必须保留真实可空性.
 
-默认 Endpoint 由 app 的构建配置提供. 接口只声明相对路径, 不读取 app `BuildConfig` 或硬编码完整域名.
-公开仓库请求无需 Token; GitHub 匿名 REST API 的常规配额为每个来源 IP 每小时 60 次, 多台设备可能共享
+接口只声明相对路径及 API 级网络组件类型, 不读取 app `BuildConfig` 或硬编码完整域名. Project 的 GitHub Endpoint
+拦截器使用 app 注入的地址改写占位 origin, GitHub 系统参数拦截器统一提供 `Accept: application/vnd.github+json`、
+`X-GitHub-Api-Version: 2026-03-10` 和 app 注入的 `User-Agent`. 公开仓库请求无需 Token;
+GitHub 匿名 REST API 的常规配额为每个来源 IP 每小时 60 次, 多台设备可能共享
 出口配额. 页面应提供手动刷新和失败重试, 使用缓存减少重复请求, 离线时仍显示静态应用信息和已有数据.
 遇到限流时依据 HTTP 状态和响应头提示, 避免自动连续重试.
+
+`StarterDatabase` 是当前唯一 RoomDatabase, version 为 2. Project 的 Entity 和 Dao 是数据库装配输入, 由 Habitat
+生成 provider 并在运行时按类型取得. 新增 Entity、修改列或提高数据库版本时必须提供迁移, 扩展持久化测试, 并确认
+Debug/Release 两个变体的 Room 实现、Habitat registry 和 merged manifest 都能生成.
+
+版本 2 将旧的 `about_github_project` 表重命名为 `project_github_project`, 使用显式 `Migration(1, 2)` 保留已经缓存的仓库数据.
+不得删除该迁移或用 destructive migration 替代, 除非已经证明所有版本 1 安装都不再需要升级.
+
+app 使用与 runtime/compiler 同版本的稳定 Room Gradle 插件, 通过 `room.schemaDirectory("$projectDir/schemas")`
+和 `exportSchema = true` 导出 `app/schemas/<数据库全限定名>/<版本>.json`. 插件自动将快照作为 AndroidTest assets,
+不放入正式 app assets. 快照属于需版本化的数据库契约; 不手改当前生成结果, 不覆盖旧版本以掩盖 schema 变化.
+Entity 变化时按实际兼容影响提升数据库版本, 提供显式迁移并新增快照.
+
+`1.json` 不是历史留存导出: 2026-09-17 依据原迁移测试中已记录的版本 1 建表与唯一索引 SQL 重建等价 Room 模型,
+由 Room 2.8.4 编译器生成, 已使用 SQLite PRAGMA 核对 13 列、空值、主键和唯一索引一致. `2.json` 直接来自当前生产定义.
+
+Room 2.8.4 的迁移测试依赖 Kotlinx Serialization 1.8.1 的运行时接口. AGP 将 AndroidTest 的共享依赖版本对齐到目标
+Debug APK, 因此仅在 `debugImplementation` 添加 `kotlinx-serialization-core` 的最低版本约束, 将已有传递依赖对齐到 1.8.1.
+仅给 `androidTestImplementation` 添加版本不能解决目标 APK 固定到旧版本的问题. 该约束不新增 Release 依赖,
+也不改变生产网络使用的 Gson 配置; 后续调整 Room 或相关依赖时需重新检查目标和测试两侧运行时兼容性.
 
 ## 6. 验证
 
@@ -167,5 +251,14 @@ Splash 修改还需执行冷启动回归:
 
 截图, 录屏和 A/B 结论只说明实际验证过的设备与系统版本, 不作为所有厂商绘制结果的保证.
 
-后续新增 feature 时扩大验证到 Aster Registry 生成与 merged manifest, 两个入口导航及返回行为. 新增
-GitHub 请求时覆盖响应解析, 错误与限流, 取消传播, 重试, 缓存和离线展示.
+当前 feature 变更需要覆盖两个 AAR、app Debug/Release、AndroidTest 编译, 三个底部 Tab、详情 Activity 返回栈和 Activity
+重建后的选中项恢复. 设置变更需覆盖颜色模式、应用语言、进程重启恢复和中英文资源. GitHub 数据还需覆盖响应映射、错误与限流、取消传播、重试、缓存新鲜期和离线展示;
+Habitat 集成测试验证生成的 Dao provider 能完成 Room 读写. 后续接入 Aster 时再扩大验证到 Aster Registry 生成、
+merged manifest 和跨模块导航.
+
+语言 Header 回归应覆盖 API 32 及以下显式应用语言与系统不同、切换后即时请求和恢复跟随系统.
+首页 Insets 回归通过真实 View 分发覆盖导航栏位于左侧、右侧和底部, 并确认重复分发不会累加 padding.
+
+数据库迁移测试使用稳定 `MigrationTestHelper` 从版本 1 快照建立真实 SQLite 数据库并插入缓存,
+通过生产 `MIGRATION_1_2` 迁移到版本 2 并验证完整 schema, 最后重新使用生产 Room Dao 验证缓存内容保留.
+只在全新版本 2 数据库上完成 Dao 往返不能替代迁移测试.

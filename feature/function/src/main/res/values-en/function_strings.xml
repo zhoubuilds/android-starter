@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="function_title">Demos</string>
+    <string name="function_back">Back to demos</string>
+    <string name="function_range_title">Integer range</string>
+    <string name="function_range_value_label">Current range</string>
+    <string name="function_range_value">Current range: %1$d - %2$d</string>
+    <string name="function_code_input_title">Segmented input</string>
+    <string name="function_code_input_progress_label">Input progress</string>
+    <string name="function_code_input_count">%1$d of 6 digits entered</string>
+    <string name="function_code_input_hint">-</string>
+    <string name="function_line_title">Line styles</string>
+    <string name="function_line_solid">Solid</string>
+    <string name="function_line_dashed">Dashed</string>
+    <string name="function_line_dash_dot">Dash-dot</string>
+    <string name="function_recycler_title">List dividers</string>
+    <string name="function_recycler_linear">List</string>
+    <string name="function_recycler_grid">Grid</string>
+    <string name="function_recycler_staggered">Staggered</string>
+    <string name="function_recycler_vertical">Vertical</string>
+    <string name="function_recycler_horizontal">Horizontal</string>
+    <string name="function_recycler_dividers">Dividers</string>
+    <string name="function_recycler_item_index">Item %1$02d</string>
+</resources>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="project_title">Project</string>
+    <string name="project_loading">Loading GitHub project</string>
+    <string name="project_public">Public repository</string>
+    <string name="project_private">Private repository</string>
+    <string name="project_visibility_unknown">Visibility unavailable</string>
+    <string name="project_description_unavailable">No project description is available</string>
+    <string name="project_open_items">Open items</string>
+    <string name="project_repository_information">Repository information</string>
+    <string name="project_language">Primary language</string>
+    <string name="project_license">License</string>
+    <string name="project_branch">Default branch</string>
+    <string name="project_pushed">Last pushed</string>
+    <string name="project_value_unknown">Unavailable</string>
+    <string name="project_source_network">Updated from GitHub · %1$s</string>
+    <string name="project_source_cache">Local cache · %1$s</string>
+    <string name="project_refresh_pull">Pull to refresh</string>
+    <string name="project_refresh_release">Release to refresh</string>
+    <string name="project_refreshing">Updating from GitHub</string>
+    <string name="project_error_network">GitHub is unavailable while offline</string>
+    <string name="project_error_rate_limited">GitHub anonymous requests are limited; try again later</string>
+    <string name="project_error_server">GitHub is temporarily unavailable</string>
+    <string name="project_error_unexpected">Project data could not be loaded</string>
+    <string name="project_retry">Retry</string>
+    <string name="project_open_repository">View GitHub repository</string>
+    <string name="project_browser_unavailable">No browser is available</string>
+</resources>

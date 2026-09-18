@@ -4,6 +4,10 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                    |
 |-----------------|---------|-----------------------------|
+| 2026-09-16      | whisper | 将 GitHub Endpoint 配置入口迁入应用 TOML |
+| 2026-09-16      | whisper | 直接复用框架占位地址并明确 Endpoint 装配入口 |
+| 2026-09-15      | whisper | 使用接口级拦截器演示 GitHub 请求配置 |
+| 2026-09-14      | whisper | 同步三 Tab、多 Activity 与 Project 模块结构 |
 | 2026-09-11      | whisper | 明确 Foundation 共享主题职责并补充模块文档入口 |
 | 2026-09-11      | whisper | 增加 App 图标主题和示例规划文档入口 |
 | 2026-09-01      | whisper | 明确 Kit 定位和设计文档入口 |
@@ -30,6 +34,8 @@ release tag.
 | 模块                                                    | 职责                                                   |
 |---------------------------------------------------------|--------------------------------------------------------|
 | [`app`](app/)                                           | 示例应用和最终装配入口                                 |
+| [`feature/function`](feature/function/)                 | 通用 View 与功能演示页面                               |
+| [`feature/project`](feature/project/)                   | GitHub 项目概览、下拉刷新与 Room/Habitat 缓存           |
 | [`architecture`](architecture/)                         | Business 管线, Architecture UI 和网络创建骨架          |
 | [`foundation`](foundation/)                             | 应用业务基座, 共享主题及 architecture 抽象的应用级实现 |
 | [`kit`](kit/)                                           | 业务无关的 Android 工具, 扩展和通用 UI 组件            |
@@ -66,8 +72,10 @@ release tag.
 
 开始实际应用开发前至少完成以下调整:
 
-1. 修改 [`app-config.toml`](app-config.toml) 中的 `applicationId` 和 `API_HOST`. 默认的
-   `https://placeholder.invalid/` 只用于防止模板携带真实环境地址, 不能提供实际服务.
+1. 修改 [`app-config.toml`](app-config.toml) 中的 `applicationId` 和应用所需的 Endpoint 配置.
+   示例通过 `buildConfig.GITHUB_API_ENDPOINT` 配置 GitHub 地址, 由 Prism 生成 app 的 `BuildConfig` 后注入路由拦截器.
+   默认 Retrofit 直接使用框架的 `ROUTING_PLACEHOLDER_BASE_URL`, 不需要重复配置 `API_HOST`.
+   这些值在构建时确定, 修改后需要重新构建安装; 不作为运行时环境切换入口.
 2. 修改 [`app/build.gradle.kts`](app/build.gradle.kts) 中的 `namespace`, 并迁移
    `com.whisper.starter` 示例包.
 3. 调整应用名称, 图标, 主题, 版本和签名配置.
@@ -94,6 +102,8 @@ Prism 的配置契约和完整退出步骤见 [Prism 使用文档](doc/prism/usa
 ## 文档
 
 * App: [设计](doc/app/design.md), [开发](doc/app/development.md), [使用](doc/app/usage.md).
+* Function: [设计](doc/function/design.md), [开发](doc/function/development.md), [使用](doc/function/usage.md).
+* Project: [设计](doc/project/design.md), [开发](doc/project/development.md), [使用](doc/project/usage.md).
 * Foundation: [设计](doc/foundation/design.md), [开发](doc/foundation/development.md),
   [使用](doc/foundation/usage.md).
 * Architecture: [设计](doc/architecture/design.md), [开发](doc/architecture/development.md),
