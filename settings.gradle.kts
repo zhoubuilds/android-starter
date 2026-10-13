@@ -28,6 +28,7 @@ rootProject.name = "android-starter"
 include(":app")
 include(":feature:function")
 include(":feature:project")
+include(":feature:settings")
 include(":kit")
 include(":foundation")
 include(":architecture")

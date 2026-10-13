@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 同步 Settings feature 的页面归属 |
 | 2026-09-17 | whisper | 明确可见加载入口、刷新去重及 GitHub 限流响应头判断 |
 | 2026-09-16 | whisper | 规范 Repository 冷流和页面专用管线处理器 |
 | 2026-09-16 | whisper | 明确 GitHub 协议实现与 app 参数注入边界 |
@@ -93,7 +94,7 @@ plugin/compiler 及初始化顺序. `StarterDatabase` 必须先建立实例, 再
 ## 4. 页面与导航
 
 `ProjectFragment` 直接呈现完整项目概览, 不维护 child Fragment 返回栈. 工具栏只表达项目页标题, 应用信息和设置入口
-由 app 的设置 Tab 承担.
+由 Settings feature 承担.
 
 `onResume` 与 `onHiddenChanged` 共同维护可见状态, 只有 resumed 且未 hidden 的进入边沿才调用
 `ProjectViewModel.refreshIfStale()`. show/hide 不会触发生命周期切换, 不能只依赖 `onResume`;

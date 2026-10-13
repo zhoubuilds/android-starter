@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                    |
 |-----------------|---------|-----------------------------|
+| 2026-10-13      | whisper | 将应用设置迁移到独立 Settings feature |
 | 2026-09-16      | whisper | 将 GitHub Endpoint 配置入口迁入应用 TOML |
 | 2026-09-16      | whisper | 直接复用框架占位地址并明确 Endpoint 装配入口 |
 | 2026-09-15      | whisper | 使用接口级拦截器演示 GitHub 请求配置 |
@@ -36,6 +37,7 @@ release tag.
 | [`app`](app/)                                           | 示例应用和最终装配入口                                 |
 | [`feature/function`](feature/function/)                 | 通用 View 与功能演示页面                               |
 | [`feature/project`](feature/project/)                   | GitHub 项目概览、下拉刷新与 Room/Habitat 缓存           |
+| [`feature/settings`](feature/settings/)                 | 应用设置、语言、外观与应用信息页面                     |
 | [`architecture`](architecture/)                         | Business 管线, Architecture UI 和网络创建骨架          |
 | [`foundation`](foundation/)                             | 应用业务基座, 共享主题及 architecture 抽象的应用级实现 |
 | [`kit`](kit/)                                           | 业务无关的 Android 工具, 扩展和通用 UI 组件            |
@@ -104,6 +106,7 @@ Prism 的配置契约和完整退出步骤见 [Prism 使用文档](doc/prism/usa
 * App: [设计](doc/app/design.md), [开发](doc/app/development.md), [使用](doc/app/usage.md).
 * Function: [设计](doc/function/design.md), [开发](doc/function/development.md), [使用](doc/function/usage.md).
 * Project: [设计](doc/project/design.md), [开发](doc/project/development.md), [使用](doc/project/usage.md).
+* Settings: [设计](doc/settings/design.md), [开发](doc/settings/development.md), [使用](doc/settings/usage.md).
 * Foundation: [设计](doc/foundation/design.md), [开发](doc/foundation/development.md),
   [使用](doc/foundation/usage.md).
 * Architecture: [设计](doc/architecture/design.md), [开发](doc/architecture/development.md),

@@ -60,6 +60,7 @@ dependencies {
     implementation(project(":architecture"))
     implementation(project(":feature:function"))
     implementation(project(":feature:project"))
+    implementation(project(":feature:settings"))
     implementation(project(":habitat:habitat-runtime"))
 
     implementation(libs.androidx.room.runtime)

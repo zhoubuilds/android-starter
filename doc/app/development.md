@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 将设置页面与外观偏好迁移到 Settings feature |
 | 2026-09-17 | whisper | 限定 Debug 序列化运行时约束以兼容 Room 迁移测试 |
 | 2026-09-17 | whisper | 接入共享分段样式、Kit Insets 和版本化 Room 迁移校验 |
 | 2026-09-17 | whisper | 修正应用语言 Header 来源并约束首页 Insets 的单次处理 |
@@ -45,7 +46,7 @@
 | 品牌种子配置 | `design/brand/theme-seed.properties` |
 | 应用和 Activity 声明 | `app/src/main/AndroidManifest.xml` |
 | 首页 Tab 组合 | `MainActivity` 与 `activity_main.xml` |
-| 应用设置与偏好 | app 的 `settings` 包与 `settings_fragment.xml` |
+| 应用设置、外观偏好与 About 页面 | `feature:settings` |
 | 应用语言声明 | `app/src/main/res/xml/locales_config.xml` 与 AppCompat Locale metadata |
 | 组件初始化 | `StarterApplication` |
 | 应用构建配置 | 根目录 `app-config.toml` |
@@ -55,7 +56,7 @@
 | RoomDatabase 装配 | app 的 `database` 包 |
 
 当前首页由 app 维护底部 Tab, 页面内容分别由 Function、Project 和 Settings Fragment 提供. GitHub 网络模型与缓存逻辑归
-Project, app 维护设置、应用信息、Endpoint、唯一 RoomDatabase 和进程初始化顺序.
+Project, 应用设置与应用信息归 Settings, app 维护 Endpoint、唯一 RoomDatabase 和进程初始化顺序.
 
 ## 2. 主题维护
 
@@ -132,10 +133,11 @@ Activity 承载系统 Splash. 该 AnimatedVectorDrawable 与 `ic_splash_screen_v
 
 ## 4. 初始化与保护范围
 
-app 当前承担颜色模式、数据库、Habitat、`ApiFactory.install()` 和 Quill writer 的组合根职责. `StarterApplication`
-先应用已保存的颜色模式; 数据组件顺序必须保持为 `StarterDatabase.initialize()`、`HabitatFactory.initialize()`、`ApiFactory.install()`, 避免 Habitat 生成的 Dao provider
+app 当前承担调用颜色模式初始化、数据库、Habitat、`ApiFactory.install()` 和 Quill writer 的组合根职责.
+`StarterApplication` 先调用 Settings 的 `AppAppearancePreferences.initialize()` 应用已保存的颜色模式;
+数据组件顺序必须保持为 `StarterDatabase.initialize()`、`HabitatFactory.initialize()`、`ApiFactory.install()`, 避免 Habitat 生成的 Dao provider
 在数据库实例可用前被消费. Kit 不持有全局 Application, app 不需要执行 Kit 初始化. 当前没有跨模块路由或
-Capability, 因此 app 和两个 feature 均不接入 Aster.
+Capability, 因此当前组合链路不接入 Aster.
 网络工厂每进程只能成功安装一次, 不通过重复安装来刷新页面, 恢复请求或切换运行期环境.
 
 网络安装使用 `ApiFactory.install(StarterNetworkComponentManager(this))`. 管理器只接收 `Application`, 默认 Retrofit
@@ -171,10 +173,11 @@ Android 24-32 的 Application 资源不会随 AppCompat 显式语言选择更新
 
 当前 feature 遵守以下规则:
 
-* `:feature:function` 与 `:feature:project` 由 app 引入并完成最终装配, 两个 feature 不反向依赖 app, 也不互相依赖.
+* `:feature:function`、`:feature:project` 与 `:feature:settings` 由 app 引入并完成最终装配, 三个 feature 不反向依赖 app,
+  也不互相依赖.
 * `MainActivity` 使用 add/show/hide 切换三个根 Fragment, 避免 Tab 往返时重复创建页面并丢失 View 状态.
 * Fragment 是 app 组合根直接使用的实现入口, 不声明路由字符串、Capability 或跨 feature 参数契约.
-* Function 的组件详情和 app 的“关于 Starter”使用独立且未导出的 Activity. 模块内部显式 Intent 不需要注册 Aster;
+* Function 的组件详情和 Settings 的“关于 Starter”使用独立且未导出的 Activity. 模块内部显式 Intent 不需要注册 Aster;
   任何外部模块可访问的页面仍必须先在对应 `*-api` 中声明稳定路由.
 * 出现真实跨模块路由或 Capability 后, 先建立对应 `*-api` 模块暴露稳定契约, 调用方只依赖 API 模块;
   实现模块再按 [Aster 使用文档](../aster/usage.md) 接入插件、compiler 和唯一 segment.

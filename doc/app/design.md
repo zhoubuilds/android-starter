@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 将设置与应用信息页面迁移到独立 Settings feature |
 | 2026-09-17 | whisper | 复用共享分段样式与 Kit Insets 并开启 Room schema 版本化 |
 | 2026-09-17 | whisper | 明确应用语言请求头与首页系统栏 Insets 的处理边界 |
 | 2026-09-16 | whisper | 将 GitHub Endpoint 归入构建配置并集中创建网络组件 |
@@ -28,8 +29,8 @@
 `foundation` 维护应用内共享的设计系统. Architecture, Kit, Aster 等通用技术模块不持有 Starter 的品牌色,
 页面结构或 GitHub 仓库配置.
 
-当前应用名称为 `Starter`. 首页使用“演示 / 项目 / 设置”三个底部 Tab. 前两个页面分别由
-`feature:function` 和 `feature:project` 提供, 设置页由 app 维护. 项目页通过 GitHub 公共 API 读取仓库信息,
+当前应用名称为 `Starter`. 首页使用“演示 / 项目 / 设置”三个底部 Tab, 分别由 `feature:function`、
+`feature:project` 和 `feature:settings` 提供. 项目页通过 GitHub 公共 API 读取仓库信息,
 并使用 Room/Habitat 缓存最近一次成功结果.
 
 ## 2. 主题与品牌
@@ -92,8 +93,9 @@ monochrome 的用途分别维护; 图标几何仍由同一设计输入生成. �
 
 ## 4. 组合根边界
 
-* `app` 直接组合两个 feature Fragment 和应用设置 Fragment, 装配 Quill、`ApiFactory`、Room 和 Habitat,
-  持有应用 `BuildConfig`、具体网络 Endpoint、应用请求参数、颜色模式与语言配置.
+* `app` 直接组合三个 feature Fragment, 装配 Quill、`ApiFactory`、Room 和 Habitat, 持有应用 `BuildConfig`、
+  具体网络 Endpoint、应用请求参数、最终主题入口与应用语言平台声明.
+* `feature:settings` 持有颜色模式偏好、语言选择页面和应用信息页面, 向 app 暴露启动期外观初始化入口.
 * `foundation` 承载应用业务基座, 业务状态处理和共享设计系统, 不读取 app 的构建变体或域名配置.
 * `architecture` 保持通用业务状态, UI 和网络创建契约.
 * 仅服务示例页面的数据映射和交互放入对应 feature, 不上移为公共技术契约.
@@ -109,20 +111,21 @@ monochrome 的用途分别维护; 图标几何仍由同一设计输入生成. �
 
 ## 5. 示例模块结构
 
-当前使用两个 Android library 模块:
+当前使用三个 feature Android library 模块:
 
 ```text
 app
 |- feature:function
 |- feature:project
+|- feature:settings
 `- foundation
 
 feature:* -> foundation / material
 ```
 
-`function` 提供 RecyclerView 演示目录和独立组件详情 Activity, `project` 只提供项目概览.
-设置页及独立的 `AboutStarterActivity` 属于 app. `MainActivity` 仅作为顶层 Tab 壳, 直接创建并保留三个根 Fragment;
-详情页面不继续堆入 MainActivity 的 Fragment 返回栈. 两个 feature 当前互不依赖, 也不声明跨模块路由或 Capability.
+`function` 提供 RecyclerView 演示目录和独立组件详情 Activity, `project` 提供项目概览, `settings` 提供设置页和
+独立的 `AboutStarterActivity`. `MainActivity` 仅作为顶层 Tab 壳, 直接创建并保留三个根 Fragment; 详情页面不继续堆入
+MainActivity 的 Fragment 返回栈. 三个 feature 当前互不依赖, 也不声明跨模块路由或 Capability.
 
 直接暴露 Fragment 只服务 app 组合根, 不替代公开业务契约. 后续出现跨模块路由或 Capability 时,
 先建立对应的 `*-api` 模块, 由 API 模块声明稳定路径、参数、能力接口和能力名称, 再由实现模块接入 Aster.

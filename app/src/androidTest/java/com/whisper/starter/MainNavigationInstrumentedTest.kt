@@ -15,6 +15,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.whisper.feature.function.R as FunctionR
 import com.whisper.feature.project.R as ProjectR
+import com.whisper.feature.settings.R as SettingsR
 import com.whisper.starter.ui.activity.MainActivity
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -109,11 +110,11 @@ class MainNavigationInstrumentedTest {
     fun selectSettings_whenActivityIsRecreated_restoresSettingsTab() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             onView(withId(R.id.main_navigation_settings)).perform(click())
-            onView(withId(R.id.settings_root)).check(matches(isDisplayed()))
+            onView(withId(SettingsR.id.settings_root)).check(matches(isDisplayed()))
 
             scenario.recreate()
 
-            onView(withId(R.id.settings_root)).check(matches(isDisplayed()))
+            onView(withId(SettingsR.id.settings_root)).check(matches(isDisplayed()))
         }
     }
 
@@ -126,10 +127,10 @@ class MainNavigationInstrumentedTest {
             onView(withId(FunctionR.id.function_catalog_root)).check(matches(isDisplayed()))
 
             onView(withId(R.id.main_navigation_settings)).perform(click())
-            onView(withId(R.id.settings_about)).perform(click())
-            onView(withId(R.id.about_starter_root)).check(matches(isDisplayed()))
+            onView(withId(SettingsR.id.settings_about)).perform(click())
+            onView(withId(SettingsR.id.settings_about_root)).check(matches(isDisplayed()))
             pressBack()
-            onView(withId(R.id.settings_root)).check(matches(isDisplayed()))
+            onView(withId(SettingsR.id.settings_root)).check(matches(isDisplayed()))
         }
     }
 }

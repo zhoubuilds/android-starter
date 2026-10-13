@@ -2,13 +2,13 @@ package com.whisper.starter
 
 import android.app.Application
 import com.whisper.architecture.network.ApiFactory
+import com.whisper.feature.settings.AppAppearancePreferences
 import com.whisper.habitat.runtime.HabitatFactory
 import com.whisper.quill.LogcatQuillWriter
 import com.whisper.quill.Quill
 import com.whisper.quill.QuillLevel
 import com.whisper.starter.database.StarterDatabase
 import com.whisper.starter.network.StarterNetworkComponentManager
-import com.whisper.starter.settings.AppAppearancePreferences
 
 /**
  * Starter 应用进程级组件的唯一初始化入口.

@@ -9,11 +9,11 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentTransaction
 import com.whisper.feature.function.FunctionFragment
 import com.whisper.feature.project.ProjectFragment
+import com.whisper.feature.settings.SettingsFragment
 import com.whisper.kit.extension.applyWindowInsetsPadding
 import com.whisper.kit.extension.viewBinding
 import com.whisper.starter.R
 import com.whisper.starter.databinding.ActivityMainBinding
-import com.whisper.starter.ui.settings.SettingsFragment
 
 /**
  * 承载 Starter 三个顶层页面的应用首页.

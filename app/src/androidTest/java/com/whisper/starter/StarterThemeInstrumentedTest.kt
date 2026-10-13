@@ -30,6 +30,7 @@ import org.junit.runner.RunWith
 import androidx.appcompat.R as AppCompatR
 import com.google.android.material.R as MaterialR
 import com.whisper.feature.function.R as FunctionR
+import com.whisper.feature.settings.R as SettingsR
 import com.whisper.foundation.R as FoundationR
 
 /**
@@ -195,7 +196,10 @@ class StarterThemeInstrumentedTest {
     @Test
     fun segmentedButtons_inBothModes_keepContinuousCornersWhenSelectionChanges() {
         val layouts = listOf(
-            R.layout.settings_fragment to listOf(R.id.settings_theme_group, R.id.settings_language_group),
+            SettingsR.layout.settings_fragment to listOf(
+                SettingsR.id.settings_theme_group,
+                SettingsR.id.settings_language_group,
+            ),
             FunctionR.layout.function_recycler_activity to listOf(
                 FunctionR.id.function_recycler_layout_group,
                 FunctionR.id.function_recycler_orientation_group,

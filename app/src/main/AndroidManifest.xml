@@ -18,9 +18,6 @@
         android:theme="@style/Theme.Androidstarter"
         tools:targetApi="33">
         <activity
-            android:name=".ui.activity.AboutStarterActivity"
-            android:exported="false" />
-        <activity
             android:name=".ui.activity.MainActivity"
             android:exported="true">
             <intent-filter>

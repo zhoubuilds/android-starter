@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 同步 Settings feature 的共享主题消费边界 |
 | 2026-09-17 | whisper | 明确共享视觉样式与 Kit 实时 Insets 工具的分层 |
 | 2026-09-17 | whisper | 统一设置与演示页面的连续分段按钮基础样式 |
 | 2026-09-15 | whisper | 增加原生 SemiBold 并建立顶层页面标题层级 |
@@ -98,5 +99,5 @@ JetBrains Mono 提供拉丁字符、数字、符号和编程连字; Noto 提供�
 官方 AAR 中的 Color Utilities 实现, 将结果写入版本化的 Android 颜色资源, 运行时不再生成颜色.
 
 替换品牌时同步修改输入, 重新生成日夜配色, 检查主题绑定和对比度. 图标设计输入及各平台资源由 app 维护,
-见 [App 开发文档](../app/development.md). `feature:function`、`feature:project` 和 app 设置页面均通过
+见 [App 开发文档](../app/development.md). `feature:function`、`feature:project` 和 `feature:settings` 均通过
 Foundation 共享主题消费语义资源.

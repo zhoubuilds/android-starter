@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 同步独立 Settings feature 的页面归属 |
 | 2026-09-17 | whisper | 说明 Room schema 导出与迁移回归入口 |
 | 2026-09-17 | whisper | 说明公共请求头跟随应用语言选择即时更新 |
 | 2026-09-16 | whisper | 说明 GitHub Endpoint 的 TOML 配置与构建时生效规则 |
@@ -125,7 +126,7 @@ Feature 使用 `ApiFactory` 创建接口, 通过注解声明组件类型, 不读
 | --- | --- | --- |
 | `:feature:function` | RecyclerView 目录及范围选择、分格输入、线条和列表分割线详情 | 首页“演示”Tab |
 | `:feature:project` | GitHub 项目概览、下拉刷新和 Room/Habitat 缓存 | 首页“项目”Tab |
-| `app` | 颜色模式、应用语言与应用信息 | 首页“设置”Tab |
+| `:feature:settings` | 颜色模式、应用语言与应用信息 | 首页“设置”Tab |
 
 三个根 Fragment 由 app 直接组合, feature 之间没有依赖, 当前不使用 Aster, 也不创建没有实际契约的 `*-api` 模块.
 后续需要对外暴露路由或 Capability 时, 必须先由对应 API 模块声明稳定契约, 再接入 Aster 实现.
@@ -134,7 +135,7 @@ Feature 使用 `ApiFactory` 创建接口, 通过注解声明组件类型, 不读
 [仓库主页](https://github.com/zhoubuilds/android-starter). 首次成功结果写入 Room; 15 分钟内再次进入优先直接使用缓存,
 超时后自动更新, 手动下拉始终请求网络. 有缓存时请求失败不会清空页面数据.
 
-“关于 Starter”从设置页进入, 查看当前安装包的应用名称和版本, 与 GitHub 数据加载状态无关.
+“关于 Starter”由 Settings 模块提供, 从设置页进入后查看当前安装包的应用名称和版本, 与 GitHub 数据加载状态无关.
 GitHub JSON 与现有 `ApiResponse<T>` 不是同一种响应格式, Project 使用普通 Retrofit suspend API 适配;
 模块和数据边界见 [App 设计文档](design.md).
 

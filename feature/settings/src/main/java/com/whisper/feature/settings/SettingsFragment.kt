@@ -1,4 +1,4 @@
-package com.whisper.starter.ui.settings
+package com.whisper.feature.settings
 
 import android.content.Intent
 import android.os.Bundle
@@ -8,18 +8,19 @@ import androidx.annotation.MainThread
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.fragment.app.Fragment
+import com.whisper.feature.settings.databinding.SettingsFragmentBinding
 import com.whisper.kit.extension.viewBinding
 import com.whisper.kit.utils.ClientInfoUtils
-import com.whisper.starter.R
-import com.whisper.starter.databinding.SettingsFragmentBinding
-import com.whisper.starter.settings.AppAppearancePreferences
-import com.whisper.starter.settings.AppThemeMode
-import com.whisper.starter.ui.activity.AboutStarterActivity
 
 /**
  * 提供应用颜色模式、语言和应用信息入口.
+ *
+ * 当前类型由 app 组合根直接创建, 不作为跨模块路由或能力契约.
+ *
+ * @author whisper
+ * @since 2026/09/14
  */
-internal class SettingsFragment : Fragment(R.layout.settings_fragment) {
+class SettingsFragment : Fragment(R.layout.settings_fragment) {
 
     @get:MainThread
     private val viewBinding by viewBinding(SettingsFragmentBinding::bind)
