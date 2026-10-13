@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                    |
 |-----------------|---------|-----------------------------|
+| 2026-10-13      | whisper | 使用 Project API 与 Aster 向 About 提供仓库入口 |
 | 2026-10-13      | whisper | 将应用设置迁移到独立 Settings feature |
 | 2026-09-16      | whisper | 将 GitHub Endpoint 配置入口迁入应用 TOML |
 | 2026-09-16      | whisper | 直接复用框架占位地址并明确 Endpoint 装配入口 |
@@ -36,6 +37,7 @@ release tag.
 |---------------------------------------------------------|--------------------------------------------------------|
 | [`app`](app/)                                           | 示例应用和最终装配入口                                 |
 | [`feature/function`](feature/function/)                 | 通用 View 与功能演示页面                               |
+| [`feature/project-api`](feature/project-api/)           | Project 跨模块 Capability 契约                         |
 | [`feature/project`](feature/project/)                   | GitHub 项目概览、下拉刷新与 Room/Habitat 缓存           |
 | [`feature/settings`](feature/settings/)                 | 应用设置、语言、外观与应用信息页面                     |
 | [`architecture`](architecture/)                         | Business 管线, Architecture UI 和网络创建骨架          |

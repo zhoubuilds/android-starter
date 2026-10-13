@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 接入 Project API 与 Aster 仓库 Capability |
 | 2026-10-13 | whisper | 同步 Settings feature 的页面归属 |
 | 2026-09-17 | whisper | 明确可见加载入口、刷新去重及 GitHub 限流响应头判断 |
 | 2026-09-16 | whisper | 规范 Repository 冷流和页面专用管线处理器 |
@@ -19,11 +20,18 @@
 ## 1. 模块结构
 
 ```text
+feature/project-api/
+`- src/main/java/com/whisper/feature/project/api/
+   |- ProjectCapabilities.kt
+   `- ProjectRepositoryCapability.kt
+
 feature/project/
 |- build.gradle.kts
 `- src/main/
    |- java/com/whisper/feature/project/
+   |  |- GithubProjectIdentity.kt
    |  |- ProjectFragment.kt
+   |  |- ProjectRepositoryCapabilityImpl.kt
    |  |- ProjectViewModel.kt
    |  `- data/
    |     |- GithubProjectRepository.kt
@@ -46,17 +54,22 @@ feature/project/
 
 ## 2. 依赖与公开面
 
-模块依赖 Foundation、Material、Room runtime、Habitat runtime 和 Gson, 不依赖 app 或 Function. `ProjectFragment`
+实现模块依赖 Project API、Aster runtime、Foundation、Material、Room runtime、Habitat runtime 和 Gson,
+不依赖 app 或其它 feature 实现. `ProjectFragment`
 为 app 组合保留 public 可见性, `ProjectRefreshHeaderView` 为 XML inflation 保留 public 可见性. Entity 与 Dao 必须允许
 app 的 RoomDatabase 装配. 两个 GitHub 拦截器具体类保持 public, 供 app 的 NetworkComponentManager 创建并注入配置;
-其它网络模型、Repository 和页面状态保持 internal. 这些装配入口不是稳定路由或 Capability 契约. 当前模块不应用
-Aster 或 KSP.
+其它网络模型、Repository 和页面状态保持 internal.
+
+Project API 只依赖并公开 Aster runtime, 维护 `ProjectRepositoryCapability` 和 `ProjectCapabilities.REPOSITORY`.
+实现模块使用 `segment = "project"`, 仅为 Debug 与 Release 生产 Variant 接入 Aster compiler.
+`ProjectRepositoryCapabilityImpl` 必须保持 public 无参构造, 不持有 Application、页面、网络或缓存状态.
 
 浏览器入口使用 `Intent.ACTION_VIEW`; 没有可处理应用时给出用户可见提示. 不把完整 Activity、Context 或 Intent
 保存在静态对象中.
 
 ## 3. 网络与缓存
 
+GitHub 仓库 owner/name 由 `GithubProjectIdentity` 集中维护, API 相对路径与 Capability 网页地址从同一身份派生.
 GitHub API 保持相对路径, 并通过 `@ApplicationInterceptors` 按顺序声明
 `GithubEndpointRoutingInterceptor`、`GithubSystemParametersInterceptor`. 这两个组件具有构造依赖, app 在解析方法中
 使用显式工厂分别注入实际 `HttpUrl` 和应用 `User-Agent`, 不通过无参反射创建, 也不建立只用于传递配置的 app 子类.
@@ -115,7 +128,8 @@ Refreshing 状态切换箭头、文案与进度, ViewModel 完成请求后负责
 ## 5. 验证
 
 ```bash
-./gradlew :feature:project:testDebugUnitTest :feature:project:lintDebug \
+./gradlew :feature:project-api:bundleDebugAar \
+  :feature:project:testDebugUnitTest :feature:project:lintDebug \
   :app:assembleDebug :app:assembleDebugAndroidTest --no-configuration-cache
 ```
 
@@ -123,5 +137,6 @@ Repository 单元测试至少覆盖冷流重复收集、Loading 与结果顺序�
 和下游异常透明性. ViewModel 测试覆盖首次可见加载、再次可见的新鲜期边界、无数据失败的手动重试、页面错误、
 刷新失败保留数据、重复刷新守卫、进度收尾以及普通 403、主限流和次级限流的区分.
 Fragment Robolectric 测试覆盖隐藏初始页延迟加载、show/hide 返回后过期刷新以及无数据失败后的 Activity 重建.
-App instrumented test 验证 Habitat 按类型提供 Dao 并完成 Room 往返. 连接模拟器后检查首次网络加载、下拉刷新、
+Capability 测试覆盖稳定 HTTPS 地址; 构建检查生成 Registry 与最终 Manifest metadata, App instrumented test 验证
+Aster 能解析能力且 About 展示相同地址. Habitat 测试按类型提供 Dao 并完成 Room 往返. 连接模拟器后检查首次网络加载、下拉刷新、
 失败保留缓存、仓库跳转、浅深色模式、Tab 往返和 Activity 重建.

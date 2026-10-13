@@ -1,6 +1,7 @@
 package com.whisper.feature.project.data.network
 
 import com.whisper.architecture.network.annotation.ApplicationInterceptors
+import com.whisper.feature.project.GithubProjectIdentity
 import retrofit2.http.GET
 
 /**
@@ -15,6 +16,6 @@ import retrofit2.http.GET
 )
 internal interface GithubProjectApi {
 
-    @GET("repos/zhoubuilds/android-starter")
+    @GET(GithubProjectIdentity.API_PATH)
     suspend fun getProject(): GithubProjectResp
 }

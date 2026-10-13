@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.ksp)
+    id("com.whisper.aster")
 }
 
 android {
@@ -33,8 +35,14 @@ android {
     }
 }
 
+aster {
+    segment = "project"
+}
+
 dependencies {
     implementation(project(":foundation"))
+    implementation(project(":feature:project-api"))
+    implementation(project(":aster:aster-runtime"))
     implementation(project(":habitat:habitat-runtime"))
     implementation(libs.androidx.room.runtime)
     implementation(libs.gson)
@@ -43,4 +51,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
+
+    add("kspDebug", project(":aster:aster-compiler"))
+    add("kspRelease", project(":aster:aster-compiler"))
 }

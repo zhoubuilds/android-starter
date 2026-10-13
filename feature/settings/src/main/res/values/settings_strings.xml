@@ -17,4 +17,7 @@
     <string name="settings_about_version_unknown">版本信息不可用</string>
     <string name="settings_about_back">返回设置</string>
     <string name="settings_about_summary">面向真实 Android 应用的模块化工程基座</string>
+    <string name="settings_about_repository">GitHub 仓库</string>
+    <string name="settings_about_repository_open">打开 GitHub 仓库 %1$s</string>
+    <string name="settings_about_browser_unavailable">没有可打开网页的应用</string>
 </resources>

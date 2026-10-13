@@ -13,8 +13,11 @@ import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.whisper.aster.runtime.Aster
 import com.whisper.feature.function.R as FunctionR
 import com.whisper.feature.project.R as ProjectR
+import com.whisper.feature.project.api.ProjectCapabilities
+import com.whisper.feature.project.api.ProjectRepositoryCapability
 import com.whisper.feature.settings.R as SettingsR
 import com.whisper.starter.ui.activity.MainActivity
 import org.junit.Assert.assertEquals
@@ -131,6 +134,20 @@ class MainNavigationInstrumentedTest {
             onView(withId(SettingsR.id.settings_about_root)).check(matches(isDisplayed()))
             pressBack()
             onView(withId(SettingsR.id.settings_root)).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun openAbout_whenProjectCapabilityIsRegistered_showsRepositoryAddress() {
+        val capability: ProjectRepositoryCapability = checkNotNull(
+            Aster.resolve<ProjectRepositoryCapability>(ProjectCapabilities.REPOSITORY),
+        )
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withId(R.id.main_navigation_settings)).perform(click())
+            onView(withId(SettingsR.id.settings_about)).perform(click())
+
+            onView(withText(capability.repositoryUrl)).check(matches(isDisplayed()))
         }
     }
 }

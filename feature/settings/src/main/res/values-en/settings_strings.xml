@@ -16,4 +16,7 @@
     <string name="settings_about_version_unknown">Version unavailable</string>
     <string name="settings_about_back">Back to settings</string>
     <string name="settings_about_summary">A modular foundation for real Android applications</string>
+    <string name="settings_about_repository">GitHub repository</string>
+    <string name="settings_about_repository_open">Open GitHub repository %1$s</string>
+    <string name="settings_about_browser_unavailable">No browser is available</string>
 </resources>

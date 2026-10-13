@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 通过 Project API 与 Aster 展示仓库入口 |
 | 2026-10-13 | whisper | 建立独立 Settings feature 与应用设置边界 |
 
 ## 1. 定位
@@ -26,7 +27,8 @@ MainActivity、最终主题入口、应用语言声明和其它平台级装配; 
 ## 3. 页面与导航
 
 设置页使用 Foundation 的连续分段样式选择颜色模式和应用语言, 并提供 About 入口. About 页面通过最终宿主的
-`PackageManager` 读取应用图标、名称和版本, 不读取 app `R` 或 `BuildConfig`.
+`PackageManager` 读取应用图标、名称和版本, 不读取 app `R` 或 `BuildConfig`. GitHub 仓库地址通过
+`feature:project-api` 的 Capability 契约和 Aster 解析, 不依赖 Project 实现、网络或缓存状态.
 
 `AboutStarterActivity` 是模块内部未导出 Activity, 当前由设置页通过显式 Intent 打开. `SettingsFragment` 和外观初始化入口
 只服务 app 组合, 当前不作为跨 feature 路由或 Capability 契约.
@@ -36,4 +38,4 @@ MainActivity、最终主题入口、应用语言声明和其它平台级装配; 
 * 新增内容应继续围绕应用设置和应用信息, 不把“我的”页面中的所有业务入口堆入 Settings.
 * app 只组合页面和调用必要初始化入口, 不重新持有 Settings 的布局、文案或偏好实现.
 * 共享视觉样式归 Foundation, 通用 Android 工具归 Kit, Settings 只维护页面级使用方式.
-* 出现跨 feature 导航或能力消费时, 单独设计稳定契约, 不让其它 feature 直接依赖本实现模块.
+* 跨 feature 导航或能力消费必须依赖对应 API 模块, 不允许 feature 实现模块互相依赖.

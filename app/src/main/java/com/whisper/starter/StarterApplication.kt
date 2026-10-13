@@ -2,6 +2,7 @@ package com.whisper.starter
 
 import android.app.Application
 import com.whisper.architecture.network.ApiFactory
+import com.whisper.aster.runtime.Aster
 import com.whisper.feature.settings.AppAppearancePreferences
 import com.whisper.habitat.runtime.HabitatFactory
 import com.whisper.quill.LogcatQuillWriter
@@ -19,7 +20,7 @@ import com.whisper.starter.network.StarterNetworkComponentManager
 class StarterApplication : Application() {
 
     /**
-     * 在页面创建前恢复外观配置, 并按数据库、Habitat、网络的依赖顺序完成进程装配.
+     * 在页面创建前恢复外观配置、发现 Aster 注册项, 并按数据库、Habitat、网络的依赖顺序完成进程装配.
      *
      * Habitat 生成的 Dao provider 依赖已发布的数据库实例. ApiFactory 每进程只允许安装一次,
      * 不能将此初始化过程作为运行期配置刷新入口.
@@ -27,6 +28,7 @@ class StarterApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         AppAppearancePreferences.initialize(this)
+        Aster.initialize(this)
         StarterDatabase.initialize(this)
         HabitatFactory.initialize(this)
         ApiFactory.install(StarterNetworkComponentManager(this))

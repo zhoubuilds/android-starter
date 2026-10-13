@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 说明 Project API 与 Aster 仓库 Capability |
 | 2026-10-13 | whisper | 同步 Settings feature 的页面归属 |
 | 2026-09-17 | whisper | 说明保留 Tab 的过期更新、失败重试与准确限流提示 |
 | 2026-09-16 | whisper | 说明 Business 管线与页面独立错误处理示例 |
@@ -15,8 +16,8 @@
 
 ## 1. 页面入口
 
-安装并启动 Starter 后, 点击首页底部“项目”Tab 打开项目概览. App 直接创建 `ProjectFragment`, 当前没有 Aster 路由或
-独立 `*-api` 契约. 项目页只承载仓库信息; 颜色模式、应用语言和“关于 Starter”由独立 Settings feature 提供.
+安装并启动 Starter 后, 点击首页底部“项目”Tab 打开项目概览. App 直接创建 `ProjectFragment`, 页面入口不使用
+Aster 路由. Project 通过独立 `project-api` 契约向 Settings About 提供仓库地址 Capability.
 
 ## 2. 当前功能
 
@@ -39,7 +40,8 @@ dependencies {
 }
 ```
 
-其它 feature 不应直接依赖此实现模块. 出现跨模块路由或 Capability 需求后, 先建立对应 API 模块并迁移调用方依赖.
+其它 feature 不应直接依赖此实现模块. 仓库入口调用方只依赖 `:feature:project-api`, 并通过
+`Aster.resolve<ProjectRepositoryCapability>(ProjectCapabilities.REPOSITORY)` 解析实现.
 
 GitHub 公共仓库读取不需要 Token. 默认匿名配额有限, 演示刷新时应避免短时间连续请求. Retrofit 使用
 `NetworkComponentManager.ROUTING_PLACEHOLDER_BASE_URL` 初始化, 无需在 `app-config.toml` 重复配置占位地址.

@@ -1,9 +1,17 @@
 package com.whisper.feature.settings
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.MainThread
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.net.toUri
+import androidx.core.view.isVisible
+import com.whisper.aster.runtime.Aster
+import com.whisper.feature.project.api.ProjectCapabilities
+import com.whisper.feature.project.api.ProjectRepositoryCapability
 import com.whisper.feature.settings.databinding.SettingsAboutActivityBinding
 import com.whisper.kit.extension.applyWindowInsetsPadding
 import com.whisper.kit.extension.viewBinding
@@ -29,6 +37,7 @@ class AboutStarterActivity : AppCompatActivity() {
         configureWindowInsets()
         configureToolbar()
         bindApplicationInfo()
+        bindProjectRepository()
     }
 
     /**
@@ -57,6 +66,41 @@ class AboutStarterActivity : AppCompatActivity() {
             getString(R.string.settings_about_version_with_code, versionName, versionCode)
         } else {
             getString(R.string.settings_about_version_unknown)
+        }
+    }
+
+    private fun bindProjectRepository() {
+        val repositoryUrl: String? = if (Aster.containsCapability(ProjectCapabilities.REPOSITORY)) {
+            Aster.resolve<ProjectRepositoryCapability>(
+                ProjectCapabilities.REPOSITORY,
+            )?.repositoryUrl?.takeIf(String::isNotBlank)
+        } else {
+            null
+        }
+        viewBinding.settingsAboutRepository.isVisible = repositoryUrl != null
+        if (repositoryUrl == null) {
+            return
+        }
+
+        viewBinding.settingsAboutRepositoryUrl.text = repositoryUrl
+        viewBinding.settingsAboutRepository.contentDescription = getString(
+            R.string.settings_about_repository_open,
+            repositoryUrl,
+        )
+        viewBinding.settingsAboutRepository.setOnClickListener {
+            openProjectRepository(repositoryUrl)
+        }
+    }
+
+    private fun openProjectRepository(repositoryUrl: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, repositoryUrl.toUri()))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(
+                this,
+                R.string.settings_about_browser_unavailable,
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 }

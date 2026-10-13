@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 接入 Project 仓库 Capability 与 Aster 初始化 |
 | 2026-10-13 | whisper | 将设置页面与外观偏好迁移到 Settings feature |
 | 2026-09-17 | whisper | 限定 Debug 序列化运行时约束以兼容 Room 迁移测试 |
 | 2026-09-17 | whisper | 接入共享分段样式、Kit Insets 和版本化 Room 迁移校验 |
@@ -47,6 +48,7 @@
 | 应用和 Activity 声明 | `app/src/main/AndroidManifest.xml` |
 | 首页 Tab 组合 | `MainActivity` 与 `activity_main.xml` |
 | 应用设置、外观偏好与 About 页面 | `feature:settings` |
+| Project 跨模块仓库契约 | `feature:project-api` |
 | 应用语言声明 | `app/src/main/res/xml/locales_config.xml` 与 AppCompat Locale metadata |
 | 组件初始化 | `StarterApplication` |
 | 应用构建配置 | 根目录 `app-config.toml` |
@@ -133,11 +135,11 @@ Activity 承载系统 Splash. 该 AnimatedVectorDrawable 与 `ic_splash_screen_v
 
 ## 4. 初始化与保护范围
 
-app 当前承担调用颜色模式初始化、数据库、Habitat、`ApiFactory.install()` 和 Quill writer 的组合根职责.
-`StarterApplication` 先调用 Settings 的 `AppAppearancePreferences.initialize()` 应用已保存的颜色模式;
-数据组件顺序必须保持为 `StarterDatabase.initialize()`、`HabitatFactory.initialize()`、`ApiFactory.install()`, 避免 Habitat 生成的 Dao provider
-在数据库实例可用前被消费. Kit 不持有全局 Application, app 不需要执行 Kit 初始化. 当前没有跨模块路由或
-Capability, 因此当前组合链路不接入 Aster.
+app 当前承担颜色模式、Aster、数据库、Habitat、`ApiFactory.install()` 和 Quill writer 的组合根职责.
+`StarterApplication` 先调用 Settings 的 `AppAppearancePreferences.initialize()` 应用已保存的颜色模式, 再调用
+`Aster.initialize()` 发布最终 Manifest 中发现的 Registry. 数据组件顺序必须保持为
+`StarterDatabase.initialize()`、`HabitatFactory.initialize()`、`ApiFactory.install()`, 避免 Habitat 生成的 Dao provider
+在数据库实例可用前被消费. Kit 不持有全局 Application, app 不需要执行 Kit 初始化.
 网络工厂每进程只能成功安装一次, 不通过重复安装来刷新页面, 恢复请求或切换运行期环境.
 
 网络安装使用 `ApiFactory.install(StarterNetworkComponentManager(this))`. 管理器只接收 `Application`, 默认 Retrofit
@@ -173,14 +175,15 @@ Android 24-32 的 Application 资源不会随 AppCompat 显式语言选择更新
 
 当前 feature 遵守以下规则:
 
-* `:feature:function`、`:feature:project` 与 `:feature:settings` 由 app 引入并完成最终装配, 三个 feature 不反向依赖 app,
-  也不互相依赖.
+* `:feature:function`、`:feature:project` 与 `:feature:settings` 由 app 引入并完成最终装配, 三个 feature 不反向依赖 app.
+* Feature 实现模块不互相依赖. Settings 和 Project 只共同依赖 `:feature:project-api`; API 模块声明仓库 Capability,
+  不持有页面、资源、网络模型或实现类型.
 * `MainActivity` 使用 add/show/hide 切换三个根 Fragment, 避免 Tab 往返时重复创建页面并丢失 View 状态.
 * Fragment 是 app 组合根直接使用的实现入口, 不声明路由字符串、Capability 或跨 feature 参数契约.
 * Function 的组件详情和 Settings 的“关于 Starter”使用独立且未导出的 Activity. 模块内部显式 Intent 不需要注册 Aster;
   任何外部模块可访问的页面仍必须先在对应 `*-api` 中声明稳定路由.
-* 出现真实跨模块路由或 Capability 后, 先建立对应 `*-api` 模块暴露稳定契约, 调用方只依赖 API 模块;
-  实现模块再按 [Aster 使用文档](../aster/usage.md) 接入插件、compiler 和唯一 segment.
+* Project 使用 `project.info.repository` 注册仓库入口 Capability. Settings 只依赖 Project API 和 Aster runtime,
+  不引用 Project 实现; 其它跨模块能力沿用相同 API/实现分离规则.
 * 演示项目允许为了展示 Android Starter 能力引入较完整的分层, 但不要在需求出现前创建空 API 模块或无消费者契约.
 
 Project 的 GitHub API 使用普通 suspend 返回类型, 避免 `BusinessFlowCallAdapterFactory` 将原生 JSON
@@ -256,8 +259,8 @@ Splash 修改还需执行冷启动回归:
 
 当前 feature 变更需要覆盖两个 AAR、app Debug/Release、AndroidTest 编译, 三个底部 Tab、详情 Activity 返回栈和 Activity
 重建后的选中项恢复. 设置变更需覆盖颜色模式、应用语言、进程重启恢复和中英文资源. GitHub 数据还需覆盖响应映射、错误与限流、取消传播、重试、缓存新鲜期和离线展示;
-Habitat 集成测试验证生成的 Dao provider 能完成 Room 读写. 后续接入 Aster 时再扩大验证到 Aster Registry 生成、
-merged manifest 和跨模块导航.
+Habitat 集成测试验证生成的 Dao provider 能完成 Room 读写. Aster 验证覆盖 Project Registry 生成、最终 merged manifest、
+类型安全 Capability 解析及 About 仓库地址展示.
 
 语言 Header 回归应覆盖 API 32 及以下显式应用语言与系统不同、切换后即时请求和恢复跟随系统.
 首页 Insets 回归通过真实 View 分发覆盖导航栏位于左侧、右侧和底部, 并确认重复分发不会累加 padding.

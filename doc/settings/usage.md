@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 说明 About 的 Project Capability 仓库入口 |
 | 2026-10-13 | whisper | 说明 Settings 模块入口与当前功能 |
 
 ## 1. 页面入口
@@ -16,8 +17,9 @@
 设置页支持跟随系统、浅色和深色三种颜色模式, 以及跟随系统、简体中文和英文三种应用语言.
 颜色模式会在进程重启后恢复, 应用语言由 AppCompat 持久化并按需重建 Activity.
 
-“关于 Starter”展示当前安装包的应用图标、名称、版本名和版本号. 页面使用未导出的 `AboutStarterActivity`,
-系统返回键或工具栏返回按钮回到设置页.
+“关于 Starter”展示当前安装包的应用图标、名称、版本名、版本号和 GitHub 仓库地址. 页面使用未导出的
+`AboutStarterActivity`, 系统返回键或工具栏返回按钮回到设置页. 点击仓库信息项交给系统浏览器打开.
+该地址通过 Project API 的 Aster Capability 获取, 不等待项目页网络加载.
 
 ## 3. 接入方式
 
@@ -26,6 +28,7 @@
 ```kotlin
 dependencies {
     implementation(project(":feature:settings"))
+    implementation(project(":aster:aster-runtime"))
 }
 ```
 
@@ -35,6 +38,7 @@ Application 在首个 Activity 创建前恢复颜色模式:
 override fun onCreate() {
     super.onCreate()
     AppAppearancePreferences.initialize(this)
+    Aster.initialize(this)
 }
 ```
 

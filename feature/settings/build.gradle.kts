@@ -32,6 +32,8 @@ android {
 
 dependencies {
     implementation(project(":foundation"))
+    implementation(project(":feature:project-api"))
+    implementation(project(":aster:aster-runtime"))
     implementation(libs.androidx.constraintlayout)
     implementation(libs.material)
 

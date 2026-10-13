@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 通过 Project API 与 Aster 暴露仓库入口能力 |
 | 2026-09-17 | whisper | 按页面可见状态检查缓存新鲜期并修正 GitHub 限流识别 |
 | 2026-09-16 | whisper | 接入 Business 数据管线并保留页面独立错误处理 |
 | 2026-09-16 | whisper | 将 GitHub 拦截器收敛为接收应用配置的具体组件 |
@@ -23,11 +24,12 @@ Header 由组件维护; 具体 Endpoint、应用 `User-Agent`、最终 RoomDatab
 
 ## 2. 组合边界
 
-`ProjectFragment` 由 app 组合根直接创建并直接呈现“项目”Tab 内容. `feature:project` 不依赖 `feature:function`,
-不引用 app 类型或资源, 也不声明跨模块路由和 Capability.
+`ProjectFragment` 由 app 组合根直接创建并直接呈现“项目”Tab 内容. `feature:project` 不依赖其它 feature 实现模块,
+也不引用 app 类型或资源. `feature:project-api` 声明仓库入口 Capability, Project 使用 Aster 注册具体实现.
 
-当其它 feature 需要导航到 Project 或消费 Project 能力时, 应先新增对应 `*-api` 模块, 由其暴露路由、参数或 Capability
-契约, 再让实现模块接入 Aster. 仓库 URL、GitHub 响应和缓存结构不是 Architecture 或 Foundation 的通用契约.
+Settings 只依赖 Project API, 通过稳定能力名取得公开仓库 URL. Capability 返回静态项目身份派生的地址,
+不读取页面 ViewModel、网络响应或 Room 缓存. GitHub 响应和缓存结构不进入 API 契约, 也不是 Architecture 或
+Foundation 的通用能力.
 
 Project 内部的 Retrofit API 通过 `@ApplicationInterceptors` 声明 `GithubEndpointRoutingInterceptor` 和
 `GithubSystemParametersInterceptor`. 它们是分别接收 `endpoint: HttpUrl` 和 `userAgent: String` 的具体组件,

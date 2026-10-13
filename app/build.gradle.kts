@@ -61,6 +61,7 @@ dependencies {
     implementation(project(":feature:function"))
     implementation(project(":feature:project"))
     implementation(project(":feature:settings"))
+    implementation(project(":aster:aster-runtime"))
     implementation(project(":habitat:habitat-runtime"))
 
     implementation(libs.androidx.room.runtime)
@@ -74,6 +75,7 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(project(":feature:project-api"))
 
     constraints {
         // AndroidTest 与目标 APK 复用运行时版本, 仅为 Room 迁移测试对齐 Debug 已有的传递依赖.

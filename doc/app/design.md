@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 使用 Project API 与 Aster 向 About 提供仓库入口 |
 | 2026-10-13 | whisper | 将设置与应用信息页面迁移到独立 Settings feature |
 | 2026-09-17 | whisper | 复用共享分段样式与 Kit Insets 并开启 Room schema 版本化 |
 | 2026-09-17 | whisper | 明确应用语言请求头与首页系统栏 Insets 的处理边界 |
@@ -93,9 +94,10 @@ monochrome 的用途分别维护; 图标几何仍由同一设计输入生成. �
 
 ## 4. 组合根边界
 
-* `app` 直接组合三个 feature Fragment, 装配 Quill、`ApiFactory`、Room 和 Habitat, 持有应用 `BuildConfig`、
-  具体网络 Endpoint、应用请求参数、最终主题入口与应用语言平台声明.
+* `app` 直接组合三个 feature Fragment, 初始化 Aster, 装配 Quill、`ApiFactory`、Room 和 Habitat, 持有应用
+  `BuildConfig`、具体网络 Endpoint、应用请求参数、最终主题入口与应用语言平台声明.
 * `feature:settings` 持有颜色模式偏好、语言选择页面和应用信息页面, 向 app 暴露启动期外观初始化入口.
+* `feature:project-api` 声明 Project 的跨模块能力契约; Settings 只通过该 API 和 Aster 获取仓库入口.
 * `foundation` 承载应用业务基座, 业务状态处理和共享设计系统, 不读取 app 的构建变体或域名配置.
 * `architecture` 保持通用业务状态, UI 和网络创建契约.
 * 仅服务示例页面的数据映射和交互放入对应 feature, 不上移为公共技术契约.
@@ -116,19 +118,25 @@ monochrome 的用途分别维护; 图标几何仍由同一设计输入生成. �
 ```text
 app
 |- feature:function
+|- feature:project-api
 |- feature:project
 |- feature:settings
 `- foundation
 
-feature:* -> foundation / material
+feature:project -> feature:project-api
+feature:settings -> feature:project-api
 ```
 
 `function` 提供 RecyclerView 演示目录和独立组件详情 Activity, `project` 提供项目概览, `settings` 提供设置页和
 独立的 `AboutStarterActivity`. `MainActivity` 仅作为顶层 Tab 壳, 直接创建并保留三个根 Fragment; 详情页面不继续堆入
-MainActivity 的 Fragment 返回栈. 三个 feature 当前互不依赖, 也不声明跨模块路由或 Capability.
+MainActivity 的 Fragment 返回栈. Feature 实现模块之间不直接依赖; `project-api` 暴露仓库入口 Capability,
+Project 注册具体实现, Settings 通过 Aster 按稳定名称解析.
 
-直接暴露 Fragment 只服务 app 组合根, 不替代公开业务契约. 后续出现跨模块路由或 Capability 时,
-先建立对应的 `*-api` 模块, 由 API 模块声明稳定路径、参数、能力接口和能力名称, 再由实现模块接入 Aster.
+直接暴露 Fragment 只服务 app 组合根, 不替代公开业务契约. 其它跨模块路由或 Capability 同样先建立对应的
+`*-api` 模块, 由 API 模块声明稳定路径、参数、能力接口和能力名称, 再由实现模块接入 Aster.
+
+About 展示的仓库地址由 Project Capability 同步提供, 不读取 Project 页的网络响应、Room 缓存或 ViewModel 状态.
+因此应用首次启动或离线时仍可显示该入口, Settings 也不需要依赖 Project 实现模块.
 不能因为直接写字符串也能完成导航, 就让调用方依赖实现模块中的隐式路径. 作为 Android Starter 演示项目,
 可以为了完整展示模块化契约采用比普通小型应用更明确的分层, 但每项机制仍需对应实际演示需求.
 

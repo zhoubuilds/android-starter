@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-13 | whisper | 接入 Project API 仓库 Capability |
 | 2026-10-13 | whisper | 建立 Settings 模块结构、公开面和验证规则 |
 
 本文补充 `feature:settings` 的维护约束. 通用规则见 [代码规范](../application/code-style.md) 和
@@ -33,8 +34,8 @@ About 页面使用 Activity ViewBinding, 并通过 Kit Insets 扩展处理系统
 
 ## 2. 依赖与公开面
 
-模块直接依赖 Foundation、ConstraintLayout 和 Material, 通过 Foundation 获得公开的 Kit 与 AppCompat 能力.
-不依赖 app、Function 或 Project.
+模块直接依赖 Project API、Aster runtime、Foundation、ConstraintLayout 和 Material, 通过 Foundation 获得公开的
+Kit 与 AppCompat 能力. 不依赖 app 或任何 feature 实现模块.
 
 `SettingsFragment` 必须为 public, 供 app 组合根创建. `AppAppearancePreferences.initialize()` 必须为 public, 供
 `StarterApplication` 在首个 Activity 前恢复颜色模式. 偏好查询、写入和 `AppThemeMode` 保持 internal.
@@ -53,13 +54,15 @@ About 页面使用 Activity ViewBinding, 并通过 Kit Insets 扩展处理系统
 
 设置页使用 Foundation 的共享主题和连续分段按钮样式. 页面专用文案、布局与图标全部留在本模块, 不把资源放回 app.
 About 页面从当前宿主查询应用名称、图标和版本, 避免对 app 包名、资源或构建配置建立反向依赖.
+仓库入口使用 `ProjectRepositoryCapability` 按名称解析; 未注册实现时隐藏该信息项, 已注册时显示完整地址并交给
+系统浏览器打开. Settings 不读取 Project 的 DTO、数据库、Repository、ViewModel 或实现类.
 
 模块内部 About 跳转使用显式 Intent. 如果其它 feature 需要进入 Settings 或 About, 应先建立导航契约,
 不能直接依赖 `feature:settings` 的 Activity 类型.
 
 ## 5. 保护范围
 
-当前 Settings 源码没有单独声明的 `@aegis` 保护标记. Foundation、Kit 和 AppCompat 的既有契约不因本模块调用而改变.
+当前 Settings 源码没有单独声明的 `@aegis` 保护标记. Aster、Foundation、Kit 和 AppCompat 的既有契约不因本模块调用而改变.
 
 ## 6. 验证
 
@@ -70,4 +73,5 @@ About 页面从当前宿主查询应用名称、图标和版本, 避免对 app �
 ```
 
 单元测试覆盖颜色模式持久化值解析. App instrumented test 覆盖设置 Tab 重建、About 往返和共享分段按钮样式.
-涉及实际颜色模式或语言切换时, 还应在指定设备或模拟器验证 Activity 重建、进程重启以及中英文资源切换.
+同时验证 Aster 能力解析和 About 仓库地址展示. 涉及实际颜色模式或语言切换时, 还应在指定设备或模拟器验证
+Activity 重建、进程重启以及中英文资源切换.
