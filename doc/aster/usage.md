@@ -4,6 +4,7 @@
 
 | 修订时间（CST）  | 修订人    | 修订说明                                                                                  |
 |------------------|-----------|-------------------------------------------------------------------------------------------|
+| 2026-10-14       | whisper   | 补充 Kotlin 泛型类型唯一解析入口                                                  |
 | 2026-09-01       | whisper   | 收敛名称类型安全解析、动态解析和类型唯一解析契约                                    |
 | 2026-08-31       | whisper   | 同步 Registry Manifest metadata 固定发现标记                                               |
 | 2026-07-29       | whisper   | 补充路由跨模块暴露边界                                                                    |
@@ -363,10 +364,11 @@ val capability: UserSessionCapability? =
 
 ```kotlin
 val capability: UserSessionCapability? =
-    Aster.resolve(UserSessionCapability::class.java)
+    Aster.resolve<UserSessionCapability>()
 ```
 
-没有匹配实现时返回 `null`; 只有一个匹配时返回该实例. 如果存在多个实现, Aster 会在实例化任何候选能力前抛出
+该 Kotlin 便捷入口等同于 `Aster.resolve(UserSessionCapability::class.java)`. Java 调用方继续使用显式
+`Class` 参数重载. 没有匹配实现时返回 `null`; 只有一个匹配时返回该实例. 如果存在多个实现, Aster 会在实例化任何候选能力前抛出
 `IllegalStateException`. 异常信息会列出请求类型, 匹配数量和按名称排序的全部候选名称; 调用方应改用
 `resolve<T>(name)` 精确选择, 或使用 `resolveAll<T>()` 显式处理多实现.
 

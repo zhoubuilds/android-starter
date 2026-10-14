@@ -19,6 +19,7 @@ import com.whisper.aster.runtime.registry.AsterRegistryInstaller
  * @aegis 保护公开 API, 初始化发布, 路由查询和能力解析的行为语义.
  * @aegis-audit 2026-09-01 | whisper | 经授权收敛名称类型安全解析和类型唯一解析契约.
  * @aegis-audit 2026-09-01 | whisper | 经授权在内部演进阶段移除冗余 context 公开属性.
+ * @aegis-audit 2026-10-14 | whisper | 经授权补充按类型解析唯一实现的 Kotlin 泛型入口.
  *
  * @author whisper
  * @since 2026/07/22
@@ -146,6 +147,21 @@ object Aster {
             reportError("Capability not found: $name")
         }
         return capability
+    }
+
+    /**
+     * 按能力契约类型获取唯一实现.
+     *
+     * 该 Kotlin 便捷入口与显式传入 [Class] 的重载保持相同语义.
+     *
+     * @param T 能力契约类型.
+     * @return 唯一匹配的能力实例, 未注册时返回 null.
+     * @exception IllegalStateException Aster 尚未初始化, 已注册目标无效或存在多个匹配实现时
+     * 抛出.
+     * @exception Throwable Capability 构造或初始化失败时原样抛出.
+     */
+    inline fun <reified T : Capability> resolve(): T? {
+        return resolve(T::class.java)
     }
 
     /**

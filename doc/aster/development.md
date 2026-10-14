@@ -4,6 +4,7 @@
 
 | 修订时间（CST）  | 修订人  | 修订说明                                                                                   |
 |------------------|---------|--------------------------------------------------------------------------------------------|
+| 2026-10-14       | whisper | 补充 Kotlin 泛型类型唯一解析入口                                                   |
 | 2026-09-01       | whisper | 收敛名称类型安全解析和类型唯一解析契约                                               |
 | 2026-08-31       | whisper | 反转 Registry Manifest metadata 并采用固定发现标记                                          |
 | 2026-08-20       | whisper | 标记稳定契约与关键协议的 Aegis 保护范围                                                     |
@@ -280,8 +281,9 @@ Android 启动、权限和 Launcher 生命周期异常原样传播。
 请求类型, 已注册实现类型以及检查名称常量和请求契约的建议. Java 调用方使用 `resolve(name, type)` 完成相同查询.
 `resolveCapability(name)` 保留动态 `Capability` 返回值, 仅用于调用方明确自行执行 `as?` 等动态类型处理的场景.
 
-类型查询先按实现 class 做 `isAssignableFrom` 匹配, 再按能力名排序. `resolve(type)` 在没有匹配时返回 `null`,
-在只有一个匹配时实例化并返回该实现, 在存在多个匹配时于实例化任何能力前抛出 `IllegalStateException`.
+类型查询先按实现 class 做 `isAssignableFrom` 匹配, 再按能力名排序. Kotlin 的 `resolve<T>()` 直接委托
+给 `resolve(type)`, 两者共享同一契约: 没有匹配时返回 `null`, 只有一个匹配时实例化并返回该实现,
+存在多个匹配时于实例化任何能力前抛出 `IllegalStateException`.
 异常包含请求类型, 匹配数量, 按名称排序的全部候选名称及显式选择建议. `resolveAll(type)` 仍实例化并返回全部匹配项.
 能力名排序不构成单个解析的优先级.
 

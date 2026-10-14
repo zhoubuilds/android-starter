@@ -7,6 +7,7 @@ import com.whisper.aster.runtime.internal.registry.RegistryState
 import com.whisper.aster.runtime.internal.registry.RouteRegistry
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -91,7 +92,7 @@ class AsterCapabilityResolutionTest {
     }
 
     @Test
-    fun resolveByTypeReturnsUniqueImplementation() {
+    fun resolveByReifiedTypeReturnsUniqueImplementationAndMatchesClassOverload() {
         installCapabilities(
             CapabilityDescriptor(
                 name = "test.unique",
@@ -100,13 +101,15 @@ class AsterCapabilityResolutionTest {
             )
         )
 
-        val capability: TestContract? = Aster.resolve(TestContract::class.java)
+        val capability: TestContract? = Aster.resolve<TestContract>()
+        val classResolvedCapability: TestContract? = Aster.resolve(TestContract::class.java)
 
         assertTrue(capability is UniqueTestCapability)
+        assertSame(classResolvedCapability, capability)
     }
 
     @Test
-    fun resolveByTypeFailsWithActionableDetailsWhenImplementationsAreAmbiguous() {
+    fun resolveByReifiedTypeFailsWithActionableDetailsWhenImplementationsAreAmbiguous() {
         installCapabilities(
             CapabilityDescriptor(
                 name = "test.zeta",
@@ -121,7 +124,7 @@ class AsterCapabilityResolutionTest {
         )
 
         val exception: IllegalStateException = assertThrows(IllegalStateException::class.java) {
-            Aster.resolve(TestContract::class.java)
+            Aster.resolve<TestContract>()
         }
 
         assertEquals(
