@@ -6,6 +6,24 @@ plugins {
     id("com.whisper.prism")
 }
 
+// 本地构建允许不配置签名; 发布环境应通过 Gradle Property 同时提供以下四项.
+val releaseStoreFile: String? = providers.gradleProperty("RELEASE_STORE_FILE").orNull
+val releaseStorePassword: String? = providers.gradleProperty("RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias: String? = providers.gradleProperty("RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword: String? = providers.gradleProperty("RELEASE_KEY_PASSWORD").orNull
+val releaseSigningProperties: List<String?> = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+)
+val isReleaseSigningAbsent: Boolean = releaseSigningProperties.all { it.isNullOrBlank() }
+val isReleaseSigningConfigured: Boolean = releaseSigningProperties.all { !it.isNullOrBlank() }
+
+check(isReleaseSigningAbsent || isReleaseSigningConfigured) {
+    "Release signing properties must be configured together."
+}
+
 android {
     namespace = "com.whisper.starter"
     compileSdk = 37
@@ -20,12 +38,26 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (isReleaseSigningConfigured) {
+            create("release") {
+                storeFile = rootProject.file(requireNotNull(releaseStoreFile))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isDebuggable = true
         }
         release {
             isMinifyEnabled = false
+            if (isReleaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
