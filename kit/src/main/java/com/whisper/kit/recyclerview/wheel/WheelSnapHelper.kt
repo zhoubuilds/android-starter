@@ -19,7 +19,7 @@ class WheelSnapHelper : LinearSnapHelper() {
         velocityY: Int,
     ): Int = if (
         layoutManager is WheelLayoutManager &&
-        layoutManager.scrollFeature != WheelLayoutManager.SCROLL_FEATURE_LIMITED
+        layoutManager.isLoopingActive
     ) {
         RecyclerView.NO_POSITION
     } else {

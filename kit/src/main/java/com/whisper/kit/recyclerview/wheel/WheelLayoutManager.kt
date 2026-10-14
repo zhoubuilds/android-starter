@@ -7,10 +7,11 @@ import androidx.annotation.IntDef
 import androidx.recyclerview.widget.RecyclerView
 
 /**
- * 从 RecyclerView 纵向中心开始布局的滚轮 LayoutManager, 支持有界和循环滚动.
+ * 从 RecyclerView 纵向中心开始布局的滚轮 LayoutManager, 支持有界和条件循环滚动.
  *
  * 应同时安装 [WheelSnapHelper], 使滚动停止后的中心条目与 RecyclerView 中心对齐.
  * [scrollToPosition] 和 [smoothScrollToPosition] 均表示将目标条目移动到中心位置.
+ * 循环模式只在每个 Adapter position 最多布局一次即可覆盖布局窗口时生效, 否则自动退化为有界模式.
  *
  * @author whisper
  * @since 2026/10/14
@@ -22,16 +23,29 @@ class WheelLayoutManager(
 ) : RecyclerView.LayoutManager(), RecyclerView.SmoothScroller.ScrollVectorProvider {
 
     companion object {
-        /** Adapter 首尾是滚动边界. */
+        /**
+         * Adapter 首尾是滚动边界.
+         */
         const val SCROLL_FEATURE_LIMITED: Int = 0
 
-        /** Adapter 首尾相接并允许循环滚动. */
+        /**
+         * Adapter 首尾在能够保持 Adapter position 唯一时相接, 否则使用有界滚动.
+         */
         const val SCROLL_FEATURE_UNLIMITED: Int = 2
     }
 
+    /**
+     * 滚动特征取值范围.
+     */
     @IntDef(SCROLL_FEATURE_LIMITED, SCROLL_FEATURE_UNLIMITED)
     @Retention(AnnotationRetention.SOURCE)
     annotation class ScrollFeature
+
+    /**
+     * 当前布局是否满足 position 唯一约束并实际启用了循环滚动.
+     */
+    internal var isLoopingActive: Boolean = false
+        private set
 
     private var pendingScrollPosition: Int = RecyclerView.NO_POSITION
     private var centerYPosition: Int = RecyclerView.NO_POSITION
@@ -70,33 +84,69 @@ class WheelLayoutManager(
         detachAndScrapAttachedViews(recycler)
 
         if (itemCount <= 0) {
+            isLoopingActive = false
             return
         }
 
-        val centerView: View = getViewForPositionByCycle(recycler, centerViewPosition)
+        val centerAdapterPosition: Int = normalizeAdapterPosition(centerViewPosition)
+        val shouldTryLooping: Boolean =
+            scrollFeature == SCROLL_FEATURE_UNLIMITED && itemCount > 1
+        isLoopingActive = shouldTryLooping && layoutFromCenter(
+            recycler = recycler,
+            centerPosition = centerAdapterPosition,
+            centerOffsetY = centerViewOffsetY,
+            allowLooping = true,
+        )
+        if (!isLoopingActive) {
+            if (shouldTryLooping) {
+                detachAndScrapAttachedViews(recycler)
+            }
+            layoutFromCenter(
+                recycler = recycler,
+                centerPosition = centerAdapterPosition,
+                centerOffsetY = centerViewOffsetY,
+                allowLooping = false,
+            )
+        }
+        checkIfCenterYPositionChanged(findCenterChildPosition())
+    }
+
+    private fun layoutFromCenter(
+        recycler: RecyclerView.Recycler,
+        centerPosition: Int,
+        centerOffsetY: Int,
+        allowLooping: Boolean,
+    ): Boolean {
+        val centerY: Int = (height - paddingTop - paddingBottom) / 2
+        val laidOutPositions: MutableSet<Int> = mutableSetOf(centerPosition)
+        val centerView: View = recycler.getViewForPosition(centerPosition)
         addView(centerView)
         measureChildWithMargins(centerView, 0, 0)
         val firstWidth: Int = getDecoratedMeasuredWidth(centerView)
         val firstHeight: Int = getDecoratedMeasuredHeight(centerView)
         val firstLeft: Int = paddingLeft + getLeftDecorationWidth(centerView)
-        val firstTop: Int = centerY - firstHeight / 2 + centerViewOffsetY
+        val firstTop: Int = centerY - firstHeight / 2 + centerOffsetY
         val firstRight: Int = firstLeft + firstWidth
         val firstBottom: Int = firstTop + firstHeight
         layoutDecoratedWithMargins(centerView, firstLeft, firstTop, firstRight, firstBottom)
 
-        layoutChild(
+        val startCovered: Boolean = layoutChild(
             getDecoratedTop(centerView),
-            centerViewPosition - 1,
+            centerPosition - 1,
             LAYOUT_START,
             recycler,
+            allowLooping,
+            laidOutPositions,
         )
-        layoutChild(
+        val endCovered: Boolean = layoutChild(
             getDecoratedBottom(centerView),
-            centerViewPosition + 1,
+            centerPosition + 1,
             LAYOUT_END,
             recycler,
+            allowLooping,
+            laidOutPositions,
         )
-        checkIfCenterYPositionChanged(findCenterChildPosition())
+        return startCovered && endCovered
     }
 
     override fun isAutoMeasureEnabled(): Boolean = true
@@ -108,10 +158,31 @@ class WheelLayoutManager(
         recycler: RecyclerView.Recycler,
         state: RecyclerView.State,
     ): Int {
-        val consumed: Int = fill(dy, recycler)
-        offsetChildrenVertical(-consumed)
+        if (dy == 0 || childCount == 0) {
+            return 0
+        }
+        val maximumLoopingStep: Int = maxOf(1, (height - paddingTop - paddingBottom) / 2)
+        var remaining: Int = dy
+        var totalConsumed: Int = 0
+        while (remaining != 0) {
+            val requestedStep: Int = if (isLoopingActive) {
+                remaining.coerceIn(-maximumLoopingStep, maximumLoopingStep)
+            } else {
+                remaining
+            }
+            val consumedStep: Int = fill(requestedStep, recycler)
+            if (consumedStep == 0) {
+                break
+            }
+            offsetChildrenVertical(-consumedStep)
+            totalConsumed += consumedStep
+            remaining -= consumedStep
+            if (consumedStep != requestedStep || !isLoopingActive) {
+                break
+            }
+        }
         checkIfCenterYPositionChanged(findCenterChildPosition())
-        return consumed
+        return totalConsumed
     }
 
     override fun scrollToPosition(position: Int) {
@@ -181,9 +252,9 @@ class WheelLayoutManager(
         if (centerChildPosition == RecyclerView.NO_POSITION || centerChildPosition == targetPosition) {
             return null
         }
-        val direction: Int = when (scrollFeature) {
-            SCROLL_FEATURE_LIMITED -> if (targetPosition > centerChildPosition) 1 else -1
-            SCROLL_FEATURE_UNLIMITED -> {
+        val direction: Int = when {
+            !isLoopingActive -> if (targetPosition > centerChildPosition) 1 else -1
+            else -> {
                 val up: Int = (centerChildPosition - targetPosition + itemCount) % itemCount
                 val down: Int = (targetPosition - centerChildPosition + itemCount) % itemCount
                 when {
@@ -192,12 +263,13 @@ class WheelLayoutManager(
                     else -> if (targetPosition > centerChildPosition) 1 else -1
                 }
             }
-            else -> 0
         }
         return PointF(0f, direction.toFloat())
     }
 
-    /** 返回当前覆盖 RecyclerView 纵向中心的条目, 没有已布局条目时返回 null. */
+    /**
+     * 返回当前覆盖 RecyclerView 纵向中心的条目, 没有已布局条目时返回 null.
+     */
     fun findCenterChild(): View? {
         if (childCount == 0) {
             return null
@@ -216,11 +288,15 @@ class WheelLayoutManager(
         }
     }
 
-    /** 返回当前覆盖 RecyclerView 纵向中心的 Adapter position. */
+    /**
+     * 返回当前覆盖 RecyclerView 纵向中心的 Adapter position.
+     */
     fun findCenterChildPosition(): Int =
         findCenterChild()?.let(::getPosition) ?: RecyclerView.NO_POSITION
 
-    /** 设置中心条目 position 变化监听器, null 表示移除. */
+    /**
+     * 设置中心条目 position 变化监听器, null 表示移除.
+     */
     fun setOnCenterYPositionChangeListener(listener: OnCenterYPositionChangeListener?) {
         onCenterYPositionChangeListener = listener
     }
@@ -232,16 +308,25 @@ class WheelLayoutManager(
     }
 
     private fun fillEnd(dy: Int, recycler: RecyclerView.Recycler): Int {
+        if (isLoopingActive) {
+            recycleStartBeforeScroll(dy, recycler)
+        }
         val anchor: View = getChildAt(childCount - 1) ?: return 0
         val anchorPosition: Int = getPosition(anchor)
         var lastCenterY: Int = anchor.top + anchor.height / 2
         var offset: Int = getDecoratedBottom(anchor)
         var position: Int = anchorPosition + 1
+        var duplicatePositionBlockedFill: Boolean = false
         while (
-            (scrollFeature == SCROLL_FEATURE_UNLIMITED || position < itemCount) &&
+            (isLoopingActive || position < itemCount) &&
             offset < height - paddingBottom + dy
         ) {
-            val view: View = getViewForPositionByCycle(recycler, position)
+            val adapterPosition: Int = resolveAdapterPosition(position, isLoopingActive) ?: break
+            if (isLoopingActive && isAdapterPositionAttached(adapterPosition)) {
+                duplicatePositionBlockedFill = true
+                break
+            }
+            val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view)
             measureChildWithMargins(view, 0, 0)
             val width: Int = getDecoratedMeasuredWidth(view)
@@ -256,7 +341,11 @@ class WheelLayoutManager(
             recycleStart(offset, anchor, dy, recycler)
             position += 1
         }
-        return if (scrollFeature == SCROLL_FEATURE_UNLIMITED) {
+        if (duplicatePositionBlockedFill) {
+            isLoopingActive = false
+            requestLayout()
+        }
+        return if (isLoopingActive) {
             dy
         } else {
             minOf(dy, lastCenterY - (height - paddingTop - paddingBottom) / 2)
@@ -264,16 +353,25 @@ class WheelLayoutManager(
     }
 
     private fun fillStart(dy: Int, recycler: RecyclerView.Recycler): Int {
+        if (isLoopingActive) {
+            recycleEndBeforeScroll(dy, recycler)
+        }
         val anchor: View = getChildAt(0) ?: return 0
         val anchorPosition: Int = getPosition(anchor)
         var firstCenterY: Int = anchor.top + anchor.height / 2
         var offset: Int = getDecoratedTop(anchor)
         var position: Int = anchorPosition - 1
+        var duplicatePositionBlockedFill: Boolean = false
         while (
-            (scrollFeature == SCROLL_FEATURE_UNLIMITED || position >= 0) &&
+            (isLoopingActive || position >= 0) &&
             offset > paddingTop + dy
         ) {
-            val view: View = getViewForPositionByCycle(recycler, position)
+            val adapterPosition: Int = resolveAdapterPosition(position, isLoopingActive) ?: break
+            if (isLoopingActive && isAdapterPositionAttached(adapterPosition)) {
+                duplicatePositionBlockedFill = true
+                break
+            }
+            val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view, 0)
             measureChildWithMargins(view, 0, 0)
             val width: Int = getDecoratedMeasuredWidth(view)
@@ -288,10 +386,36 @@ class WheelLayoutManager(
             recycleEnd(offset, anchor, dy, recycler)
             position -= 1
         }
-        return if (scrollFeature == SCROLL_FEATURE_UNLIMITED) {
+        if (duplicatePositionBlockedFill) {
+            isLoopingActive = false
+            requestLayout()
+        }
+        return if (isLoopingActive) {
             dy
         } else {
             maxOf(dy, firstCenterY - (height - paddingTop - paddingBottom) / 2)
+        }
+    }
+
+    private fun recycleStartBeforeScroll(dy: Int, recycler: RecyclerView.Recycler) {
+        while (childCount > 1) {
+            val first: View = getChildAt(0) ?: return
+            if (getDecoratedBottom(first) - dy <= paddingTop) {
+                removeAndRecycleView(first, recycler)
+            } else {
+                return
+            }
+        }
+    }
+
+    private fun recycleEndBeforeScroll(dy: Int, recycler: RecyclerView.Recycler) {
+        while (childCount > 1) {
+            val last: View = getChildAt(childCount - 1) ?: return
+            if (getDecoratedTop(last) - dy >= height - paddingBottom) {
+                removeAndRecycleView(last, recycler)
+            } else {
+                return
+            }
         }
     }
 
@@ -338,25 +462,48 @@ class WheelLayoutManager(
         position: Int,
         layoutDirection: Int,
         recycler: RecyclerView.Recycler,
-    ) {
-        when (layoutDirection) {
-            LAYOUT_START -> layoutChildToStart(baseline, position, recycler)
-            LAYOUT_END -> layoutChildToEnd(baseline, position, recycler)
+        allowLooping: Boolean,
+        laidOutPositions: MutableSet<Int>,
+    ): Boolean = when (layoutDirection) {
+        LAYOUT_START -> layoutChildToStart(
+            baseline,
+            position,
+            recycler,
+            allowLooping,
+            laidOutPositions,
+        )
+        LAYOUT_END -> layoutChildToEnd(
+            baseline,
+            position,
+            recycler,
+            allowLooping,
+            laidOutPositions,
+        )
+        else -> false
+    }
+
+    private fun resolveAdapterPosition(position: Int, allowLooping: Boolean): Int? {
+        if (position in 0 until itemCount) {
+            return position
         }
+        return if (allowLooping) normalizeAdapterPosition(position) else null
     }
 
     private fun layoutChildToStart(
         baseline: Int,
         position: Int,
         recycler: RecyclerView.Recycler,
-    ) {
+        allowLooping: Boolean,
+        laidOutPositions: MutableSet<Int>,
+    ): Boolean {
         var offset: Int = baseline
         var targetPosition: Int = position
-        while (
-            (scrollFeature == SCROLL_FEATURE_UNLIMITED || targetPosition >= 0) &&
-            offset >= paddingTop
-        ) {
-            val view: View = getViewForPositionByCycle(recycler, targetPosition)
+        while (offset >= paddingTop) {
+            val adapterPosition: Int = resolveAdapterPosition(targetPosition, allowLooping) ?: return false
+            if (!laidOutPositions.add(adapterPosition)) {
+                return false
+            }
+            val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view, 0)
             measureChildWithMargins(view, 0, 0)
             val width: Int = getDecoratedMeasuredWidth(view)
@@ -369,20 +516,24 @@ class WheelLayoutManager(
             offset -= viewHeight
             targetPosition -= 1
         }
+        return true
     }
 
     private fun layoutChildToEnd(
         baseline: Int,
         position: Int,
         recycler: RecyclerView.Recycler,
-    ) {
+        allowLooping: Boolean,
+        laidOutPositions: MutableSet<Int>,
+    ): Boolean {
         var offset: Int = baseline
         var targetPosition: Int = position
-        while (
-            (scrollFeature == SCROLL_FEATURE_UNLIMITED || targetPosition < itemCount) &&
-            offset < height - paddingBottom
-        ) {
-            val view: View = getViewForPositionByCycle(recycler, targetPosition)
+        while (offset < height - paddingBottom) {
+            val adapterPosition: Int = resolveAdapterPosition(targetPosition, allowLooping) ?: return false
+            if (!laidOutPositions.add(adapterPosition)) {
+                return false
+            }
+            val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view)
             measureChildWithMargins(view, 0, 0)
             val width: Int = getDecoratedMeasuredWidth(view)
@@ -395,12 +546,21 @@ class WheelLayoutManager(
             offset += viewHeight
             targetPosition += 1
         }
+        return true
     }
 
-    private fun getViewForPositionByCycle(
-        recycler: RecyclerView.Recycler,
-        position: Int,
-    ): View = recycler.getViewForPosition((position % itemCount + itemCount) % itemCount)
+    private fun normalizeAdapterPosition(position: Int): Int =
+        (position % itemCount + itemCount) % itemCount
+
+    private fun isAdapterPositionAttached(position: Int): Boolean {
+        for (index: Int in 0 until childCount) {
+            val child: View = getChildAt(index) ?: continue
+            if (getPosition(child) == position) {
+                return true
+            }
+        }
+        return false
+    }
 
     private fun findCenterChildAfter(centerIndex: Int): View? {
         for (index: Int in centerIndex + 1 until childCount) {
@@ -447,7 +607,9 @@ class WheelLayoutManager(
         onCenterYPositionChangeListener?.onCenterYPositionChanged(position)
     }
 
-    /** 中心位置的 Adapter position 发生变化后的通知. */
+    /**
+     * 中心位置的 Adapter position 发生变化后的通知.
+     */
     fun interface OnCenterYPositionChangeListener {
         fun onCenterYPositionChanged(position: Int)
     }

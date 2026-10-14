@@ -4,7 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
-| 2026-10-14      | whisper | 增加 RecyclerView 滚轮布局用法    |
+| 2026-10-14      | whisper | 增加 RecyclerView 滚轮布局及条件循环用法 |
 | 2026-09-17      | whisper | 说明实时 Insets padding 与页面处理边的选择 |
 | 2026-09-14      | whisper | 说明 Kit 无需全局 Application 初始化 |
 | 2026-09-11      | whisper | 补充刷新内容数量、动画时长和业务回调时机说明 |
@@ -1022,7 +1022,7 @@ wheelLayoutManager.setOnCenterYPositionChangeListener { position ->
 }
 ```
 
-需要 Adapter 首尾相接时显式启用循环模式:
+需要 Adapter 首尾相接时显式请求循环模式:
 
 ```kotlin
 recyclerView.layoutManager = WheelLayoutManager(
@@ -1030,8 +1030,14 @@ recyclerView.layoutManager = WheelLayoutManager(
 )
 ```
 
-`scrollToPosition(position)` 与 `smoothScrollToPosition(position)` 都会以目标条目居中为最终位置. Adapter 继续提供真实数据量,
-不需要伪造一个很大的 itemCount. LayoutManager 只提供纵向布局和滚动; item 高度、内容、选中线、颜色渐变及日期联动由调用方负责.
+`SCROLL_FEATURE_UNLIMITED` 是循环请求而不是无条件保证. LayoutManager 会按 item 的实际测量结果试排: 每个真实 Adapter
+position 最多挂载一次即可覆盖布局窗口时启用首尾循环; 数据不足以覆盖时自动退化为有界滚动. 因此是否循环不由固定 item
+数量或预估总高度决定, 数据量或 item 尺寸变化后的重新布局也会重新判断.
+
+`scrollToPosition(position)` 与 `smoothScrollToPosition(position)` 都会以目标条目居中为最终位置. Adapter 继续提供真实数据量和
+标准 position, 不需要伪造很大的 itemCount 或处理虚拟 position. `notifyItemChanged()` 等标准更新仍作用于唯一的真实 position;
+启用稳定 ID 时仍应遵守 RecyclerView 的唯一和稳定约束. LayoutManager 只提供纵向布局和滚动; item 高度、内容、选中线、
+颜色渐变及日期联动由调用方负责.
 
 ## 10. RecyclerView ViewHolder
 

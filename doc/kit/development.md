@@ -4,7 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
-| 2026-10-14      | whisper | 迁入 RecyclerView 滚轮布局实现    |
+| 2026-10-14      | whisper | 迁入 RecyclerView 滚轮布局并约束条件循环实现 |
 | 2026-09-17      | whisper | 增加实时 Insets padding、剩余分发与低版本刘海处理 |
 | 2026-09-14      | whisper | 移除全局 Application 持有器       |
 | 2026-09-11      | whisper | 校准刷新组件外观来源及布局快照比较基准 |
@@ -622,11 +622,17 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
 
 维护要求:
 
-1. 默认使用有界滚动; 循环滚动必须由调用方显式传入 `SCROLL_FEATURE_UNLIMITED`.
-2. `scrollToPosition()` 和 `smoothScrollToPosition()` 的目标语义均为将对应 Adapter position 移动到 RecyclerView 中心.
-3. 中心变化监听器只提供 Adapter position, 数据解释继续由 Adapter 或调用方负责.
-4. `WheelSnapHelper` 是停止后居中的配套类型; `WheelSmoothScroller` 只服务 LayoutManager, 不扩大为独立公开 API.
-5. item 创建、绑定和数据更新仍由标准 RecyclerView Adapter 负责; 选中线、渐变和文字颜色不进入滚动实现.
+1. 默认使用有界滚动; 调用方传入 `SCROLL_FEATURE_UNLIMITED` 只表示请求循环, 实际布局可以退化为有界滚动.
+2. 每个 Adapter position 在同一布局阶段最多挂载一次. 初始布局必须使用实际测量的 item 从中心向两端试排; 能以唯一
+   position 覆盖布局窗口时才启用循环, 任一方向需要复用已挂载 position 时丢弃试排结果并按有界模式重新布局. 不得通过
+   固定 item 数量、单个 item 高度或预估总高度判断是否可循环.
+3. 循环滚动填充前先回收按本次位移计算后已经离开窗口的 item, 并在首尾换向时继续校验待填充 position 未挂载;
+   无法维持唯一性时停止循环并请求重新布局, 不得让 Adapter 接收虚拟 position 或伪造 itemCount.
+4. `scrollToPosition()` 和 `smoothScrollToPosition()` 的目标语义均为将对应 Adapter position 移动到 RecyclerView 中心.
+5. 中心变化监听器只提供 Adapter position, 数据解释继续由 Adapter 或调用方负责.
+6. `WheelSnapHelper` 是停止后居中的配套类型; `WheelSmoothScroller` 只服务 LayoutManager, 不扩大为独立公开 API.
+7. item 创建、绑定、稳定 ID 和数据更新仍由标准 RecyclerView Adapter 负责. Adapter 提供稳定 ID 时, 每个真实 position
+   对应的 ID 仍须唯一且随数据项保持稳定; 选中线、渐变和文字颜色不进入滚动实现.
 
 ## 8. RecyclerView ViewHolder
 
@@ -771,7 +777,8 @@ git diff --check
 
 公开扩展函数应保留编译型测试, 覆盖 lambda 调用形态。
 
-滚轮布局测试至少覆盖默认与显式滚动特征、纵向滚动能力、空数据以及中心 position 监听器的 lambda 调用形态.
+滚轮布局测试至少覆盖默认与显式滚动特征、纵向滚动能力、空数据、中心 position 监听器的 lambda 调用形态、基于实际测量
+结果的循环启用与退化、跨首尾及大距离滚动、数据更新后已挂载 position 的唯一性.
 
 单元测试启用 Android 资源以加载测试 XML. `kit/src/test/resources/robolectric.properties` 使用 `sdk=24` 保持原有默认测试基线,
 避免默认 SDK 随 Manifest 的 targetSdk 改变; 测试类或方法中的显式 `@Config` 继续覆盖该默认值.
