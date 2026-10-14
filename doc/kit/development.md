@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-14      | whisper | 迁入 RecyclerView 滚轮布局实现    |
 | 2026-09-17      | whisper | 增加实时 Insets padding、剩余分发与低版本刘海处理 |
 | 2026-09-14      | whisper | 移除全局 Application 持有器       |
 | 2026-09-11      | whisper | 校准刷新组件外观来源及布局快照比较基准 |
@@ -120,7 +121,8 @@ kit/
    |  |  |- recyclerview/
    |  |  |  |- decoration/
    |  |  |  |- holder/
-   |  |  |  `- listener/
+   |  |  |  |- listener/
+   |  |  |  `- wheel/
    |  |  |- utils/
    |  |  `- widget/
    |  |     |- KitCodeInputEditText.kt
@@ -140,7 +142,8 @@ kit/
    |  |- recyclerview/
    |  |  |- decoration/
    |  |  |- holder/
-   |  |  `- listener/
+   |  |  |- listener/
+   |  |  `- wheel/
    |  `- widget/
    |     |- rangeselection/
    |     `- refreshloadlayout/
@@ -156,6 +159,7 @@ kit/
 | `recyclerview.decoration` | RecyclerView item 间距和分割线工具  |
 | `recyclerview.holder`     | RecyclerView ViewHolder 通用封装    |
 | `recyclerview.listener`   | RecyclerView item 内点击与长按分发工具 |
+| `recyclerview.wheel`      | RecyclerView 纵向滚轮布局与中心吸附 |
 | `utils`                   | 客户端标识, 窗口等 Android 平台工具 |
 | `widget`                  | 线条绘制和分格输入等独立基础控件 |
 | `widget.rangeselection`   | 整数范围选择控件及其约束计算、无障碍辅助类型 |
@@ -611,7 +615,20 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
     Staggered 缺少主轴起始拓扑所需的 `StaggeredFullSpanProvider` 时, 只禁用主轴 offset 和分割线, 交叉轴继续读取实际
     LayoutParams. Adapter 已实现 Provider 时, 非预测布局中的查询结果必须与 `LayoutParams.isFullSpan` 一致, 否则立即失败.
 
-## 7. RecyclerView ViewHolder
+## 7. RecyclerView 滚轮布局
+
+`recyclerview.wheel` 由公开的 `WheelLayoutManager`、`WheelSnapHelper` 和包内的 `WheelSmoothScroller` 组成. 这三个类型
+共同维护纵向中心布局、滚动停止吸附和程序平滑滚动, 不承载 item 内容、视觉着色或日期等领域联动.
+
+维护要求:
+
+1. 默认使用有界滚动; 循环滚动必须由调用方显式传入 `SCROLL_FEATURE_UNLIMITED`.
+2. `scrollToPosition()` 和 `smoothScrollToPosition()` 的目标语义均为将对应 Adapter position 移动到 RecyclerView 中心.
+3. 中心变化监听器只提供 Adapter position, 数据解释继续由 Adapter 或调用方负责.
+4. `WheelSnapHelper` 是停止后居中的配套类型; `WheelSmoothScroller` 只服务 LayoutManager, 不扩大为独立公开 API.
+5. item 创建、绑定和数据更新仍由标准 RecyclerView Adapter 负责; 选中线、渐变和文字颜色不进入滚动实现.
+
+## 8. RecyclerView ViewHolder
 
 `recyclerview.holder` 提供 ViewBinding ViewHolder 通用封装。该工具只持有 binding, 不持有业务数据, 不处理业务点击事件。
 
@@ -622,7 +639,7 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
 3. 不让 ViewHolder 持有 item 数据或业务回调。
 4. 只封装 ViewBinding 和 RecyclerView ViewHolder 的通用样板代码。
 
-## 8. RecyclerView 点击与长按分发
+## 9. RecyclerView 点击与长按分发
 
 `recyclerview.listener` 提供 RecyclerView 级 item 内子 View 点击和长按分发能力. 该工具只处理 Android View 命中和手势通知,
 不承载业务事件语义.
@@ -676,7 +693,7 @@ ACTION_UP 最终校验. 不通过测试访问私有状态验证实现细节, 应
 
 如果未来提供双击能力, 必须使用独立的显式 API, 不得静默改变现有点击 API 的两次普通点击语义.
 
-## 9. 匿名设备标识
+## 10. 匿名设备标识
 
 `DeviceIdUtils` 提供无需额外权限的应用侧匿名标识. 新安装首次调用时生成 UUID, 写入应用私有
 `kit_device_id` SharedPreferences, 后续在同一进程内缓存并在应用数据仍然存在时复用. 已由旧版本写入的非空值必须继续复用,
@@ -695,7 +712,7 @@ ACTION_UP 最终校验. 不通过测试访问私有状态验证实现细节, 应
 该值只适合作为验证码请求控频、滥用检测等服务端策略的弱信号. 不得将它作为账号身份、认证凭据、授权依据或唯一控频维度;
 服务端应结合手机号、账号、IP、请求行为或平台完整性信号形成最终策略.
 
-## 10. 客户端与应用信息
+## 11. 客户端与应用信息
 
 `ClientInfoUtils` 统一提供 Android 客户端和宿主应用的基础运行环境信息. 它不提供设备标识, 屏幕尺寸或窗口状态:
 匿名应用侧标识由 `DeviceIdUtils` 负责, 显示与窗口信息由 `WindowUtils` 负责. 该边界避免一个宽泛的设备信息入口混合不同生命周期,
@@ -715,7 +732,7 @@ PackageManager 返回的原始语义. 应用包不存在时版本名和版本号
 连续的非 ASCII token 字符替换为 `-`, 并将每个动态 token 限制为 128 个字符; 不得反向改变原始 getter. 默认值不加入匿名设备标识,
 厂商、品牌或型号, 避免为普通网络请求增加不必要的设备指纹信息. 具体服务端协议需要其它字段时应由调用方自行组合.
 
-## 11. 窗口信息
+## 12. 窗口信息
 
 `WindowUtils.getCurrentWindowBounds()` 只接收 Activity, 通过 AndroidX `WindowMetricsCalculator` 统一计算 API 24 及以上
 当前窗口 bounds. 返回独立的 `Rect` 副本, 单位为 px, 包含状态栏和导航栏所在区域, 不扣除任何 WindowInsets.
@@ -731,7 +748,7 @@ API 29 及以上结果由 AndroidX Window 保证正确; API 24 至 28 使用 bes
 两个方法分别只在配置明确为 `ORIENTATION_LANDSCAPE` 或 `ORIENTATION_PORTRAIT` 时返回 `true`;
 `ORIENTATION_UNDEFINED` 和 `ORIENTATION_SQUARE` 下都返回 `false`, 不使用互为取反的实现.
 
-## 12. Aegis 保护范围
+## 13. Aegis 保护范围
 
 `utils` 包中的三个公开顶层工具均由类型 KDoc 的 `@aegis` 标记保护:
 
@@ -739,10 +756,10 @@ API 29 及以上结果由 AndroidX Window 保证正确; API 24 至 28 使用 bes
 * `ClientInfoUtils` 保护公开 API、平台原值 getter、版本与 Locale 查询语义以及默认 User-Agent 格式和隐私边界.
 * `WindowUtils` 保护公开 API、完整窗口 bounds 的快照与兼容语义、Insets 职责边界及资源方向判定规则.
 
-保护范围包括本文件第 9 至 11 节明确的对应公开契约、可观察行为和实现约束. 修改受保护内容时必须遵守根目录
+保护范围包括本文件第 10 至 12 节明确的对应公开契约、可观察行为和实现约束. 修改受保护内容时必须遵守根目录
 `AGENTS.md` 的授权和审计要求.
 
-## 13. 测试
+## 14. 测试
 
 修改 `kit` 后至少执行:
 
@@ -753,6 +770,8 @@ git diff --check
 ```
 
 公开扩展函数应保留编译型测试, 覆盖 lambda 调用形态。
+
+滚轮布局测试至少覆盖默认与显式滚动特征、纵向滚动能力、空数据以及中心 position 监听器的 lambda 调用形态.
 
 单元测试启用 Android 资源以加载测试 XML. `kit/src/test/resources/robolectric.properties` 使用 `sdk=24` 保持原有默认测试基线,
 避免默认 SDK 随 Manifest 的 targetSdk 改变; 测试类或方法中的显式 `@Config` 继续覆盖该默认值.

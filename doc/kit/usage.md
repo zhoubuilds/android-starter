@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-14      | whisper | 增加 RecyclerView 滚轮布局用法    |
 | 2026-09-17      | whisper | 说明实时 Insets padding 与页面处理边的选择 |
 | 2026-09-14      | whisper | 说明 Kit 无需全局 Application 初始化 |
 | 2026-09-11      | whisper | 补充刷新内容数量、动画时长和业务回调时机说明 |
@@ -1005,7 +1006,34 @@ Adapter 继续只负责 item 创建和数据绑定, LayoutManager 继续负责�
 [RecyclerView Decoration 边界](recyclerview-decoration-boundary.md).
 Decoration 类型与 LayoutManager 不匹配时会清空 offset、跳过绘制并按实例记录一次警告, 不会使应用崩溃.
 
-## 9. RecyclerView ViewHolder
+## 9. RecyclerView 滚轮布局
+
+纵向滚轮列表使用 `WheelLayoutManager` 与 `WheelSnapHelper`. 默认是有界滚动:
+
+```kotlin
+val wheelLayoutManager = WheelLayoutManager()
+recyclerView.layoutManager = wheelLayoutManager
+recyclerView.adapter = wheelAdapter
+WheelSnapHelper().attachToRecyclerView(recyclerView)
+
+wheelLayoutManager.setOnCenterYPositionChangeListener { position ->
+    val selectedItem = items.getOrNull(position)
+    // 将 selectedItem 交给页面状态.
+}
+```
+
+需要 Adapter 首尾相接时显式启用循环模式:
+
+```kotlin
+recyclerView.layoutManager = WheelLayoutManager(
+    WheelLayoutManager.SCROLL_FEATURE_UNLIMITED,
+)
+```
+
+`scrollToPosition(position)` 与 `smoothScrollToPosition(position)` 都会以目标条目居中为最终位置. Adapter 继续提供真实数据量,
+不需要伪造一个很大的 itemCount. LayoutManager 只提供纵向布局和滚动; item 高度、内容、选中线、颜色渐变及日期联动由调用方负责.
+
+## 10. RecyclerView ViewHolder
 
 ViewBinding item 可以使用 `ViewBindingHolder` 减少 ViewHolder 样板代码:
 
@@ -1020,7 +1048,7 @@ override fun onBindViewHolder(holder: ViewBindingHolder<ItemUserBinding>, positi
 
 该工具只持有 binding, 不持有 item 数据, 不处理业务点击事件。点击事件可按需搭配 RecyclerView 点击分发工具统一处理。
 
-## 10. RecyclerView 点击与长按分发
+## 11. RecyclerView 点击与长按分发
 
 RecyclerView item 内子 View 点击可以通过统一触摸监听分发, 避免在每个 ViewHolder 中分散绑定点击逻辑:
 
@@ -1107,7 +1135,7 @@ recyclerView.removeOnItemTouchListener(listener)
 recyclerView.removeOnItemTouchListener(longClickListener)
 ```
 
-## 11. 匿名设备标识
+## 12. 匿名设备标识
 
 需要为验证码请求控频等场景提供一个无需额外权限的弱标识时, 可以使用:
 
@@ -1122,7 +1150,7 @@ val deviceId: String = DeviceIdUtils.getDeviceId(context)
 调用方可以把它作为服务端风控输入之一, 但不能用于身份认证、授权或唯一控频依据. 验证码接口仍应在服务端结合手机号、账号、
 IP、请求行为或平台完整性信号进行限制, 并按适用的隐私规则处理和保留该标识.
 
-## 12. 客户端与应用信息
+## 13. 客户端与应用信息
 
 读取 Android 平台与当前宿主应用的基础信息:
 
@@ -1161,7 +1189,7 @@ val userAgent: String = ClientInfoUtils.getDefaultUserAgent(context)
 版本名不可用时自动回退到版本号或 `unknown`. 默认值有意不包含设备 ID、厂商、品牌和型号. 服务端协议明确要求其它字段时,
 由调用方基于原始 getter 自行组合, 并评估隐私和兼容性影响.
 
-## 13. 窗口信息
+## 14. 窗口信息
 
 需要获取当前 Activity 的完整窗口边界时使用:
 
@@ -1188,7 +1216,7 @@ val isPortrait: Boolean = WindowUtils.isPortrait(context)
 结果表示传入 Context 当前资源配置的方向, 不表示设备的自然方向或物理旋转角度. 配置方向未定义或为方形时,
 两个方法都会返回 `false`. 布局适配仍应优先使用 Android 的 `land` 资源限定符和响应式布局, 不依赖运行时分支复制资源系统能力.
 
-## 14. 窗口 Insets padding
+## 15. 窗口 Insets padding
 
 Activity 启用 edge-to-edge 后, 在新建 View 上安装一次通用 padding 扩展:
 

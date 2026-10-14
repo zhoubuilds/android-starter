@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                   |
 |-----------------|---------|----------------------------|
+| 2026-10-14      | whisper | 迁入 RecyclerView 滚轮布局能力 |
 | 2026-09-17      | whisper | 增加基于目标 View 实时分发的 Insets padding 扩展 |
 | 2026-09-14      | whisper | 移除全局 Application 持有器 |
 | 2026-09-11      | whisper | 明确刷新组件重布局后的相同位移快照去重 |
@@ -133,6 +134,10 @@ LayoutManager 框架:
 
 item 内部内容之间的 margin 和具备真实内容语义的 View 不受上述限制. 判断边界时以视觉元素是否属于单个 item 内容为准,
 不以它恰好写在 XML、ViewHolder 或 Adapter 中为准.
+
+`recyclerview.wheel` 提供一个具体的纵向滚轮布局能力, 不扩展为通用 LayoutManager 框架. `WheelLayoutManager` 负责从
+RecyclerView 中心向两端布局、有界或首尾循环滚动及中心 position 通知; `WheelSnapHelper` 负责停止后的中心吸附;
+平滑滚动实现保持包内可见. 业务数据、item 视图、选中样式和日期等领域联动仍由调用方组合.
 
 Grid 的 span 边界在交叉轴上稳定, 分割线因而优先沿主轴贯穿当前已布局内容; 行或列间的分割线再按 item
 沿交叉轴分段补齐. 该顺序让交汇区域始终由连续线覆盖, 也与不具备统一交叉轴分组边界的流式布局保持相同模型.
