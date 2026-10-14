@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-14 | whisper | 将仓库 Capability 消费收敛为契约类型唯一解析 |
 | 2026-10-13 | whisper | 通过 Project API 与 Aster 暴露仓库入口能力 |
 | 2026-09-17 | whisper | 按页面可见状态检查缓存新鲜期并修正 GitHub 限流识别 |
 | 2026-09-16 | whisper | 接入 Business 数据管线并保留页面独立错误处理 |
@@ -27,7 +28,8 @@ Header 由组件维护; 具体 Endpoint、应用 `User-Agent`、最终 RoomDatab
 `ProjectFragment` 由 app 组合根直接创建并直接呈现“项目”Tab 内容. `feature:project` 不依赖其它 feature 实现模块,
 也不引用 app 类型或资源. `feature:project-api` 声明仓库入口 Capability, Project 使用 Aster 注册具体实现.
 
-Settings 只依赖 Project API, 通过稳定能力名取得公开仓库 URL. Capability 返回静态项目身份派生的地址,
+Settings 只依赖 Project API, 通过契约类型解析唯一实现并取得公开仓库 URL. 稳定能力名仍用于 Project 实现注册.
+Capability 返回静态项目身份派生的地址,
 不读取页面 ViewModel、网络响应或 Room 缓存. GitHub 响应和缓存结构不进入 API 契约, 也不是 Architecture 或
 Foundation 的通用能力.
 

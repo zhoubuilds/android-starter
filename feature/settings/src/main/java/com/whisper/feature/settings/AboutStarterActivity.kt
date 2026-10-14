@@ -10,7 +10,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import com.whisper.aster.runtime.Aster
-import com.whisper.feature.project.api.ProjectCapabilities
 import com.whisper.feature.project.api.ProjectRepositoryCapability
 import com.whisper.feature.settings.databinding.SettingsAboutActivityBinding
 import com.whisper.kit.extension.applyWindowInsetsPadding
@@ -70,18 +69,19 @@ class AboutStarterActivity : AppCompatActivity() {
     }
 
     private fun bindProjectRepository() {
-        val repositoryUrl: String? = if (Aster.containsCapability(ProjectCapabilities.REPOSITORY)) {
-            Aster.resolve<ProjectRepositoryCapability>(
-                ProjectCapabilities.REPOSITORY,
-            )?.repositoryUrl?.takeIf(String::isNotBlank)
-        } else {
-            null
-        }
-        viewBinding.settingsAboutRepository.isVisible = repositoryUrl != null
+        val repositoryUrl: String? = Aster.resolve<ProjectRepositoryCapability>()
+            ?.repositoryUrl
+            ?.takeIf(String::isNotBlank)
+
         if (repositoryUrl == null) {
+            viewBinding.settingsAboutRepository.isVisible = false
+            viewBinding.settingsAboutRepositoryUrl.text = ""
+            viewBinding.settingsAboutRepository.contentDescription = null
+            viewBinding.settingsAboutRepository.setOnClickListener(null)
             return
         }
 
+        viewBinding.settingsAboutRepository.isVisible = true
         viewBinding.settingsAboutRepositoryUrl.text = repositoryUrl
         viewBinding.settingsAboutRepository.contentDescription = getString(
             R.string.settings_about_repository_open,

@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-14 | whisper | 使用契约类型唯一解析仓库 Capability |
 | 2026-10-13 | whisper | 说明 Project API 与 Aster 仓库 Capability |
 | 2026-10-13 | whisper | 同步 Settings feature 的页面归属 |
 | 2026-09-17 | whisper | 说明保留 Tab 的过期更新、失败重试与准确限流提示 |
@@ -41,7 +42,7 @@ dependencies {
 ```
 
 其它 feature 不应直接依赖此实现模块. 仓库入口调用方只依赖 `:feature:project-api`, 并通过
-`Aster.resolve<ProjectRepositoryCapability>(ProjectCapabilities.REPOSITORY)` 解析实现.
+`Aster.resolve<ProjectRepositoryCapability>()` 解析唯一实现. 如果最终应用依赖图中存在多个该契约的实现, Aster 会拒绝歧义解析.
 
 GitHub 公共仓库读取不需要 Token. 默认匿名配额有限, 演示刷新时应避免短时间连续请求. Retrofit 使用
 `NetworkComponentManager.ROUTING_PLACEHOLDER_BASE_URL` 初始化, 无需在 `app-config.toml` 重复配置占位地址.

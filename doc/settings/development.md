@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-14 | whisper | 完善仓库 Capability 的唯一类型解析与空值绑定 |
 | 2026-10-13 | whisper | 接入 Project API 仓库 Capability |
 | 2026-10-13 | whisper | 建立 Settings 模块结构、公开面和验证规则 |
 
@@ -54,8 +55,9 @@ Kit 与 AppCompat 能力. 不依赖 app 或任何 feature 实现模块.
 
 设置页使用 Foundation 的共享主题和连续分段按钮样式. 页面专用文案、布局与图标全部留在本模块, 不把资源放回 app.
 About 页面从当前宿主查询应用名称、图标和版本, 避免对 app 包名、资源或构建配置建立反向依赖.
-仓库入口使用 `ProjectRepositoryCapability` 按名称解析; 未注册实现时隐藏该信息项, 已注册时显示完整地址并交给
-系统浏览器打开. Settings 不读取 Project 的 DTO、数据库、Repository、ViewModel 或实现类.
+仓库入口使用 `Aster.resolve<ProjectRepositoryCapability>()` 按契约类型解析唯一实现. 未注册实现或地址为空时,
+仓库信息项必须设为 `GONE`, 地址文本设为空并清除内容描述与点击监听; 地址有效时必须显式设为 `VISIBLE`,
+显示完整地址并交给系统浏览器打开. Settings 不读取 Project 的 DTO、数据库、Repository、ViewModel 或实现类.
 
 模块内部 About 跳转使用显式 Intent. 如果其它 feature 需要进入 Settings 或 About, 应先建立导航契约,
 不能直接依赖 `feature:settings` 的 Activity 类型.

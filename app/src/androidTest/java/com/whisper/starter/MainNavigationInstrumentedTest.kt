@@ -16,7 +16,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.whisper.aster.runtime.Aster
 import com.whisper.feature.function.R as FunctionR
 import com.whisper.feature.project.R as ProjectR
-import com.whisper.feature.project.api.ProjectCapabilities
 import com.whisper.feature.project.api.ProjectRepositoryCapability
 import com.whisper.feature.settings.R as SettingsR
 import com.whisper.starter.ui.activity.MainActivity
@@ -140,7 +139,7 @@ class MainNavigationInstrumentedTest {
     @Test
     fun openAbout_whenProjectCapabilityIsRegistered_showsRepositoryAddress() {
         val capability: ProjectRepositoryCapability = checkNotNull(
-            Aster.resolve<ProjectRepositoryCapability>(ProjectCapabilities.REPOSITORY),
+            Aster.resolve<ProjectRepositoryCapability>(),
         )
 
         ActivityScenario.launch(MainActivity::class.java).use {

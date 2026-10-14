@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-14 | whisper | 使用契约类型唯一解析 Project 仓库能力 |
 | 2026-10-13 | whisper | 使用 Project API 与 Aster 向 About 提供仓库入口 |
 | 2026-10-13 | whisper | 将设置与应用信息页面迁移到独立 Settings feature |
 | 2026-09-17 | whisper | 复用共享分段样式与 Kit Insets 并开启 Room schema 版本化 |
@@ -130,7 +131,7 @@ feature:settings -> feature:project-api
 `function` 提供 RecyclerView 演示目录和独立组件详情 Activity, `project` 提供项目概览, `settings` 提供设置页和
 独立的 `AboutStarterActivity`. `MainActivity` 仅作为顶层 Tab 壳, 直接创建并保留三个根 Fragment; 详情页面不继续堆入
 MainActivity 的 Fragment 返回栈. Feature 实现模块之间不直接依赖; `project-api` 暴露仓库入口 Capability,
-Project 注册具体实现, Settings 通过 Aster 按稳定名称解析.
+Project 按稳定名称注册具体实现, Settings 通过 Aster 按契约类型解析唯一实现.
 
 直接暴露 Fragment 只服务 app 组合根, 不替代公开业务契约. 其它跨模块路由或 Capability 同样先建立对应的
 `*-api` 模块, 由 API 模块声明稳定路径、参数、能力接口和能力名称, 再由实现模块接入 Aster.

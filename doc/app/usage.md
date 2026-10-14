@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-14 | whisper | 说明 Settings 按契约类型解析 Project 仓库能力 |
 | 2026-10-13 | whisper | 说明 Project Capability 与 About 仓库入口 |
 | 2026-10-13 | whisper | 同步独立 Settings feature 的页面归属 |
 | 2026-09-17 | whisper | 说明 Room schema 导出与迁移回归入口 |
@@ -131,7 +132,7 @@ Feature 使用 `ApiFactory` 创建接口, 通过注解声明组件类型, 不读
 | `:feature:settings` | 颜色模式、应用语言与应用信息 | 首页“设置”Tab |
 
 三个根 Fragment 由 app 直接组合. Feature 实现模块之间不直接依赖; Settings 和 Project 只依赖
-`feature:project-api` 中的稳定契约. Project 通过 Aster 注册仓库地址能力, Settings 在 About 页面按能力名称解析.
+`feature:project-api` 中的稳定契约. Project 通过 Aster 注册仓库地址能力, Settings 在 About 页面按契约类型解析唯一实现.
 
 项目页展示 Star、Fork、开放项、主要语言、许可证、默认分支和最近推送时间, 可下拉更新或打开
 [仓库主页](https://github.com/zhoubuilds/android-starter). 首次成功结果写入 Room; 15 分钟内再次进入优先直接使用缓存,
