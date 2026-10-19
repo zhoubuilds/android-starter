@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-19      | whisper | 增加滚轮状态恢复及中心锚点位置、可见性校验约束 |
 | 2026-10-19      | whisper | 关闭滚轮预测布局并明确普通动画契约 |
 | 2026-10-19      | whisper | 统一滚轮中心及装饰外边界计算       |
 | 2026-10-15      | whisper | 补充滚轮零高度 item 和填充终止约束 |
@@ -650,6 +651,13 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
 10. `supportsPredictiveItemAnimations()` 必须返回 false. 当前实现不执行 predictive pre-layout, 也不维护 appearing、
     disappearing child 的屏幕外预测位置; 不得只修改能力声明重新开启. 默认 ItemAnimator 和标准粒度通知继续负责普通
     add、remove、move、change 动画, 调用方不需要为此把 `itemAnimator` 设为 null.
+11. LayoutManager 状态只保存中心真实 Adapter position 和相对内容中心的 decorated-with-margins 像素 offset. 恢复优先级为
+    显式 `scrollToPosition()`、待恢复状态、当前 child、position 0; 空 Adapter 不得消费 pending 状态, 非空布局完成后才清除.
+    显式或恢复 position 越界时放弃该锚点, 循环模式也不得取模. `isLoopingActive` 必须由恢复时的真实数据和布局窗口重新计算,
+    不进入 Parcelable. `SavedState` 必须保持 JVM public, 使 Android Parcel 能在冷启动恢复时反射读取 `CREATOR`; Kotlin
+    源码使用 `internal` 限制模块外访问. 待恢复锚点按新测量的 decorated-with-margins 尺寸仍与内容区域相交时保留 offset;
+    完全离开内容区域时只将 offset 退化为 0, 不改变 position. 零高度锚点按中心坐标是否位于内容边界内判断.
+    普通重布局和显式滚动不应用该退化. 业务 key、选中数据及数据重排映射仍由调用方维护.
 
 ## 8. RecyclerView ViewHolder
 
@@ -801,6 +809,10 @@ item 尺寸变化后的循环能力重算, 以及对称/非对称 padding、奇�
 同时覆盖 `EXACTLY` 和会触发多次布局 pass 的 `AT_MOST` 测量; 全零高度 item 应覆盖平滑目标确认及相同目标不重复通知.
 测试还应断言 LayoutManager 不声明预测动画能力, 并在默认 ItemAnimator 非空时覆盖结构更新后的最终中心、循环状态和
 已挂载 position 唯一性; 不把屏幕外 appearing/disappearing 条目的预测移动轨迹作为当前组件契约.
+状态恢复测试应覆盖精确居中、非零中心 offset 的 Parcel 往返、容器尺寸和 padding 变化、空 Adapter 延迟数据、显式滚动
+覆盖恢复状态、数据缩短后的越界锚点及 item 尺寸变化后的 offset 可见性退化, 包括零高度锚点; 显式和恢复目标越界时都不得
+通过循环取模落到其它 position. 测试还应断言 `SavedState` 编译为 JVM public 类, 避免 Robolectric Parcel 跳过平台反射
+访问限制后产生假通过.
 
 单元测试启用 Android 资源以加载测试 XML. `kit/src/test/resources/robolectric.properties` 使用 `sdk=24` 保持原有默认测试基线,
 避免默认 SDK 随 Manifest 的 targetSdk 改变; 测试类或方法中的显式 `@Config` 继续覆盖该默认值.

@@ -3,6 +3,8 @@ package com.whisper.kit.recyclerview.wheel
 import android.app.Activity
 import android.graphics.Rect
 import android.os.Looper
+import android.os.Parcel
+import android.os.Parcelable
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
@@ -20,6 +22,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.lang.reflect.Modifier
 import java.util.concurrent.TimeUnit
 
 /**
@@ -220,6 +223,27 @@ class WheelLayoutManagerTest {
     }
 
     @Test
+    fun scrollToPosition_withOutOfBoundsTarget_preservesCurrentCenter() {
+        val fixture: Fixture = createFixture(
+            itemCount = 8,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+        fixture.layoutManager.scrollToPosition(3)
+        layout(fixture)
+
+        fixture.layoutManager.scrollToPosition(8)
+        layout(fixture)
+
+        assertEquals(3, fixture.layoutManager.findCenterChildPosition())
+        assertEquals(
+            0,
+            fixture.layoutManager.distanceToCenter(
+                checkNotNull(fixture.layoutManager.findCenterChild()),
+            ),
+        )
+    }
+
+    @Test
     fun smoothScrollToPosition_withAsymmetricPadding_usesSharedCenterDistance() {
         val fixture: Fixture = createFixture(
             itemCount = 12,
@@ -240,6 +264,286 @@ class WheelLayoutManagerTest {
         } finally {
             activityController.close()
         }
+    }
+
+    @Test
+    fun stateRestore_preservesCenteredPosition() {
+        val original: Fixture = createFixture(
+            itemCount = 20,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+        original.layoutManager.scrollToPosition(7)
+        layout(original)
+        val savedState: Parcelable = original.layoutManager.onSaveInstanceState()
+        val restored: Fixture = createFixture(
+            itemCount = 20,
+            padding = Rect(0, 20, 0, 40),
+            layoutHeight = 501,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            performInitialLayout = false,
+        )
+
+        restored.layoutManager.onRestoreInstanceState(savedState)
+        layout(restored)
+
+        assertEquals(7, restored.layoutManager.findCenterChildPosition())
+        assertEquals(
+            0,
+            restored.layoutManager.distanceToCenter(
+                checkNotNull(restored.layoutManager.findCenterChild()),
+            ),
+        )
+    }
+
+    @Test
+    fun stateRestore_afterParcelRoundTrip_preservesPartialCenterOffset() {
+        val original: Fixture = createFixture(itemCount = 20)
+        original.recyclerView.scrollBy(0, ITEM_HEIGHT / 2)
+        val originalCenterView: View = checkNotNull(original.layoutManager.findCenterChild())
+        val expectedPosition: Int = original.layoutManager.getPosition(originalCenterView)
+        val expectedOffset: Int = original.layoutManager.distanceToCenter(originalCenterView)
+        val savedState: Parcelable = parcelRoundTrip(original.layoutManager.onSaveInstanceState())
+        val restored: Fixture = createFixture(
+            itemCount = 20,
+            padding = Rect(0, 20, 0, 40),
+            layoutHeight = 501,
+            performInitialLayout = false,
+        )
+
+        restored.layoutManager.onRestoreInstanceState(savedState)
+        layout(restored)
+
+        val restoredCenterView: View = checkNotNull(restored.layoutManager.findCenterChild())
+        assertTrue(expectedOffset != 0)
+        assertEquals(expectedPosition, restored.layoutManager.getPosition(restoredCenterView))
+        assertEquals(expectedOffset, restored.layoutManager.distanceToCenter(restoredCenterView))
+    }
+
+    @Test
+    fun stateRestore_afterItemHeightShrinks_recentersCompletelyInvisibleAnchor() {
+        val original: Fixture = createFixture(
+            itemCount = 3,
+            itemHeight = 1_000,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+        original.recyclerView.scrollBy(0, 400)
+        val originalCenterView: View = checkNotNull(original.layoutManager.findCenterChild())
+        assertEquals(0, original.layoutManager.getPosition(originalCenterView))
+        assertEquals(-400, original.layoutManager.distanceToCenter(originalCenterView))
+        val savedState: Parcelable = parcelRoundTrip(original.layoutManager.onSaveInstanceState())
+        val restored: Fixture = createFixture(
+            itemCount = 3,
+            itemHeight = 10,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            performInitialLayout = false,
+        )
+
+        restored.layoutManager.onRestoreInstanceState(savedState)
+        layout(restored)
+
+        val restoredCenterView: View = checkNotNull(restored.layoutManager.findCenterChild())
+        assertEquals(0, restored.layoutManager.getPosition(restoredCenterView))
+        assertEquals(0, restored.layoutManager.distanceToCenter(restoredCenterView))
+    }
+
+    @Test
+    fun stateRestore_afterItemHeightChanges_preservesVisibleCenterOffset() {
+        val original: Fixture = createFixture(
+            itemCount = 20,
+            itemHeight = 200,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+        original.recyclerView.scrollBy(0, 40)
+        val originalCenterView: View = checkNotNull(original.layoutManager.findCenterChild())
+        val expectedPosition: Int = original.layoutManager.getPosition(originalCenterView)
+        val expectedOffset: Int = original.layoutManager.distanceToCenter(originalCenterView)
+        val savedState: Parcelable = parcelRoundTrip(original.layoutManager.onSaveInstanceState())
+        val restored: Fixture = createFixture(
+            itemCount = 20,
+            itemHeight = 100,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            performInitialLayout = false,
+        )
+
+        restored.layoutManager.onRestoreInstanceState(savedState)
+        layout(restored)
+
+        val restoredCenterView: View = checkNotNull(restored.layoutManager.findCenterChild())
+        assertTrue(expectedOffset != 0)
+        assertEquals(expectedPosition, restored.layoutManager.getPosition(restoredCenterView))
+        assertEquals(expectedOffset, restored.layoutManager.distanceToCenter(restoredCenterView))
+    }
+
+    @Test
+    fun stateRestore_zeroHeightAnchorWithInvisibleCenter_recentersSamePosition() {
+        val restored: Fixture = createFixture(
+            itemCount = 8,
+            itemHeight = 0,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            performInitialLayout = false,
+        )
+        val savedState: Parcelable = parcelRoundTrip(
+            WheelLayoutManager.SavedState(
+                anchorPosition = 4,
+                anchorOffsetY = restored.layoutHeight,
+            ),
+        )
+
+        restored.layoutManager.onRestoreInstanceState(savedState)
+        layout(restored)
+
+        val restoredCenterView: View = checkNotNull(restored.layoutManager.findCenterChild())
+        assertEquals(4, restored.layoutManager.getPosition(restoredCenterView))
+        assertEquals(0, restored.layoutManager.distanceToCenter(restoredCenterView))
+    }
+
+    @Test
+    fun savedState_isJvmPublicForPlatformParcelReflection() {
+        val fixture: Fixture = createFixture(itemCount = 20)
+        val savedState: Parcelable = fixture.layoutManager.onSaveInstanceState()
+
+        assertTrue(Modifier.isPublic(savedState.javaClass.modifiers))
+    }
+
+    @Test
+    fun stateRestore_withEmptyAdapter_waitsForData() {
+        val original: Fixture = createFixture(itemCount = 20)
+        original.layoutManager.scrollToPosition(7)
+        layout(original)
+        val savedState: Parcelable = original.layoutManager.onSaveInstanceState()
+        val restored: Fixture = createFixture(
+            itemCount = 0,
+            performInitialLayout = false,
+        )
+
+        restored.layoutManager.onRestoreInstanceState(savedState)
+        layout(restored)
+        restored.adapter.appendItems(count = 20, height = ITEM_HEIGHT)
+        layout(restored)
+
+        assertEquals(7, restored.layoutManager.findCenterChildPosition())
+        assertEquals(
+            0,
+            restored.layoutManager.distanceToCenter(
+                checkNotNull(restored.layoutManager.findCenterChild()),
+            ),
+        )
+    }
+
+    @Test
+    fun scrollToPosition_withEmptyAdapter_doesNotWrapOutOfBoundsTargetWhenDataArrives() {
+        listOf(
+            WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            WheelLayoutManager.SCROLL_FEATURE_UNLIMITED,
+        ).forEach { scrollFeature: Int ->
+            val fixture: Fixture = createFixture(
+                itemCount = 0,
+                scrollFeature = scrollFeature,
+                performInitialLayout = false,
+            )
+
+            fixture.layoutManager.scrollToPosition(5)
+            layout(fixture)
+            fixture.adapter.appendItems(count = 3, height = ITEM_HEIGHT)
+            layout(fixture)
+
+            assertEquals(0, fixture.layoutManager.findCenterChildPosition())
+            assertUniqueAttachedPositions(fixture)
+        }
+    }
+
+    @Test
+    fun stateRestore_withEmptyAdapter_preservesPendingExplicitTarget() {
+        val original: Fixture = createFixture(
+            itemCount = 0,
+            performInitialLayout = false,
+        )
+        original.layoutManager.scrollToPosition(5)
+        layout(original)
+        val savedState: Parcelable = parcelRoundTrip(original.layoutManager.onSaveInstanceState())
+        val restored: Fixture = createFixture(
+            itemCount = 0,
+            performInitialLayout = false,
+        )
+
+        restored.layoutManager.onRestoreInstanceState(savedState)
+        layout(restored)
+        restored.adapter.appendItems(count = 8, height = ITEM_HEIGHT)
+        layout(restored)
+
+        assertEquals(5, restored.layoutManager.findCenterChildPosition())
+    }
+
+    @Test
+    fun stateRestore_explicitScrollPositionTakesPrecedence() {
+        val original: Fixture = createFixture(itemCount = 20)
+        original.layoutManager.scrollToPosition(7)
+        layout(original)
+        val savedState: Parcelable = original.layoutManager.onSaveInstanceState()
+        listOf(true, false).forEach { restoreBeforeExplicitScroll: Boolean ->
+            val restored: Fixture = createFixture(
+                itemCount = 20,
+                performInitialLayout = false,
+            )
+
+            if (restoreBeforeExplicitScroll) {
+                restored.layoutManager.onRestoreInstanceState(savedState)
+                restored.layoutManager.scrollToPosition(3)
+            } else {
+                restored.layoutManager.scrollToPosition(3)
+                restored.layoutManager.onRestoreInstanceState(savedState)
+            }
+            layout(restored)
+
+            assertEquals(3, restored.layoutManager.findCenterChildPosition())
+            assertEquals(
+                0,
+                restored.layoutManager.distanceToCenter(
+                    checkNotNull(restored.layoutManager.findCenterChild()),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun stateRestore_afterOutOfBoundsExplicitTarget_preservesCurrentCenter() {
+        val original: Fixture = createFixture(
+            itemCount = 8,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+        original.layoutManager.scrollToPosition(3)
+        layout(original)
+        original.layoutManager.scrollToPosition(8)
+        val savedState: Parcelable = original.layoutManager.onSaveInstanceState()
+        val restored: Fixture = createFixture(
+            itemCount = 8,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            performInitialLayout = false,
+        )
+
+        restored.layoutManager.onRestoreInstanceState(savedState)
+        layout(restored)
+
+        assertEquals(3, restored.layoutManager.findCenterChildPosition())
+    }
+
+    @Test
+    fun stateRestore_withOutOfBoundsPosition_doesNotWrapInUnlimitedMode() {
+        val original: Fixture = createFixture(itemCount = 20)
+        original.layoutManager.scrollToPosition(19)
+        layout(original)
+        val savedState: Parcelable = original.layoutManager.onSaveInstanceState()
+        val restored: Fixture = createFixture(
+            itemCount = 3,
+            performInitialLayout = false,
+        )
+
+        restored.layoutManager.onRestoreInstanceState(savedState)
+        layout(restored)
+
+        assertEquals(0, restored.layoutManager.findCenterChildPosition())
+        assertFalse(restored.layoutManager.isLoopingActive)
+        assertUniqueAttachedPositions(restored)
     }
 
     @Test
@@ -557,6 +861,7 @@ class WheelLayoutManagerTest {
         layoutWidth: Int = 200,
         layoutHeight: Int = 400,
         layoutHeightMode: Int = View.MeasureSpec.EXACTLY,
+        performInitialLayout: Boolean = true,
     ): Fixture = createFixture(
         itemHeights = List(itemCount) { itemHeight },
         hasStableIds = hasStableIds,
@@ -567,6 +872,7 @@ class WheelLayoutManagerTest {
         layoutWidth = layoutWidth,
         layoutHeight = layoutHeight,
         layoutHeightMode = layoutHeightMode,
+        performInitialLayout = performInitialLayout,
     )
 
     private fun createFixture(
@@ -579,6 +885,7 @@ class WheelLayoutManagerTest {
         layoutWidth: Int = 200,
         layoutHeight: Int = 400,
         layoutHeightMode: Int = View.MeasureSpec.EXACTLY,
+        performInitialLayout: Boolean = true,
     ): Fixture {
         val layoutManager = WheelLayoutManager(scrollFeature)
         val adapter = CountingAdapter(itemHeights, hasStableIds, itemMargins)
@@ -609,8 +916,25 @@ class WheelLayoutManagerTest {
             layoutHeight = layoutHeight,
             layoutHeightMode = layoutHeightMode,
         )
-        layout(fixture)
+        if (performInitialLayout) {
+            layout(fixture)
+        }
         return fixture
+    }
+
+    private fun parcelRoundTrip(state: Parcelable): Parcelable {
+        val parcel: Parcel = Parcel.obtain()
+        return try {
+            parcel.writeParcelable(state, 0)
+            parcel.setDataPosition(0)
+            @Suppress("DEPRECATION")
+            val restoredState: Parcelable? = parcel.readParcelable(
+                WheelLayoutManager::class.java.classLoader,
+            )
+            checkNotNull(restoredState)
+        } finally {
+            parcel.recycle()
+        }
     }
 
     private fun layout(

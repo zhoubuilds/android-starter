@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-19      | whisper | 说明滚轮状态恢复、锚点校验和异步数据配置 |
 | 2026-10-19      | whisper | 说明滚轮普通动画与预测动画边界    |
 | 2026-10-19      | whisper | 说明滚轮 padding 与 item 外边界语义 |
 | 2026-10-15      | whisper | 补充滚轮零高度 item 的循环语义    |
@@ -1052,6 +1053,20 @@ item 的 LayoutParams margin 与 ItemDecoration offset 会作为完整外边界�
 默认 ItemAnimator 仍可执行普通的增加、删除、移动和内容变化动画. 更新前后都具备布局位置的可见条目可以按坐标移动;
 缺少一端布局位置的 appearing/disappearing 条目通常使用普通淡入淡出, 不会从推断出的屏幕外位置移动进入或离开.
 调用方无需设置 `itemAnimator = null`; 只有希望关闭全部条目动画时才应这样配置.
+
+当 RecyclerView 具有可保存的 View ID 并参与 View 层级状态保存时, `WheelLayoutManager` 会随 RecyclerView 自动保存和恢复
+中心 Adapter position 及尚未吸附完成的像素偏移. 恢复期间调用 `scrollToPosition()` 会以显式目标为准. Adapter 异步加载且
+初始可能为空时, 应延迟 RecyclerView 分发恢复状态:
+
+```kotlin
+adapter.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
+```
+
+LayoutManager 会额外保留已经收到但尚无数据可布局的恢复锚点. 如果非空布局时显式或恢复 position 越界, 该锚点会被放弃,
+不会在循环模式中取模到其它条目; 有现有 child 时继续保持当前中心, 否则从 position 0 布局. 恢复前后 item 尺寸变化时,
+锚点仍与当前内容区域相交就保留原像素偏移; 锚点完全不可见时保留 position 并重新居中, 避免旧像素偏移产生空白视口.
+position 恢复不等于业务身份恢复; 数据可能重排时, 调用方应保存业务 key, 在新数据中查找对应 position 后显式调用
+`scrollToPosition()`.
 
 ## 10. RecyclerView ViewHolder
 

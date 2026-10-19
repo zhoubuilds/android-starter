@@ -1,6 +1,8 @@
 package com.whisper.kit.recyclerview.wheel
 
 import android.graphics.PointF
+import android.os.Parcel
+import android.os.Parcelable
 import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.IntDef
@@ -16,6 +18,7 @@ import kotlin.math.abs
  * 循环模式只在每个 Adapter position 最多布局一次即可覆盖布局窗口时生效, 否则自动退化为有界模式.
  * item 的纵向占用尺寸可以为 0; 布局终止依赖 Adapter position 推进, 不依赖每个 item 产生像素位移.
  * 不支持 RecyclerView predictive item animations; 默认 ItemAnimator 仍可执行普通的增删、移动和内容变化动画.
+ * RecyclerView 重建时保存并恢复中心 Adapter position 及其相对内容中心的像素偏移.
  *
  * @author whisper
  * @since 2026/10/14
@@ -61,6 +64,7 @@ class WheelLayoutManager(
     private val verticalOrientationHelper: OrientationHelper =
         OrientationHelper.createVerticalHelper(this)
     private var pendingScrollPosition: Int = RecyclerView.NO_POSITION
+    private var pendingSavedState: SavedState? = null
     private var centerYPosition: Int = RecyclerView.NO_POSITION
 
     /**
@@ -75,9 +79,33 @@ class WheelLayoutManager(
     )
 
     override fun onLayoutChildren(recycler: RecyclerView.Recycler, state: RecyclerView.State) {
+        if (state.isPreLayout) {
+            return
+        }
+        if (itemCount <= 0) {
+            detachAndScrapAttachedViews(recycler)
+            isLoopingActive = false
+            lastLayoutPassContentCenterY = null
+            verticalOrientationHelper.onLayoutComplete()
+            return
+        }
+
         val centerViewPosition: Int
         val centerViewOffsetY: Int
-        if (pendingScrollPosition == RecyclerView.NO_POSITION) {
+        val isRestoringSavedState: Boolean
+        val requestedPosition: Int? = pendingScrollPosition.takeIf(::isValidAdapterPosition)
+        val restoredState: SavedState? = pendingSavedState?.takeIf { savedState: SavedState ->
+            isValidAdapterPosition(savedState.anchorPosition)
+        }
+        if (requestedPosition != null) {
+            centerViewPosition = requestedPosition
+            centerViewOffsetY = 0
+            isRestoringSavedState = false
+        } else if (restoredState != null) {
+            centerViewPosition = restoredState.anchorPosition
+            centerViewOffsetY = restoredState.anchorOffsetY
+            isRestoringSavedState = true
+        } else {
             val anchorCenterY: Int = lastLayoutPassContentCenterY ?: contentCenterY
             val centerView: View? = findCenterChild(anchorCenterY, centerYPosition)
             val position: Int = centerView?.let(::getPosition) ?: RecyclerView.NO_POSITION
@@ -89,24 +117,11 @@ class WheelLayoutManager(
                 centerViewPosition = minOf(position, itemCount - 1)
                 centerViewOffsetY = decoratedCenterY(attachedCenterView) - anchorCenterY
             }
-        } else {
-            centerViewPosition = pendingScrollPosition
-            centerViewOffsetY = 0
-        }
-
-        if (state.isPreLayout) {
-            return
+            isRestoringSavedState = false
         }
         detachAndScrapAttachedViews(recycler)
 
-        if (itemCount <= 0) {
-            isLoopingActive = false
-            lastLayoutPassContentCenterY = null
-            verticalOrientationHelper.onLayoutComplete()
-            return
-        }
-
-        val centerAdapterPosition: Int = normalizeAdapterPosition(centerViewPosition)
+        val centerAdapterPosition: Int = centerViewPosition
         val shouldTryLooping: Boolean =
             scrollFeature == SCROLL_FEATURE_UNLIMITED && itemCount > 1
         isLoopingActive = shouldTryLooping && layoutFromCenter(
@@ -114,6 +129,7 @@ class WheelLayoutManager(
             centerPosition = centerAdapterPosition,
             centerOffsetY = centerViewOffsetY,
             allowLooping = true,
+            isRestoringSavedState = isRestoringSavedState,
         )
         if (!isLoopingActive) {
             if (shouldTryLooping) {
@@ -124,6 +140,7 @@ class WheelLayoutManager(
                 centerPosition = centerAdapterPosition,
                 centerOffsetY = centerViewOffsetY,
                 allowLooping = false,
+                isRestoringSavedState = isRestoringSavedState,
             )
         }
         checkIfCenterYPositionChanged(
@@ -139,6 +156,7 @@ class WheelLayoutManager(
         centerPosition: Int,
         centerOffsetY: Int,
         allowLooping: Boolean,
+        isRestoringSavedState: Boolean,
     ): Boolean {
         val laidOutPositions: MutableSet<Int> = mutableSetOf(centerPosition)
         val centerView: View = recycler.getViewForPosition(centerPosition)
@@ -147,7 +165,15 @@ class WheelLayoutManager(
         val firstWidth: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(centerView)
         val firstHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(centerView)
         val firstLeft: Int = paddingLeft
-        val firstTop: Int = contentCenterY - firstHeight / 2 + centerOffsetY
+        val resolvedCenterOffsetY: Int = if (
+            isRestoringSavedState &&
+            !isAnchorVisibleAtOffset(centerOffsetY, firstHeight)
+        ) {
+            0
+        } else {
+            centerOffsetY
+        }
+        val firstTop: Int = contentCenterY - firstHeight / 2 + resolvedCenterOffsetY
         val firstRight: Int = firstLeft + firstWidth
         val firstBottom: Int = firstTop + firstHeight
         layoutDecoratedWithMargins(centerView, firstLeft, firstTop, firstRight, firstBottom)
@@ -169,6 +195,20 @@ class WheelLayoutManager(
             laidOutPositions,
         )
         return startCovered && endCovered
+    }
+
+    private fun isAnchorVisibleAtOffset(centerOffsetY: Int, decoratedMeasurement: Int): Boolean {
+        val anchorStart: Long = contentCenterY.toLong() -
+            decoratedMeasurement.toLong() / 2L +
+            centerOffsetY.toLong()
+        val anchorEnd: Long = anchorStart + decoratedMeasurement.toLong()
+        val contentStart: Long = verticalOrientationHelper.startAfterPadding.toLong()
+        val contentEnd: Long = verticalOrientationHelper.endAfterPadding.toLong()
+        return if (decoratedMeasurement == 0) {
+            anchorStart in contentStart..contentEnd
+        } else {
+            anchorStart < contentEnd && anchorEnd > contentStart
+        }
     }
 
     override fun isAutoMeasureEnabled(): Boolean = true
@@ -209,15 +249,50 @@ class WheelLayoutManager(
 
     override fun scrollToPosition(position: Int) {
         pendingScrollPosition = position
+        pendingSavedState = null
+        requestLayout()
+    }
+
+    override fun onSaveInstanceState(): Parcelable {
+        val canSavePendingPosition: Boolean = pendingScrollPosition != RecyclerView.NO_POSITION &&
+            (itemCount <= 0 || isValidAdapterPosition(pendingScrollPosition))
+        if (canSavePendingPosition) {
+            return SavedState(pendingScrollPosition, 0)
+        }
+        val savedState: SavedState? = pendingSavedState?.takeIf { state: SavedState ->
+            itemCount <= 0 || isValidAdapterPosition(state.anchorPosition)
+        }
+        if (savedState != null) {
+            return SavedState(savedState)
+        }
+        val anchorCenterY: Int = lastLayoutPassContentCenterY ?: contentCenterY
+        val centerView: View = findCenterChild(anchorCenterY, centerYPosition)
+            ?: return SavedState(RecyclerView.NO_POSITION, 0)
+        return SavedState(
+            anchorPosition = getPosition(centerView),
+            anchorOffsetY = decoratedCenterY(centerView) - anchorCenterY,
+        )
+    }
+
+    override fun onRestoreInstanceState(state: Parcelable?) {
+        if (state !is SavedState) {
+            return
+        }
+        pendingSavedState = if (pendingScrollPosition == RecyclerView.NO_POSITION) {
+            SavedState(state)
+        } else {
+            null
+        }
         requestLayout()
     }
 
     override fun onLayoutCompleted(state: RecyclerView.State) {
         super.onLayoutCompleted(state)
-        if (state.isPreLayout) {
+        if (state.isPreLayout || state.itemCount <= 0) {
             return
         }
         pendingScrollPosition = RecyclerView.NO_POSITION
+        pendingSavedState = null
     }
 
     /**
@@ -573,11 +648,13 @@ class WheelLayoutManager(
     }
 
     private fun resolveAdapterPosition(position: Int, allowLooping: Boolean): Int? {
-        if (position in 0 until itemCount) {
+        if (isValidAdapterPosition(position)) {
             return position
         }
         return if (allowLooping) normalizeAdapterPosition(position) else null
     }
+
+    private fun isValidAdapterPosition(position: Int): Boolean = position in 0 until itemCount
 
     private fun layoutChildToStart(
         baseline: Int,
@@ -665,6 +742,43 @@ class WheelLayoutManager(
      */
     fun interface OnCenterYPositionChangeListener {
         fun onCenterYPositionChanged(position: Int)
+    }
+
+    /**
+     * 保存滚轮中心锚点, offset 使用相对 RecyclerView 内容中心的 decorated-with-margins 坐标.
+     *
+     * internal 保证 JVM 类为 public, 供 Android Parcel 在冷启动恢复时反射读取 [CREATOR].
+     */
+    internal class SavedState : Parcelable {
+        val anchorPosition: Int
+        val anchorOffsetY: Int
+
+        constructor(anchorPosition: Int, anchorOffsetY: Int) {
+            this.anchorPosition = anchorPosition
+            this.anchorOffsetY = anchorOffsetY
+        }
+
+        constructor(other: SavedState) : this(other.anchorPosition, other.anchorOffsetY)
+
+        private constructor(parcel: Parcel) : this(
+            anchorPosition = parcel.readInt(),
+            anchorOffsetY = parcel.readInt(),
+        )
+
+        override fun writeToParcel(destination: Parcel, flags: Int) {
+            destination.writeInt(anchorPosition)
+            destination.writeInt(anchorOffsetY)
+        }
+
+        override fun describeContents(): Int = 0
+
+        companion object {
+            @JvmField
+            val CREATOR: Parcelable.Creator<SavedState> = object : Parcelable.Creator<SavedState> {
+                override fun createFromParcel(source: Parcel): SavedState = SavedState(source)
+                override fun newArray(size: Int): Array<SavedState?> = arrayOfNulls(size)
+            }
+        }
     }
 }
 
