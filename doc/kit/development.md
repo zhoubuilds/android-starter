@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-19      | whisper | 关闭滚轮预测布局并明确普通动画契约 |
 | 2026-10-19      | whisper | 统一滚轮中心及装饰外边界计算       |
 | 2026-10-15      | whisper | 补充滚轮零高度 item 和填充终止约束 |
 | 2026-10-14      | whisper | 迁入 RecyclerView 滚轮布局并约束条件循环实现 |
@@ -646,6 +647,9 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
 8. `WheelSnapHelper` 是停止后居中的配套类型; `WheelSmoothScroller` 只服务 LayoutManager, 不扩大为独立公开 API.
 9. item 创建、绑定、稳定 ID 和数据更新仍由标准 RecyclerView Adapter 负责. Adapter 提供稳定 ID 时, 每个真实 position
    对应的 ID 仍须唯一且随数据项保持稳定; 选中线、渐变和文字颜色不进入滚动实现.
+10. `supportsPredictiveItemAnimations()` 必须返回 false. 当前实现不执行 predictive pre-layout, 也不维护 appearing、
+    disappearing child 的屏幕外预测位置; 不得只修改能力声明重新开启. 默认 ItemAnimator 和标准粒度通知继续负责普通
+    add、remove、move、change 动画, 调用方不需要为此把 `itemAnimator` 设为 null.
 
 ## 8. RecyclerView ViewHolder
 
@@ -795,6 +799,8 @@ git diff --check
 item 尺寸变化后的循环能力重算, 以及对称/非对称 padding、奇数可用尺寸、margin、ItemDecoration、程序滚动、平滑滚动、
 停止吸附和中心同距规则的一致性. 运行时容器尺寸和 padding 变化应覆盖居中与非零相对 offset 的锚点保持,
 同时覆盖 `EXACTLY` 和会触发多次布局 pass 的 `AT_MOST` 测量; 全零高度 item 应覆盖平滑目标确认及相同目标不重复通知.
+测试还应断言 LayoutManager 不声明预测动画能力, 并在默认 ItemAnimator 非空时覆盖结构更新后的最终中心、循环状态和
+已挂载 position 唯一性; 不把屏幕外 appearing/disappearing 条目的预测移动轨迹作为当前组件契约.
 
 单元测试启用 Android 资源以加载测试 XML. `kit/src/test/resources/robolectric.properties` 使用 `sdk=24` 保持原有默认测试基线,
 避免默认 SDK 随 Manifest 的 targetSdk 改变; 测试类或方法中的显式 `@Config` 继续覆盖该默认值.

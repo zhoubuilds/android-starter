@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-19      | whisper | 说明滚轮普通动画与预测动画边界    |
 | 2026-10-19      | whisper | 说明滚轮 padding 与 item 外边界语义 |
 | 2026-10-15      | whisper | 补充滚轮零高度 item 的循环语义    |
 | 2026-10-14      | whisper | 增加 RecyclerView 滚轮布局及条件循环用法 |
@@ -1045,6 +1046,12 @@ position 最多挂载一次即可覆盖布局窗口时启用首尾循环; 数据
 运行时修改容器尺寸或 padding 后, 当前逻辑中心会随新的内容中心移动, 尚未吸附完成的相对偏移也会保留.
 item 的 LayoutParams margin 与 ItemDecoration offset 会作为完整外边界参与测量、布局和吸附, 不会压缩 item 自身尺寸.
 多个零高度 item 同时位于中心时, `smoothScrollToPosition()` 仍会把指定目标确认为逻辑中心.
+
+`WheelLayoutManager` 不支持 RecyclerView predictive item animations, 但不会关闭 RecyclerView 的 ItemAnimator.
+使用 `notifyItemInserted()`、`notifyItemRemoved()`、`notifyItemMoved()`、`notifyItemChanged()` 或对应 range API 时,
+默认 ItemAnimator 仍可执行普通的增加、删除、移动和内容变化动画. 更新前后都具备布局位置的可见条目可以按坐标移动;
+缺少一端布局位置的 appearing/disappearing 条目通常使用普通淡入淡出, 不会从推断出的屏幕外位置移动进入或离开.
+调用方无需设置 `itemAnimator = null`; 只有希望关闭全部条目动画时才应这样配置.
 
 ## 10. RecyclerView ViewHolder
 

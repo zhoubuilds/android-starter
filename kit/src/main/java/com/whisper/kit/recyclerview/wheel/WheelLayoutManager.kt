@@ -15,6 +15,7 @@ import kotlin.math.abs
  * [scrollToPosition] 和 [smoothScrollToPosition] 均表示将目标条目移动到中心位置.
  * 循环模式只在每个 Adapter position 最多布局一次即可覆盖布局窗口时生效, 否则自动退化为有界模式.
  * item 的纵向占用尺寸可以为 0; 布局终止依赖 Adapter position 推进, 不依赖每个 item 产生像素位移.
+ * 不支持 RecyclerView predictive item animations; 默认 ItemAnimator 仍可执行普通的增删、移动和内容变化动画.
  *
  * @author whisper
  * @since 2026/10/14
@@ -219,7 +220,12 @@ class WheelLayoutManager(
         pendingScrollPosition = RecyclerView.NO_POSITION
     }
 
-    override fun supportsPredictiveItemAnimations(): Boolean = true
+    /**
+     * 当前布局在 pre-layout 阶段不会布局旧结构, 也不维护 appearing 和 disappearing child 的预测位置,
+     * 因此不能声明支持 predictive item animations. 返回 false 仅关闭预测布局, 不影响 ItemAnimator
+     * 根据普通布局前后快照执行增删、移动和内容变化动画.
+     */
+    override fun supportsPredictiveItemAnimations(): Boolean = false
 
     override fun computeVerticalScrollExtent(state: RecyclerView.State): Int {
         if (childCount == 0) {

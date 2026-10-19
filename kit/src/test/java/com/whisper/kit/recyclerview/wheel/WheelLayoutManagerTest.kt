@@ -52,6 +52,13 @@ class WheelLayoutManagerTest {
     }
 
     @Test
+    fun create_doesNotClaimPredictiveItemAnimationSupport() {
+        val layoutManager = WheelLayoutManager()
+
+        assertFalse(layoutManager.supportsPredictiveItemAnimations())
+    }
+
+    @Test
     fun generateDefaultLayoutParams_usesWrapContentOnBothAxes() {
         val layoutParams: RecyclerView.LayoutParams = WheelLayoutManager().generateDefaultLayoutParams()
 
@@ -492,8 +499,10 @@ class WheelLayoutManagerTest {
     }
 
     @Test
-    fun unlimitedLayout_notifyItemRemoved_keepsPostLayoutPositionsUnique() {
+    fun unlimitedLayout_notifyItemRemoved_withSimpleAnimations_keepsPostLayoutPositionsUnique() {
         val fixture: Fixture = createFixture(itemCount = 20)
+
+        assertNotNull(fixture.recyclerView.itemAnimator)
 
         fixture.adapter.removeAt(0)
         layout(fixture)
