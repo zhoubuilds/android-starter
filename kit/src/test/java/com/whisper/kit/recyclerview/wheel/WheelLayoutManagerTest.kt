@@ -1,18 +1,26 @@
 package com.whisper.kit.recyclerview.wheel
 
+import android.app.Activity
+import android.graphics.Rect
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.util.concurrent.TimeUnit
 
 /**
  * 验证滚轮布局迁移后的基础公开调用形态.
@@ -105,6 +113,38 @@ class WheelLayoutManagerTest {
     }
 
     @Test
+    fun unlimitedLayout_withZeroHeightItems_finishesAsBoundedLayout() {
+        val fixture: Fixture = createFixture(
+            itemCount = 20,
+            itemHeight = 0,
+        )
+
+        assertFalse(fixture.layoutManager.isLoopingActive)
+        assertEquals(20, fixture.layoutManager.childCount)
+        assertUniqueAttachedPositions(fixture)
+
+        fixture.recyclerView.scrollBy(0, 10_000)
+
+        assertFalse(fixture.layoutManager.isLoopingActive)
+        assertUniqueAttachedPositions(fixture)
+    }
+
+    @Test
+    fun unlimitedLayout_withMixedZeroHeightItems_usesActualCoverage() {
+        val fixture: Fixture = createFixture(
+            itemHeights = listOf(0, 250, 250),
+        )
+
+        assertTrue(fixture.layoutManager.isLoopingActive)
+        assertUniqueAttachedPositions(fixture)
+
+        fixture.recyclerView.scrollBy(0, -250)
+
+        assertTrue(fixture.layoutManager.isLoopingActive)
+        assertUniqueAttachedPositions(fixture)
+    }
+
+    @Test
     fun unlimitedLayout_withSingleItem_keepsOneCenteredChild() {
         val fixture: Fixture = createFixture(itemCount = 1)
         val child: View = checkNotNull(fixture.layoutManager.getChildAt(0))
@@ -121,6 +161,279 @@ class WheelLayoutManagerTest {
 
         assertEquals(0, fixture.layoutManager.findCenterChildPosition())
         assertEquals(listOf(0), attachedPositions(fixture))
+    }
+
+    @Test
+    fun initialLayout_withDifferentVerticalPadding_usesPaddedContentCenter() {
+        val paddingCases: List<Rect> = listOf(
+            Rect(0, 0, 0, 0),
+            Rect(0, 20, 0, 20),
+            Rect(0, 20, 0, 0),
+            Rect(0, 20, 0, 40),
+        )
+
+        paddingCases.forEach { padding: Rect ->
+            val fixture: Fixture = createFixture(
+                itemCount = 8,
+                scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+                padding = padding,
+                layoutHeight = 401,
+            )
+            val centerChild: View = checkNotNull(fixture.layoutManager.findCenterChild())
+            val expectedCenterY: Int = padding.top +
+                (fixture.recyclerView.height - padding.top - padding.bottom) / 2
+
+            assertEquals(expectedCenterY, decoratedCenterY(fixture.layoutManager, centerChild))
+            assertEquals(0, fixture.layoutManager.distanceToCenter(centerChild))
+            assertArrayEquals(
+                intArrayOf(0, 0),
+                WheelSnapHelper().calculateDistanceToFinalSnap(fixture.layoutManager, centerChild),
+            )
+        }
+    }
+
+    @Test
+    fun scrollToPosition_withAsymmetricPadding_usesSameCenterAsSnapHelper() {
+        val fixture: Fixture = createFixture(
+            itemCount = 8,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            padding = Rect(0, 20, 0, 40),
+        )
+
+        fixture.layoutManager.scrollToPosition(4)
+        layout(fixture)
+
+        val centerChild: View = checkNotNull(fixture.layoutManager.findCenterChild())
+        assertEquals(4, fixture.layoutManager.getPosition(centerChild))
+        assertEquals(0, fixture.layoutManager.distanceToCenter(centerChild))
+        assertArrayEquals(
+            intArrayOf(0, 0),
+            WheelSnapHelper().calculateDistanceToFinalSnap(fixture.layoutManager, centerChild),
+        )
+    }
+
+    @Test
+    fun smoothScrollToPosition_withAsymmetricPadding_usesSharedCenterDistance() {
+        val fixture: Fixture = createFixture(
+            itemCount = 12,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            padding = Rect(0, 20, 0, 40),
+        )
+        val activityController = Robolectric.buildActivity(Activity::class.java).setup()
+        try {
+            activityController.get().setContentView(fixture.recyclerView)
+            layout(fixture)
+
+            fixture.recyclerView.smoothScrollToPosition(7)
+            shadowOf(Looper.getMainLooper()).idleFor(5L, TimeUnit.SECONDS)
+
+            val centerChild: View = checkNotNull(fixture.layoutManager.findCenterChild())
+            assertEquals(7, fixture.layoutManager.getPosition(centerChild))
+            assertEquals(0, fixture.layoutManager.distanceToCenter(centerChild))
+        } finally {
+            activityController.close()
+        }
+    }
+
+    @Test
+    fun relayout_afterHeightChange_preservesCenterPositionAndRelativeOffset() {
+        val fixture: Fixture = createFixture(
+            itemCount = 12,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+        fixture.recyclerView.scrollBy(0, ITEM_HEIGHT / 2)
+        val positionBeforeRelayout: Int = fixture.layoutManager.findCenterChildPosition()
+        val offsetBeforeRelayout: Int = fixture.layoutManager.distanceToCenter(
+            checkNotNull(fixture.layoutManager.findCenterChild()),
+        )
+
+        layout(fixture, layoutHeight = 600)
+
+        assertEquals(positionBeforeRelayout, fixture.layoutManager.findCenterChildPosition())
+        assertEquals(
+            offsetBeforeRelayout,
+            fixture.layoutManager.distanceToCenter(checkNotNull(fixture.layoutManager.findCenterChild())),
+        )
+    }
+
+    @Test
+    fun relayout_afterAsymmetricPaddingChange_movesAnchorWithContentCenter() {
+        val fixture: Fixture = createFixture(
+            itemCount = 12,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            padding = Rect(0, 20, 0, 40),
+        )
+        val positionBeforeRelayout: Int = fixture.layoutManager.findCenterChildPosition()
+
+        fixture.recyclerView.setPadding(0, 60, 0, 20)
+        layout(fixture)
+
+        assertEquals(positionBeforeRelayout, fixture.layoutManager.findCenterChildPosition())
+        assertEquals(
+            0,
+            fixture.layoutManager.distanceToCenter(checkNotNull(fixture.layoutManager.findCenterChild())),
+        )
+    }
+
+    @Test
+    fun initialLayout_withAtMostHeight_usesMeasuredContentCenter() {
+        val fixture: Fixture = createFixture(
+            itemCount = 8,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            layoutHeight = 400,
+            layoutHeightMode = View.MeasureSpec.AT_MOST,
+        )
+
+        assertTrue(fixture.recyclerView.height < fixture.layoutHeight)
+        assertEquals(
+            0,
+            fixture.layoutManager.distanceToCenter(checkNotNull(fixture.layoutManager.findCenterChild())),
+        )
+    }
+
+    @Test
+    fun relayout_withAtMostHeight_preservesPositionAndOffsetAcrossLayoutPasses() {
+        val fixture: Fixture = createFixture(
+            itemCount = 12,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            padding = Rect(0, 20, 0, 40),
+        )
+        fixture.recyclerView.scrollBy(0, ITEM_HEIGHT / 2)
+        val positionBeforeRelayout: Int = fixture.layoutManager.findCenterChildPosition()
+        val offsetBeforeRelayout: Int = fixture.layoutManager.distanceToCenter(
+            checkNotNull(fixture.layoutManager.findCenterChild()),
+        )
+        fixture.recyclerView.setPadding(0, 60, 0, 20)
+
+        layout(
+            fixture = fixture,
+            layoutHeight = 400,
+            layoutHeightMode = View.MeasureSpec.AT_MOST,
+        )
+
+        assertTrue(fixture.recyclerView.height < fixture.layoutHeight)
+        assertEquals(positionBeforeRelayout, fixture.layoutManager.findCenterChildPosition())
+        assertEquals(
+            offsetBeforeRelayout,
+            fixture.layoutManager.distanceToCenter(checkNotNull(fixture.layoutManager.findCenterChild())),
+        )
+    }
+
+    @Test
+    fun smoothScrollToPosition_withZeroHeightItems_confirmsTargetOnce() {
+        val fixture: Fixture = createFixture(
+            itemCount = 8,
+            itemHeight = 0,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+        val centerChanges: MutableList<Int> = mutableListOf()
+        val activityController = Robolectric.buildActivity(Activity::class.java).setup()
+        try {
+            activityController.get().setContentView(fixture.recyclerView)
+            layout(fixture)
+            fixture.layoutManager.setOnCenterYPositionChangeListener(centerChanges::add)
+
+            fixture.recyclerView.smoothScrollToPosition(5)
+            shadowOf(Looper.getMainLooper()).idleFor(5L, TimeUnit.SECONDS)
+
+            assertEquals(5, fixture.layoutManager.findCenterChildPosition())
+            assertEquals(listOf(5), centerChanges)
+
+            fixture.recyclerView.smoothScrollToPosition(5)
+            shadowOf(Looper.getMainLooper()).idleFor(5L, TimeUnit.SECONDS)
+
+            assertEquals(listOf(5), centerChanges)
+        } finally {
+            activityController.close()
+        }
+    }
+
+    @Test
+    fun layout_withMarginsAndDecoration_preservesItemSizeAndSharedGeometry() {
+        val padding = Rect(13, 20, 17, 40)
+        val margins = Rect(5, 10, 9, 6)
+        val decorationOffsets = Rect(3, 7, 4, 11)
+        val fixture: Fixture = createFixture(
+            itemCount = 8,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            padding = padding,
+            itemMargins = margins,
+            decorationOffsets = decorationOffsets,
+        )
+        val centerChild: View = checkNotNull(fixture.layoutManager.findCenterChild())
+        val centerLayoutParams: RecyclerView.LayoutParams =
+            centerChild.layoutParams as RecyclerView.LayoutParams
+
+        assertEquals(ITEM_HEIGHT, centerChild.height)
+        assertEquals(
+            ITEM_HEIGHT + margins.top + margins.bottom +
+                decorationOffsets.top + decorationOffsets.bottom,
+            decoratedEnd(fixture.layoutManager, centerChild) -
+                decoratedStart(fixture.layoutManager, centerChild),
+        )
+        assertEquals(
+            padding.top + (fixture.recyclerView.height - padding.top - padding.bottom) / 2,
+            decoratedCenterY(fixture.layoutManager, centerChild),
+        )
+        assertEquals(
+            padding.left,
+            fixture.layoutManager.getDecoratedLeft(centerChild) - centerLayoutParams.leftMargin,
+        )
+        assertEquals(
+            fixture.recyclerView.width - padding.right,
+            fixture.layoutManager.getDecoratedRight(centerChild) + centerLayoutParams.rightMargin,
+        )
+        for (index: Int in 1 until fixture.layoutManager.childCount) {
+            val previous: View = checkNotNull(fixture.layoutManager.getChildAt(index - 1))
+            val current: View = checkNotNull(fixture.layoutManager.getChildAt(index))
+            assertEquals(
+                decoratedEnd(fixture.layoutManager, previous),
+                decoratedStart(fixture.layoutManager, current),
+            )
+        }
+        assertArrayEquals(
+            intArrayOf(0, 0),
+            WheelSnapHelper().calculateDistanceToFinalSnap(fixture.layoutManager, centerChild),
+        )
+
+        fixture.recyclerView.scrollBy(0, 10_000)
+        assertEquals(7, fixture.layoutManager.findCenterChildPosition())
+        assertEquals(
+            0,
+            fixture.layoutManager.distanceToCenter(checkNotNull(fixture.layoutManager.findCenterChild())),
+        )
+
+        fixture.recyclerView.scrollBy(0, -10_000)
+        assertEquals(0, fixture.layoutManager.findCenterChildPosition())
+        assertEquals(
+            0,
+            fixture.layoutManager.distanceToCenter(checkNotNull(fixture.layoutManager.findCenterChild())),
+        )
+    }
+
+    @Test
+    fun centerSelection_whenTwoChildrenAreEquidistant_keepsCurrentPosition() {
+        val fixture: Fixture = createFixture(
+            itemCount = 10,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+        val snapHelper = WheelSnapHelper()
+
+        fixture.recyclerView.scrollBy(0, ITEM_HEIGHT / 2)
+
+        assertEquals(0, fixture.layoutManager.findCenterChildPosition())
+        assertSame(
+            fixture.layoutManager.findCenterChild(),
+            snapHelper.findSnapView(fixture.layoutManager),
+        )
+
+        fixture.recyclerView.scrollBy(0, 1)
+
+        assertEquals(1, fixture.layoutManager.findCenterChildPosition())
+        assertSame(
+            fixture.layoutManager.findCenterChild(),
+            snapHelper.findSnapView(fixture.layoutManager),
+        )
     }
 
     @Test
@@ -157,7 +470,7 @@ class WheelLayoutManagerTest {
         fixture.adapter.clearBindCounts()
 
         fixture.adapter.notifyItemChanged(0)
-        layout(fixture.recyclerView)
+        layout(fixture)
 
         assertEquals(1, fixture.adapter.bindCount(0))
         assertUniqueAttachedPositions(fixture)
@@ -172,7 +485,7 @@ class WheelLayoutManagerTest {
         fixture.adapter.clearBindCounts()
 
         fixture.adapter.notifyItemChanged(0)
-        layout(fixture.recyclerView)
+        layout(fixture)
 
         assertEquals(1, fixture.adapter.bindCount(0))
         assertUniqueAttachedPositions(fixture)
@@ -183,9 +496,43 @@ class WheelLayoutManagerTest {
         val fixture: Fixture = createFixture(itemCount = 20)
 
         fixture.adapter.removeAt(0)
-        layout(fixture.recyclerView)
+        layout(fixture)
 
         assertEquals(19, fixture.adapter.itemCount)
+        assertTrue(fixture.layoutManager.isLoopingActive)
+        assertUniqueAttachedPositions(fixture)
+    }
+
+    @Test
+    fun unlimitedLayout_itemCountChanges_recalculatesLoopingAvailability() {
+        val fixture: Fixture = createFixture(itemCount = 20)
+
+        fixture.adapter.keepFirst(3)
+        layout(fixture)
+
+        assertFalse(fixture.layoutManager.isLoopingActive)
+        assertEquals(listOf(0, 1, 2), attachedPositions(fixture))
+
+        fixture.adapter.appendItems(count = 17, height = ITEM_HEIGHT)
+        layout(fixture)
+
+        assertTrue(fixture.layoutManager.isLoopingActive)
+        assertUniqueAttachedPositions(fixture)
+    }
+
+    @Test
+    fun unlimitedLayout_itemHeightChanges_recalculatesLoopingAvailability() {
+        val fixture: Fixture = createFixture(itemCount = 20)
+
+        fixture.adapter.updateHeights(List(20) { 0 })
+        layout(fixture)
+
+        assertFalse(fixture.layoutManager.isLoopingActive)
+        assertUniqueAttachedPositions(fixture)
+
+        fixture.adapter.updateHeights(List(20) { ITEM_HEIGHT })
+        layout(fixture)
+
         assertTrue(fixture.layoutManager.isLoopingActive)
         assertUniqueAttachedPositions(fixture)
     }
@@ -194,22 +541,86 @@ class WheelLayoutManagerTest {
         itemCount: Int,
         hasStableIds: Boolean = false,
         itemHeight: Int = ITEM_HEIGHT,
+        scrollFeature: Int = WheelLayoutManager.SCROLL_FEATURE_UNLIMITED,
+        padding: Rect = Rect(),
+        itemMargins: Rect = Rect(),
+        decorationOffsets: Rect? = null,
+        layoutWidth: Int = 200,
+        layoutHeight: Int = 400,
+        layoutHeightMode: Int = View.MeasureSpec.EXACTLY,
+    ): Fixture = createFixture(
+        itemHeights = List(itemCount) { itemHeight },
+        hasStableIds = hasStableIds,
+        scrollFeature = scrollFeature,
+        padding = padding,
+        itemMargins = itemMargins,
+        decorationOffsets = decorationOffsets,
+        layoutWidth = layoutWidth,
+        layoutHeight = layoutHeight,
+        layoutHeightMode = layoutHeightMode,
+    )
+
+    private fun createFixture(
+        itemHeights: List<Int>,
+        hasStableIds: Boolean = false,
+        scrollFeature: Int = WheelLayoutManager.SCROLL_FEATURE_UNLIMITED,
+        padding: Rect = Rect(),
+        itemMargins: Rect = Rect(),
+        decorationOffsets: Rect? = null,
+        layoutWidth: Int = 200,
+        layoutHeight: Int = 400,
+        layoutHeightMode: Int = View.MeasureSpec.EXACTLY,
     ): Fixture {
-        val layoutManager = WheelLayoutManager(WheelLayoutManager.SCROLL_FEATURE_UNLIMITED)
-        val adapter = CountingAdapter(itemCount, hasStableIds, itemHeight)
+        val layoutManager = WheelLayoutManager(scrollFeature)
+        val adapter = CountingAdapter(itemHeights, hasStableIds, itemMargins)
         val recyclerView = RecyclerView(RuntimeEnvironment.getApplication()).apply {
             this.layoutManager = layoutManager
             this.adapter = adapter
+            setPadding(padding.left, padding.top, padding.right, padding.bottom)
+            decorationOffsets?.let { offsets: Rect ->
+                addItemDecoration(
+                    object : RecyclerView.ItemDecoration() {
+                        override fun getItemOffsets(
+                            outRect: Rect,
+                            view: View,
+                            parent: RecyclerView,
+                            state: RecyclerView.State,
+                        ) {
+                            outRect.set(offsets)
+                        }
+                    },
+                )
+            }
         }
-        layout(recyclerView)
-        return Fixture(recyclerView, layoutManager, adapter)
+        val fixture = Fixture(
+            recyclerView = recyclerView,
+            layoutManager = layoutManager,
+            adapter = adapter,
+            layoutWidth = layoutWidth,
+            layoutHeight = layoutHeight,
+            layoutHeightMode = layoutHeightMode,
+        )
+        layout(fixture)
+        return fixture
     }
 
-    private fun layout(recyclerView: RecyclerView) {
-        val widthSpec: Int = View.MeasureSpec.makeMeasureSpec(200, View.MeasureSpec.EXACTLY)
-        val heightSpec: Int = View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY)
-        recyclerView.measure(widthSpec, heightSpec)
-        recyclerView.layout(0, 0, 200, 400)
+    private fun layout(
+        fixture: Fixture,
+        layoutWidth: Int = fixture.layoutWidth,
+        layoutHeight: Int = fixture.layoutHeight,
+        layoutHeightMode: Int = fixture.layoutHeightMode,
+    ) {
+        val widthSpec: Int =
+            View.MeasureSpec.makeMeasureSpec(layoutWidth, View.MeasureSpec.EXACTLY)
+        val heightSpec: Int =
+            View.MeasureSpec.makeMeasureSpec(layoutHeight, layoutHeightMode)
+        fixture.recyclerView.measure(widthSpec, heightSpec)
+        fixture.recyclerView.layout(
+            0,
+            0,
+            fixture.recyclerView.measuredWidth,
+            fixture.recyclerView.measuredHeight,
+        )
     }
 
     private fun attachedPositions(fixture: Fixture): List<Int> =
@@ -222,19 +633,40 @@ class WheelLayoutManagerTest {
         assertEquals(positions.toSet().size, positions.size)
     }
 
+    private fun decoratedStart(layoutManager: WheelLayoutManager, view: View): Int {
+        val layoutParams: RecyclerView.LayoutParams = view.layoutParams as RecyclerView.LayoutParams
+        return layoutManager.getDecoratedTop(view) - layoutParams.topMargin
+    }
+
+    private fun decoratedEnd(layoutManager: WheelLayoutManager, view: View): Int {
+        val layoutParams: RecyclerView.LayoutParams = view.layoutParams as RecyclerView.LayoutParams
+        return layoutManager.getDecoratedBottom(view) + layoutParams.bottomMargin
+    }
+
+    private fun decoratedCenterY(layoutManager: WheelLayoutManager, view: View): Int =
+        decoratedStart(layoutManager, view) +
+            (decoratedEnd(layoutManager, view) - decoratedStart(layoutManager, view)) / 2
+
     private data class Fixture(
         val recyclerView: RecyclerView,
         val layoutManager: WheelLayoutManager,
         val adapter: CountingAdapter,
+        val layoutWidth: Int,
+        val layoutHeight: Int,
+        val layoutHeightMode: Int,
     )
 
     private class CountingAdapter(
-        private var count: Int,
+        itemHeights: List<Int>,
         hasStableIds: Boolean,
-        private val itemHeight: Int,
+        private val itemMargins: Rect,
     ) : RecyclerView.Adapter<Holder>() {
 
+        private val items: MutableList<Item> = itemHeights.mapIndexed { index: Int, height: Int ->
+            Item(id = index.toLong(), height = height)
+        }.toMutableList()
         private val bindCounts: MutableMap<Int, Int> = mutableMapOf()
+        private var nextItemId: Long = items.size.toLong()
 
         init {
             setHasStableIds(hasStableIds)
@@ -247,27 +679,73 @@ class WheelLayoutManagerTest {
         fun bindCount(position: Int): Int = bindCounts[position] ?: 0
 
         fun removeAt(position: Int) {
-            require(position in 0 until count)
-            count -= 1
+            require(position in items.indices)
+            items.removeAt(position)
             notifyItemRemoved(position)
+        }
+
+        fun keepFirst(count: Int) {
+            require(count in 0..items.size)
+            val removedCount: Int = items.size - count
+            if (removedCount == 0) {
+                return
+            }
+            items.subList(count, items.size).clear()
+            notifyItemRangeRemoved(count, removedCount)
+        }
+
+        fun appendItems(count: Int, height: Int) {
+            require(count >= 0)
+            if (count == 0) {
+                return
+            }
+            val insertionPosition: Int = items.size
+            repeat(count) {
+                items += Item(id = nextItemId, height = height)
+                nextItemId += 1
+            }
+            notifyItemRangeInserted(insertionPosition, count)
+        }
+
+        fun updateHeights(heights: List<Int>) {
+            require(heights.size == items.size)
+            items.forEachIndexed { index: Int, item: Item ->
+                item.height = heights[index]
+            }
+            notifyItemRangeChanged(0, items.size)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder = Holder(
             View(parent.context).apply {
                 layoutParams = RecyclerView.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    itemHeight,
-                )
+                    0,
+                ).apply {
+                    setMargins(
+                        itemMargins.left,
+                        itemMargins.top,
+                        itemMargins.right,
+                        itemMargins.bottom,
+                    )
+                }
             },
         )
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
+            holder.itemView.layoutParams = holder.itemView.layoutParams.apply {
+                height = items[position].height
+            }
             bindCounts[position] = bindCount(position) + 1
         }
 
-        override fun getItemId(position: Int): Long = position.toLong()
+        override fun getItemId(position: Int): Long = items[position].id
 
-        override fun getItemCount(): Int = count
+        override fun getItemCount(): Int = items.size
+
+        private data class Item(
+            val id: Long,
+            var height: Int,
+        )
     }
 
     private class Holder(itemView: View) : RecyclerView.ViewHolder(itemView)

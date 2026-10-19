@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-19      | whisper | 统一滚轮中心及装饰外边界计算       |
+| 2026-10-15      | whisper | 补充滚轮零高度 item 和填充终止约束 |
 | 2026-10-14      | whisper | 迁入 RecyclerView 滚轮布局并约束条件循环实现 |
 | 2026-09-17      | whisper | 增加实时 Insets padding、剩余分发与低版本刘海处理 |
 | 2026-09-14      | whisper | 移除全局 Application 持有器       |
@@ -627,11 +629,22 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
    position 覆盖布局窗口时才启用循环, 任一方向需要复用已挂载 position 时丢弃试排结果并按有界模式重新布局. 不得通过
    固定 item 数量、单个 item 高度或预估总高度判断是否可循环.
 3. 循环滚动填充前先回收按本次位移计算后已经离开窗口的 item, 并在首尾换向时继续校验待填充 position 未挂载;
-   无法维持唯一性时停止循环并请求重新布局, 不得让 Adapter 接收虚拟 position 或伪造 itemCount.
-4. `scrollToPosition()` 和 `smoothScrollToPosition()` 的目标语义均为将对应 Adapter position 移动到 RecyclerView 中心.
-5. 中心变化监听器只提供 Adapter position, 数据解释继续由 Adapter 或调用方负责.
-6. `WheelSnapHelper` 是停止后居中的配套类型; `WheelSmoothScroller` 只服务 LayoutManager, 不扩大为独立公开 API.
-7. item 创建、绑定、稳定 ID 和数据更新仍由标准 RecyclerView Adapter 负责. Adapter 提供稳定 ID 时, 每个真实 position
+   单次填充最多尝试 `itemCount` 个连续候选 position, 无法维持唯一性或需要访问第二轮数据时停止循环并请求重新布局,
+   不得让 Adapter 接收虚拟 position 或伪造 itemCount. item 的纵向占用尺寸允许为 0, 每次迭代仍须推进逻辑 position;
+   不得通过抛出异常、跳过 position 或强制使用 1px 改变标准 RecyclerView 输入语义.
+4. 内容中心必须使用 `startAfterPadding + totalSpace / 2`; item 的主轴测量、start、end 和中心必须统一使用纵向
+   `OrientationHelper` 的 decorated-with-margins 坐标. 传给 `layoutDecoratedWithMargins()` 的边界已经包含 decoration 和
+   margin, 不得再次叠加 decoration inset. 填充、边界限制和回收使用同一坐标系.
+5. `WheelLayoutManager` 是中心距离和最近中心条目选择的唯一实现来源. `WheelSnapHelper` 和 `WheelSmoothScroller` 必须复用
+   LayoutManager 的结果. 多个条目中心同距时优先保留当前中心 position, 否则选择视觉布局顺序中的第一个条目.
+   容器尺寸或 padding 变化时, 使用上一次非 pre-layout pass 的内容中心保存逻辑中心及相对 offset; 每个非 pre-layout
+   `onLayoutChildren()` 结束时同步提交内容中心与 `OrientationHelper` 基准, 适配 AutoMeasure 在一次完整计算中执行多次布局.
+   pre-layout 不得覆盖有效锚点, 空布局应清除已经失去 child 参照的基准. 平滑滚动目标已经附着且中心距离为 0 时仍须确认
+   其 position, 并复用中心变化去重逻辑.
+6. `scrollToPosition()` 和 `smoothScrollToPosition()` 的目标语义均为将对应 Adapter position 移动到 RecyclerView 中心.
+7. 中心变化监听器只提供 Adapter position, 数据解释继续由 Adapter 或调用方负责.
+8. `WheelSnapHelper` 是停止后居中的配套类型; `WheelSmoothScroller` 只服务 LayoutManager, 不扩大为独立公开 API.
+9. item 创建、绑定、稳定 ID 和数据更新仍由标准 RecyclerView Adapter 负责. Adapter 提供稳定 ID 时, 每个真实 position
    对应的 ID 仍须唯一且随数据项保持稳定; 选中线、渐变和文字颜色不进入滚动实现.
 
 ## 8. RecyclerView ViewHolder
@@ -778,7 +791,10 @@ git diff --check
 公开扩展函数应保留编译型测试, 覆盖 lambda 调用形态。
 
 滚轮布局测试至少覆盖默认与显式滚动特征、纵向滚动能力、空数据、中心 position 监听器的 lambda 调用形态、基于实际测量
-结果的循环启用与退化、跨首尾及大距离滚动、数据更新后已挂载 position 的唯一性.
+结果的循环启用与退化、跨首尾及大距离滚动、数据更新后已挂载 position 的唯一性、全零及混合零高度 item、数据量和
+item 尺寸变化后的循环能力重算, 以及对称/非对称 padding、奇数可用尺寸、margin、ItemDecoration、程序滚动、平滑滚动、
+停止吸附和中心同距规则的一致性. 运行时容器尺寸和 padding 变化应覆盖居中与非零相对 offset 的锚点保持,
+同时覆盖 `EXACTLY` 和会触发多次布局 pass 的 `AT_MOST` 测量; 全零高度 item 应覆盖平滑目标确认及相同目标不重复通知.
 
 单元测试启用 Android 资源以加载测试 XML. `kit/src/test/resources/robolectric.properties` 使用 `sdk=24` 保持原有默认测试基线,
 避免默认 SDK 随 Manifest 的 targetSdk 改变; 测试类或方法中的显式 `@Config` 继续覆盖该默认值.

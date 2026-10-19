@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-19      | whisper | 说明滚轮 padding 与 item 外边界语义 |
+| 2026-10-15      | whisper | 补充滚轮零高度 item 的循环语义    |
 | 2026-10-14      | whisper | 增加 RecyclerView 滚轮布局及条件循环用法 |
 | 2026-09-17      | whisper | 说明实时 Insets padding 与页面处理边的选择 |
 | 2026-09-14      | whisper | 说明 Kit 无需全局 Application 初始化 |
@@ -1032,12 +1034,17 @@ recyclerView.layoutManager = WheelLayoutManager(
 
 `SCROLL_FEATURE_UNLIMITED` 是循环请求而不是无条件保证. LayoutManager 会按 item 的实际测量结果试排: 每个真实 Adapter
 position 最多挂载一次即可覆盖布局窗口时启用首尾循环; 数据不足以覆盖时自动退化为有界滚动. 因此是否循环不由固定 item
-数量或预估总高度决定, 数据量或 item 尺寸变化后的重新布局也会重新判断.
+数量或预估总高度决定, 数据量或 item 尺寸变化后的重新布局也会重新判断. item 的纵向占用尺寸可以为 0, 不会被跳过、
+强制改成 1px 或单独导致异常; LayoutManager 通过推进真实 position 并限制单次最多访问一轮数据来保证布局终止.
+零高度 item 与其它唯一 item 共同能够覆盖布局窗口时仍可启用循环, 否则按相同规则退化为有界滚动.
 
 `scrollToPosition(position)` 与 `smoothScrollToPosition(position)` 都会以目标条目居中为最终位置. Adapter 继续提供真实数据量和
 标准 position, 不需要伪造很大的 itemCount 或处理虚拟 position. `notifyItemChanged()` 等标准更新仍作用于唯一的真实 position;
 启用稳定 ID 时仍应遵守 RecyclerView 的唯一和稳定约束. LayoutManager 只提供纵向布局和滚动; item 高度、内容、选中线、
-颜色渐变及日期联动由调用方负责.
+颜色渐变及日期联动由调用方负责. RecyclerView 使用非零或非对称 padding 时, 条目会对齐到扣除 padding 后的内容中心;
+运行时修改容器尺寸或 padding 后, 当前逻辑中心会随新的内容中心移动, 尚未吸附完成的相对偏移也会保留.
+item 的 LayoutParams margin 与 ItemDecoration offset 会作为完整外边界参与测量、布局和吸附, 不会压缩 item 自身尺寸.
+多个零高度 item 同时位于中心时, `smoothScrollToPosition()` 仍会把指定目标确认为逻辑中心.
 
 ## 10. RecyclerView ViewHolder
 

@@ -1,5 +1,6 @@
 package com.whisper.kit.recyclerview.wheel
 
+import android.view.View
 import androidx.recyclerview.widget.LinearSnapHelper
 import androidx.recyclerview.widget.RecyclerView
 
@@ -12,6 +13,22 @@ import androidx.recyclerview.widget.RecyclerView
  * @since 2026/10/14
  */
 class WheelSnapHelper : LinearSnapHelper() {
+
+    override fun calculateDistanceToFinalSnap(
+        layoutManager: RecyclerView.LayoutManager,
+        targetView: View,
+    ): IntArray? = if (layoutManager is WheelLayoutManager) {
+        intArrayOf(0, layoutManager.distanceToCenter(targetView))
+    } else {
+        super.calculateDistanceToFinalSnap(layoutManager, targetView)
+    }
+
+    override fun findSnapView(layoutManager: RecyclerView.LayoutManager): View? =
+        if (layoutManager is WheelLayoutManager) {
+            layoutManager.findCenterChild()
+        } else {
+            super.findSnapView(layoutManager)
+        }
 
     override fun findTargetSnapPosition(
         layoutManager: RecyclerView.LayoutManager,

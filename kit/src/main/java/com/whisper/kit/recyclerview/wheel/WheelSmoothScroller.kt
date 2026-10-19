@@ -47,17 +47,15 @@ internal class WheelSmoothScroller(context: Context) : RecyclerView.SmoothScroll
         state: RecyclerView.State,
         action: Action,
     ) {
-        val targetLayoutManager: RecyclerView.LayoutManager = layoutManager ?: return
-        if (!targetLayoutManager.canScrollVertically()) {
+        val targetLayoutManager: WheelLayoutManager = layoutManager as? WheelLayoutManager ?: return
+        val dy: Int = targetLayoutManager.distanceToCenter(targetView)
+        if (dy == 0) {
+            targetLayoutManager.confirmCenteredTarget(targetView)
             return
         }
-        val targetViewY: Int = targetLayoutManager.getDecoratedTop(targetView) +
-            targetLayoutManager.getDecoratedMeasuredHeight(targetView) / 2
-        val parentY: Int = targetLayoutManager.paddingTop + targetLayoutManager.height / 2
-        val dy: Int = parentY - targetViewY
         val time: Int = calculateTimeForDeceleration(dy)
         if (time > 0) {
-            action.update(0, -dy, time, decelerateInterpolator)
+            action.update(0, dy, time, decelerateInterpolator)
         }
     }
 

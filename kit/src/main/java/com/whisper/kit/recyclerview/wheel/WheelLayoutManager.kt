@@ -4,7 +4,9 @@ import android.graphics.PointF
 import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.IntDef
+import androidx.recyclerview.widget.OrientationHelper
 import androidx.recyclerview.widget.RecyclerView
+import kotlin.math.abs
 
 /**
  * 从 RecyclerView 纵向中心开始布局的滚轮 LayoutManager, 支持有界和条件循环滚动.
@@ -12,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView
  * 应同时安装 [WheelSnapHelper], 使滚动停止后的中心条目与 RecyclerView 中心对齐.
  * [scrollToPosition] 和 [smoothScrollToPosition] 均表示将目标条目移动到中心位置.
  * 循环模式只在每个 Adapter position 最多布局一次即可覆盖布局窗口时生效, 否则自动退化为有界模式.
+ * item 的纵向占用尺寸可以为 0; 布局终止依赖 Adapter position 推进, 不依赖每个 item 产生像素位移.
  *
  * @author whisper
  * @since 2026/10/14
@@ -47,8 +50,22 @@ class WheelLayoutManager(
     internal var isLoopingActive: Boolean = false
         private set
 
+    /**
+     * RecyclerView 扣除纵向 padding 后的内容中心坐标.
+     */
+    private val contentCenterY: Int
+        get() = verticalOrientationHelper.startAfterPadding +
+            verticalOrientationHelper.totalSpace / 2
+
+    private val verticalOrientationHelper: OrientationHelper =
+        OrientationHelper.createVerticalHelper(this)
     private var pendingScrollPosition: Int = RecyclerView.NO_POSITION
     private var centerYPosition: Int = RecyclerView.NO_POSITION
+
+    /**
+     * 上一次非 pre-layout 布局的内容中心, null 表示当前没有可复用的重布局锚点.
+     */
+    private var lastLayoutPassContentCenterY: Int? = null
     private var onCenterYPositionChangeListener: OnCenterYPositionChangeListener? = null
 
     override fun generateDefaultLayoutParams(): RecyclerView.LayoutParams = RecyclerView.LayoutParams(
@@ -57,11 +74,11 @@ class WheelLayoutManager(
     )
 
     override fun onLayoutChildren(recycler: RecyclerView.Recycler, state: RecyclerView.State) {
-        val centerY: Int = (height - paddingTop - paddingBottom) / 2
         val centerViewPosition: Int
         val centerViewOffsetY: Int
         if (pendingScrollPosition == RecyclerView.NO_POSITION) {
-            val centerView: View? = findCenterChild()
+            val anchorCenterY: Int = lastLayoutPassContentCenterY ?: contentCenterY
+            val centerView: View? = findCenterChild(anchorCenterY, centerYPosition)
             val position: Int = centerView?.let(::getPosition) ?: RecyclerView.NO_POSITION
             if (position == RecyclerView.NO_POSITION) {
                 centerViewPosition = 0
@@ -69,9 +86,7 @@ class WheelLayoutManager(
             } else {
                 val attachedCenterView: View = checkNotNull(centerView)
                 centerViewPosition = minOf(position, itemCount - 1)
-                centerViewOffsetY =
-                    getDecoratedTop(attachedCenterView) +
-                    getDecoratedMeasuredHeight(attachedCenterView) / 2 - centerY
+                centerViewOffsetY = decoratedCenterY(attachedCenterView) - anchorCenterY
             }
         } else {
             centerViewPosition = pendingScrollPosition
@@ -85,6 +100,8 @@ class WheelLayoutManager(
 
         if (itemCount <= 0) {
             isLoopingActive = false
+            lastLayoutPassContentCenterY = null
+            verticalOrientationHelper.onLayoutComplete()
             return
         }
 
@@ -108,7 +125,12 @@ class WheelLayoutManager(
                 allowLooping = false,
             )
         }
-        checkIfCenterYPositionChanged(findCenterChildPosition())
+        checkIfCenterYPositionChanged(
+            findCenterChild(contentCenterY, centerAdapterPosition)?.let(::getPosition)
+                ?: RecyclerView.NO_POSITION,
+        )
+        lastLayoutPassContentCenterY = contentCenterY
+        verticalOrientationHelper.onLayoutComplete()
     }
 
     private fun layoutFromCenter(
@@ -117,21 +139,20 @@ class WheelLayoutManager(
         centerOffsetY: Int,
         allowLooping: Boolean,
     ): Boolean {
-        val centerY: Int = (height - paddingTop - paddingBottom) / 2
         val laidOutPositions: MutableSet<Int> = mutableSetOf(centerPosition)
         val centerView: View = recycler.getViewForPosition(centerPosition)
         addView(centerView)
         measureChildWithMargins(centerView, 0, 0)
-        val firstWidth: Int = getDecoratedMeasuredWidth(centerView)
-        val firstHeight: Int = getDecoratedMeasuredHeight(centerView)
-        val firstLeft: Int = paddingLeft + getLeftDecorationWidth(centerView)
-        val firstTop: Int = centerY - firstHeight / 2 + centerOffsetY
+        val firstWidth: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(centerView)
+        val firstHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(centerView)
+        val firstLeft: Int = paddingLeft
+        val firstTop: Int = contentCenterY - firstHeight / 2 + centerOffsetY
         val firstRight: Int = firstLeft + firstWidth
         val firstBottom: Int = firstTop + firstHeight
         layoutDecoratedWithMargins(centerView, firstLeft, firstTop, firstRight, firstBottom)
 
         val startCovered: Boolean = layoutChild(
-            getDecoratedTop(centerView),
+            verticalOrientationHelper.getDecoratedStart(centerView),
             centerPosition - 1,
             LAYOUT_START,
             recycler,
@@ -139,7 +160,7 @@ class WheelLayoutManager(
             laidOutPositions,
         )
         val endCovered: Boolean = layoutChild(
-            getDecoratedBottom(centerView),
+            verticalOrientationHelper.getDecoratedEnd(centerView),
             centerPosition + 1,
             LAYOUT_END,
             recycler,
@@ -161,7 +182,7 @@ class WheelLayoutManager(
         if (dy == 0 || childCount == 0) {
             return 0
         }
-        val maximumLoopingStep: Int = maxOf(1, (height - paddingTop - paddingBottom) / 2)
+        val maximumLoopingStep: Int = maxOf(1, verticalOrientationHelper.totalSpace / 2)
         var remaining: Int = dy
         var totalConsumed: Int = 0
         while (remaining != 0) {
@@ -174,7 +195,7 @@ class WheelLayoutManager(
             if (consumedStep == 0) {
                 break
             }
-            offsetChildrenVertical(-consumedStep)
+            verticalOrientationHelper.offsetChildren(-consumedStep)
             totalConsumed += consumedStep
             remaining -= consumedStep
             if (consumedStep != requestedStep || !isLoopingActive) {
@@ -192,6 +213,9 @@ class WheelLayoutManager(
 
     override fun onLayoutCompleted(state: RecyclerView.State) {
         super.onLayoutCompleted(state)
+        if (state.isPreLayout) {
+            return
+        }
         pendingScrollPosition = RecyclerView.NO_POSITION
     }
 
@@ -203,8 +227,14 @@ class WheelLayoutManager(
         }
         val firstView: View = getChildAt(0) ?: return 0
         val lastView: View = getChildAt(childCount - 1) ?: return 0
-        val top: Int = maxOf(paddingTop, getDecoratedTop(firstView))
-        val bottom: Int = minOf(height - paddingBottom, getDecoratedBottom(lastView))
+        val top: Int = maxOf(
+            verticalOrientationHelper.startAfterPadding,
+            verticalOrientationHelper.getDecoratedStart(firstView),
+        )
+        val bottom: Int = minOf(
+            verticalOrientationHelper.endAfterPadding,
+            verticalOrientationHelper.getDecoratedEnd(lastView),
+        )
         return bottom - top
     }
 
@@ -214,7 +244,10 @@ class WheelLayoutManager(
         }
         val firstView: View = getChildAt(0) ?: return 0
         val lastView: View = getChildAt(childCount - 1) ?: return 0
-        return (getDecoratedBottom(lastView) - getDecoratedTop(firstView)) / childCount * itemCount
+        val laidOutRange: Int =
+            verticalOrientationHelper.getDecoratedEnd(lastView) -
+                verticalOrientationHelper.getDecoratedStart(firstView)
+        return laidOutRange / childCount * itemCount
     }
 
     override fun computeVerticalScrollOffset(state: RecyclerView.State): Int {
@@ -225,10 +258,12 @@ class WheelLayoutManager(
         val centerYPosition: Int = getPosition(centerYView)
         val firstView: View = getChildAt(0) ?: return 0
         val lastView: View = getChildAt(childCount - 1) ?: return 0
-        val averageHeight: Int =
-            (getDecoratedBottom(lastView) - getDecoratedTop(firstView)) / childCount
-        val centerY: Int = (height - paddingTop - paddingBottom) / 2
-        return centerYPosition * averageHeight - (getDecoratedBottom(centerYView) - centerY)
+        val laidOutRange: Int =
+            verticalOrientationHelper.getDecoratedEnd(lastView) -
+                verticalOrientationHelper.getDecoratedStart(firstView)
+        val averageHeight: Int = laidOutRange / childCount
+        return centerYPosition * averageHeight -
+            (verticalOrientationHelper.getDecoratedEnd(centerYView) - contentCenterY)
     }
 
     override fun smoothScrollToPosition(
@@ -268,28 +303,31 @@ class WheelLayoutManager(
     }
 
     /**
-     * 返回当前覆盖 RecyclerView 纵向中心的条目, 没有已布局条目时返回 null.
+     * 返回中心最接近 RecyclerView 内容中心的条目, 没有已布局条目时返回 null.
+     *
+     * 多个条目同距时优先保留当前中心 position, 否则返回布局顺序中的第一个条目.
      */
-    fun findCenterChild(): View? {
-        if (childCount == 0) {
-            return null
-        }
-        val centerIndex: Int = childCount / 2
-        val centerView: View = getChildAt(centerIndex) ?: return null
-        return when (val centerViewCheckResult: Int = checkChildIfInCenterY(centerView)) {
-            0 -> centerView
-            else -> {
-                if (centerViewCheckResult < 0) {
-                    findCenterChildAfter(centerIndex)
-                } else {
-                    findCenterChildBefore(centerIndex)
-                }
+    fun findCenterChild(): View? = findCenterChild(contentCenterY, centerYPosition)
+
+    private fun findCenterChild(centerY: Int, preferredPosition: Int): View? {
+        var closestView: View? = null
+        var closestDistance: Int = Int.MAX_VALUE
+        for (index: Int in 0 until childCount) {
+            val child: View = getChildAt(index) ?: continue
+            val distance: Int = abs(decoratedCenterY(child) - centerY)
+            val shouldKeepCurrentCenter: Boolean = distance == closestDistance &&
+                getPosition(child) == preferredPosition &&
+                closestView?.let(::getPosition) != preferredPosition
+            if (distance < closestDistance || shouldKeepCurrentCenter) {
+                closestView = child
+                closestDistance = distance
             }
         }
+        return closestView
     }
 
     /**
-     * 返回当前覆盖 RecyclerView 纵向中心的 Adapter position.
+     * 返回中心最接近 RecyclerView 内容中心的 Adapter position.
      */
     fun findCenterChildPosition(): Int =
         findCenterChild()?.let(::getPosition) ?: RecyclerView.NO_POSITION
@@ -300,6 +338,26 @@ class WheelLayoutManager(
     fun setOnCenterYPositionChangeListener(listener: OnCenterYPositionChangeListener?) {
         onCenterYPositionChangeListener = listener
     }
+
+    /**
+     * 返回条目中心相对 RecyclerView 内容中心的有符号距离.
+     */
+    internal fun distanceToCenter(view: View): Int = decoratedCenterY(view) - contentCenterY
+
+    /**
+     * 确认已经到达内容中心的平滑滚动目标, 重复确认不会再次通知监听器.
+     */
+    internal fun confirmCenteredTarget(view: View) {
+        val position: Int = getPosition(view)
+        if (position == RecyclerView.NO_POSITION || distanceToCenter(view) != 0) {
+            return
+        }
+        checkIfCenterYPositionChanged(position)
+    }
+
+    private fun decoratedCenterY(view: View): Int =
+        verticalOrientationHelper.getDecoratedStart(view) +
+            verticalOrientationHelper.getDecoratedMeasurement(view) / 2
 
     private fun fill(dy: Int, recycler: RecyclerView.Recycler): Int = when {
         dy > 0 -> fillEnd(dy, recycler)
@@ -313,42 +371,47 @@ class WheelLayoutManager(
         }
         val anchor: View = getChildAt(childCount - 1) ?: return 0
         val anchorPosition: Int = getPosition(anchor)
-        var lastCenterY: Int = anchor.top + anchor.height / 2
-        var offset: Int = getDecoratedBottom(anchor)
+        var lastCenterY: Int = decoratedCenterY(anchor)
+        var offset: Int = verticalOrientationHelper.getDecoratedEnd(anchor)
         var position: Int = anchorPosition + 1
-        var duplicatePositionBlockedFill: Boolean = false
+        var attemptedPositionCount: Int = 0
+        var loopingFillBlocked: Boolean = false
         while (
             (isLoopingActive || position < itemCount) &&
-            offset < height - paddingBottom + dy
+            offset < verticalOrientationHelper.endAfterPadding + dy
         ) {
+            if (isLoopingActive && attemptedPositionCount >= itemCount) {
+                loopingFillBlocked = true
+                break
+            }
             val adapterPosition: Int = resolveAdapterPosition(position, isLoopingActive) ?: break
+            attemptedPositionCount += 1
             if (isLoopingActive && isAdapterPositionAttached(adapterPosition)) {
-                duplicatePositionBlockedFill = true
+                loopingFillBlocked = true
                 break
             }
             val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view)
             measureChildWithMargins(view, 0, 0)
-            val width: Int = getDecoratedMeasuredWidth(view)
-            val viewHeight: Int = getDecoratedMeasuredHeight(view)
-            val left: Int = paddingLeft + getLeftDecorationWidth(view)
-            val top: Int = offset + getTopDecorationHeight(view)
+            val width: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(view)
+            val viewHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(view)
+            val left: Int = paddingLeft
+            val top: Int = offset
             val right: Int = left + width
             val bottom: Int = top + viewHeight
             layoutDecoratedWithMargins(view, left, top, right, bottom)
-            offset += viewHeight
-            lastCenterY = top + viewHeight / 2
+            offset = verticalOrientationHelper.getDecoratedEnd(view)
+            lastCenterY = decoratedCenterY(view)
             recycleStart(offset, anchor, dy, recycler)
             position += 1
         }
-        if (duplicatePositionBlockedFill) {
-            isLoopingActive = false
-            requestLayout()
+        if (loopingFillBlocked) {
+            deactivateLooping()
         }
         return if (isLoopingActive) {
             dy
         } else {
-            minOf(dy, lastCenterY - (height - paddingTop - paddingBottom) / 2)
+            minOf(dy, lastCenterY - contentCenterY)
         }
     }
 
@@ -358,49 +421,65 @@ class WheelLayoutManager(
         }
         val anchor: View = getChildAt(0) ?: return 0
         val anchorPosition: Int = getPosition(anchor)
-        var firstCenterY: Int = anchor.top + anchor.height / 2
-        var offset: Int = getDecoratedTop(anchor)
+        var firstCenterY: Int = decoratedCenterY(anchor)
+        var offset: Int = verticalOrientationHelper.getDecoratedStart(anchor)
         var position: Int = anchorPosition - 1
-        var duplicatePositionBlockedFill: Boolean = false
+        var attemptedPositionCount: Int = 0
+        var loopingFillBlocked: Boolean = false
         while (
             (isLoopingActive || position >= 0) &&
-            offset > paddingTop + dy
+            offset > verticalOrientationHelper.startAfterPadding + dy
         ) {
+            if (isLoopingActive && attemptedPositionCount >= itemCount) {
+                loopingFillBlocked = true
+                break
+            }
             val adapterPosition: Int = resolveAdapterPosition(position, isLoopingActive) ?: break
+            attemptedPositionCount += 1
             if (isLoopingActive && isAdapterPositionAttached(adapterPosition)) {
-                duplicatePositionBlockedFill = true
+                loopingFillBlocked = true
                 break
             }
             val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view, 0)
             measureChildWithMargins(view, 0, 0)
-            val width: Int = getDecoratedMeasuredWidth(view)
-            val viewHeight: Int = getDecoratedMeasuredHeight(view)
-            val left: Int = paddingLeft + getLeftDecorationWidth(view)
-            val top: Int = offset - viewHeight - getBottomDecorationHeight(view)
+            val width: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(view)
+            val viewHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(view)
+            val left: Int = paddingLeft
+            val top: Int = offset - viewHeight
             val right: Int = left + width
             val bottom: Int = top + viewHeight
             layoutDecoratedWithMargins(view, left, top, right, bottom)
-            offset -= viewHeight
-            firstCenterY = top + viewHeight / 2
+            offset = verticalOrientationHelper.getDecoratedStart(view)
+            firstCenterY = decoratedCenterY(view)
             recycleEnd(offset, anchor, dy, recycler)
             position -= 1
         }
-        if (duplicatePositionBlockedFill) {
-            isLoopingActive = false
-            requestLayout()
+        if (loopingFillBlocked) {
+            deactivateLooping()
         }
         return if (isLoopingActive) {
             dy
         } else {
-            maxOf(dy, firstCenterY - (height - paddingTop - paddingBottom) / 2)
+            maxOf(dy, firstCenterY - contentCenterY)
         }
+    }
+
+    private fun deactivateLooping() {
+        if (!isLoopingActive) {
+            return
+        }
+        isLoopingActive = false
+        requestLayout()
     }
 
     private fun recycleStartBeforeScroll(dy: Int, recycler: RecyclerView.Recycler) {
         while (childCount > 1) {
             val first: View = getChildAt(0) ?: return
-            if (getDecoratedBottom(first) - dy <= paddingTop) {
+            if (
+                verticalOrientationHelper.getDecoratedEnd(first) - dy <=
+                verticalOrientationHelper.startAfterPadding
+            ) {
                 removeAndRecycleView(first, recycler)
             } else {
                 return
@@ -411,7 +490,10 @@ class WheelLayoutManager(
     private fun recycleEndBeforeScroll(dy: Int, recycler: RecyclerView.Recycler) {
         while (childCount > 1) {
             val last: View = getChildAt(childCount - 1) ?: return
-            if (getDecoratedTop(last) - dy >= height - paddingBottom) {
+            if (
+                verticalOrientationHelper.getDecoratedStart(last) - dy >=
+                verticalOrientationHelper.endAfterPadding
+            ) {
                 removeAndRecycleView(last, recycler)
             } else {
                 return
@@ -428,8 +510,9 @@ class WheelLayoutManager(
         while (childCount > 0) {
             val first: View = getChildAt(0) ?: break
             if (
-                first.bottom < paddingTop +
-                minOf(offset - getDecoratedBottom(anchor), dy)
+                verticalOrientationHelper.getDecoratedEnd(first) <
+                verticalOrientationHelper.startAfterPadding +
+                minOf(offset - verticalOrientationHelper.getDecoratedEnd(anchor), dy)
             ) {
                 removeAndRecycleView(first, recycler)
             } else {
@@ -447,8 +530,9 @@ class WheelLayoutManager(
         while (childCount > 0) {
             val last: View = getChildAt(childCount - 1) ?: break
             if (
-                last.top > height - paddingBottom +
-                maxOf(offset - getDecoratedTop(anchor), dy)
+                verticalOrientationHelper.getDecoratedStart(last) >
+                verticalOrientationHelper.endAfterPadding +
+                maxOf(offset - verticalOrientationHelper.getDecoratedStart(anchor), dy)
             ) {
                 removeAndRecycleView(last, recycler)
             } else {
@@ -498,7 +582,7 @@ class WheelLayoutManager(
     ): Boolean {
         var offset: Int = baseline
         var targetPosition: Int = position
-        while (offset >= paddingTop) {
+        while (offset >= verticalOrientationHelper.startAfterPadding) {
             val adapterPosition: Int = resolveAdapterPosition(targetPosition, allowLooping) ?: return false
             if (!laidOutPositions.add(adapterPosition)) {
                 return false
@@ -506,14 +590,14 @@ class WheelLayoutManager(
             val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view, 0)
             measureChildWithMargins(view, 0, 0)
-            val width: Int = getDecoratedMeasuredWidth(view)
-            val viewHeight: Int = getDecoratedMeasuredHeight(view)
-            val left: Int = paddingLeft + getLeftDecorationWidth(view)
-            val top: Int = offset - viewHeight - getBottomDecorationHeight(view)
+            val width: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(view)
+            val viewHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(view)
+            val left: Int = paddingLeft
+            val top: Int = offset - viewHeight
             val right: Int = left + width
             val bottom: Int = top + viewHeight
             layoutDecoratedWithMargins(view, left, top, right, bottom)
-            offset -= viewHeight
+            offset = verticalOrientationHelper.getDecoratedStart(view)
             targetPosition -= 1
         }
         return true
@@ -528,7 +612,7 @@ class WheelLayoutManager(
     ): Boolean {
         var offset: Int = baseline
         var targetPosition: Int = position
-        while (offset < height - paddingBottom) {
+        while (offset < verticalOrientationHelper.endAfterPadding) {
             val adapterPosition: Int = resolveAdapterPosition(targetPosition, allowLooping) ?: return false
             if (!laidOutPositions.add(adapterPosition)) {
                 return false
@@ -536,14 +620,14 @@ class WheelLayoutManager(
             val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view)
             measureChildWithMargins(view, 0, 0)
-            val width: Int = getDecoratedMeasuredWidth(view)
-            val viewHeight: Int = getDecoratedMeasuredHeight(view)
-            val left: Int = paddingLeft + getLeftDecorationWidth(view)
-            val top: Int = offset + getTopDecorationHeight(view)
+            val width: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(view)
+            val viewHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(view)
+            val left: Int = paddingLeft
+            val top: Int = offset
             val right: Int = left + width
             val bottom: Int = top + viewHeight
             layoutDecoratedWithMargins(view, left, top, right, bottom)
-            offset += viewHeight
+            offset = verticalOrientationHelper.getDecoratedEnd(view)
             targetPosition += 1
         }
         return true
@@ -560,43 +644,6 @@ class WheelLayoutManager(
             }
         }
         return false
-    }
-
-    private fun findCenterChildAfter(centerIndex: Int): View? {
-        for (index: Int in centerIndex + 1 until childCount) {
-            val view: View? = getChildAt(index)
-            val checkResult: Int = view?.let(::checkChildIfInCenterY) ?: 1
-            if (checkResult == 0) {
-                return view
-            }
-            if (checkResult > 0) {
-                break
-            }
-        }
-        return null
-    }
-
-    private fun findCenterChildBefore(centerIndex: Int): View? {
-        for (index: Int in centerIndex - 1 downTo 0) {
-            val view: View? = getChildAt(index)
-            val checkResult: Int = view?.let(::checkChildIfInCenterY) ?: -1
-            if (checkResult == 0) {
-                return view
-            }
-            if (checkResult < 0) {
-                break
-            }
-        }
-        return null
-    }
-
-    private fun checkChildIfInCenterY(view: View): Int {
-        val centerY: Int = (height - paddingTop - paddingBottom) / 2
-        return when {
-            getDecoratedTop(view) > centerY -> 1
-            getDecoratedBottom(view) < centerY -> -1
-            else -> 0
-        }
     }
 
     private fun checkIfCenterYPositionChanged(position: Int) {
