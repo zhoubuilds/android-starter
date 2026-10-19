@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-19      | whisper | 说明滚轮模式及程序滚动目标边界    |
 | 2026-10-19      | whisper | 说明滚轮状态恢复、锚点校验和异步数据配置 |
 | 2026-10-19      | whisper | 说明滚轮普通动画与预测动画边界    |
 | 2026-10-19      | whisper | 说明滚轮 padding 与 item 外边界语义 |
@@ -1042,6 +1043,10 @@ position 最多挂载一次即可覆盖布局窗口时启用首尾循环; 数据
 
 `scrollToPosition(position)` 与 `smoothScrollToPosition(position)` 都会以目标条目居中为最终位置. Adapter 继续提供真实数据量和
 标准 position, 不需要伪造很大的 itemCount 或处理虚拟 position. `notifyItemChanged()` 等标准更新仍作用于唯一的真实 position;
+循环模式也不会把超过 Adapter 上界的值解释为额外圈数或取模目标. `smoothScrollToPosition()` 的负 position 属于配置错误并
+抛出 `IllegalArgumentException`; Adapter 为空时不启动平滑滚动; 超过当前上界的目标与 RecyclerView 常规行为一致,
+收敛到最后一个真实 position, 再根据当前实际滚动模式选择行进方向. 构造 `WheelLayoutManager` 时也必须使用公开的
+`SCROLL_FEATURE_LIMITED` 或 `SCROLL_FEATURE_UNLIMITED`, 其它值会抛出 `IllegalArgumentException`.
 启用稳定 ID 时仍应遵守 RecyclerView 的唯一和稳定约束. LayoutManager 只提供纵向布局和滚动; item 高度、内容、选中线、
 颜色渐变及日期联动由调用方负责. RecyclerView 使用非零或非对称 padding 时, 条目会对齐到扣除 padding 后的内容中心;
 运行时修改容器尺寸或 padding 后, 当前逻辑中心会随新的内容中心移动, 尚未吸附完成的相对偏移也会保留.

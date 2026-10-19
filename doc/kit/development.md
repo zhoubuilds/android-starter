@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-19      | whisper | 补充滚轮模式及平滑滚动目标校验约束 |
 | 2026-10-19      | whisper | 增加滚轮状态恢复及中心锚点位置、可见性校验约束 |
 | 2026-10-19      | whisper | 关闭滚轮预测布局并明确普通动画契约 |
 | 2026-10-19      | whisper | 统一滚轮中心及装饰外边界计算       |
@@ -658,6 +659,10 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
     源码使用 `internal` 限制模块外访问. 待恢复锚点按新测量的 decorated-with-margins 尺寸仍与内容区域相交时保留 offset;
     完全离开内容区域时只将 offset 退化为 0, 不改变 position. 零高度锚点按中心坐标是否位于内容边界内判断.
     普通重布局和显式滚动不应用该退化. 业务 key、选中数据及数据重排映射仍由调用方维护.
+12. 构造参数 `scrollFeature` 只接受 `SCROLL_FEATURE_LIMITED` 和 `SCROLL_FEATURE_UNLIMITED`, 非法配置立即失败.
+    程序滚动目标始终是 `0 until Adapter.itemCount` 内的真实 position, 循环模式不得把越界目标作为虚拟 position 或取模.
+    平滑滚动的负目标立即失败; 空 Adapter 不启动平滑滚动; 超过上界的目标先收敛到当前 Adapter 末项, 再按实际
+    `isLoopingActive` 选择方向. `computeScrollVectorForPosition()` 不得对非法目标计算方向.
 
 ## 8. RecyclerView ViewHolder
 

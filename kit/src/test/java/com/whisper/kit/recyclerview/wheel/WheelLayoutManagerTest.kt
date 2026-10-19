@@ -14,6 +14,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,6 +53,15 @@ class WheelLayoutManagerTest {
 
         assertEquals(WheelLayoutManager.SCROLL_FEATURE_UNLIMITED, layoutManager.scrollFeature)
         assertNull(layoutManager.computeScrollVectorForPosition(0))
+    }
+
+    @Test
+    fun create_withInvalidScrollFeature_throws() {
+        listOf(-1, 1, 3, Int.MAX_VALUE).forEach { scrollFeature: Int ->
+            assertThrows(IllegalArgumentException::class.java) {
+                WheelLayoutManager(scrollFeature)
+            }
+        }
     }
 
     @Test
@@ -264,6 +274,74 @@ class WheelLayoutManagerTest {
         } finally {
             activityController.close()
         }
+    }
+
+    @Test
+    fun smoothScrollToPosition_withNegativeTarget_throws() {
+        val fixture: Fixture = createFixture(
+            itemCount = 20,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+
+        listOf(RecyclerView.NO_POSITION, -2, Int.MIN_VALUE).forEach { position: Int ->
+            assertThrows(IllegalArgumentException::class.java) {
+                fixture.recyclerView.smoothScrollToPosition(position)
+            }
+        }
+    }
+
+    @Test
+    fun smoothScrollToPosition_withEmptyAdapter_doesNotRetainTarget() {
+        val fixture: Fixture = createFixture(itemCount = 0)
+
+        fixture.recyclerView.smoothScrollToPosition(Int.MAX_VALUE)
+        fixture.adapter.appendItems(20, ITEM_HEIGHT)
+        layout(fixture)
+
+        assertEquals(0, fixture.layoutManager.findCenterChildPosition())
+    }
+
+    @Test
+    fun smoothScrollToPosition_withTargetAboveAdapterRange_usesLastRealPosition() {
+        listOf(
+            WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            WheelLayoutManager.SCROLL_FEATURE_UNLIMITED,
+        ).forEach { scrollFeature: Int ->
+            val fixture: Fixture = createFixture(
+                itemCount = 20,
+                scrollFeature = scrollFeature,
+            )
+            val activityController = Robolectric.buildActivity(Activity::class.java).setup()
+            try {
+                activityController.get().setContentView(fixture.recyclerView)
+                layout(fixture)
+                if (scrollFeature == WheelLayoutManager.SCROLL_FEATURE_UNLIMITED) {
+                    assertTrue(fixture.layoutManager.isLoopingActive)
+                    assertEquals(
+                        -1f,
+                        fixture.layoutManager.computeScrollVectorForPosition(19)?.y,
+                    )
+                }
+
+                fixture.recyclerView.smoothScrollToPosition(Int.MAX_VALUE)
+                shadowOf(Looper.getMainLooper()).idleFor(5L, TimeUnit.SECONDS)
+
+                val centerChild: View = checkNotNull(fixture.layoutManager.findCenterChild())
+                assertEquals(19, fixture.layoutManager.getPosition(centerChild))
+                assertEquals(0, fixture.layoutManager.distanceToCenter(centerChild))
+            } finally {
+                activityController.close()
+            }
+        }
+    }
+
+    @Test
+    fun computeScrollVectorForPosition_withInvalidTarget_returnsNull() {
+        val fixture: Fixture = createFixture(itemCount = 20)
+
+        assertNull(fixture.layoutManager.computeScrollVectorForPosition(RecyclerView.NO_POSITION))
+        assertNull(fixture.layoutManager.computeScrollVectorForPosition(20))
+        assertNull(fixture.layoutManager.computeScrollVectorForPosition(Int.MAX_VALUE))
     }
 
     @Test

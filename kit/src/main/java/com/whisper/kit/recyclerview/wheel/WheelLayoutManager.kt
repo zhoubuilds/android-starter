@@ -19,6 +19,7 @@ import kotlin.math.abs
  * item 的纵向占用尺寸可以为 0; 布局终止依赖 Adapter position 推进, 不依赖每个 item 产生像素位移.
  * 不支持 RecyclerView predictive item animations; 默认 ItemAnimator 仍可执行普通的增删、移动和内容变化动画.
  * RecyclerView 重建时保存并恢复中心 Adapter position 及其相对内容中心的像素偏移.
+ * [scrollFeature] 只接受 [SCROLL_FEATURE_LIMITED] 和 [SCROLL_FEATURE_UNLIMITED].
  *
  * @author whisper
  * @since 2026/10/14
@@ -72,6 +73,15 @@ class WheelLayoutManager(
      */
     private var lastLayoutPassContentCenterY: Int? = null
     private var onCenterYPositionChangeListener: OnCenterYPositionChangeListener? = null
+
+    init {
+        require(
+            scrollFeature == SCROLL_FEATURE_LIMITED ||
+                scrollFeature == SCROLL_FEATURE_UNLIMITED,
+        ) {
+            "scrollFeature must be SCROLL_FEATURE_LIMITED or SCROLL_FEATURE_UNLIMITED"
+        }
+    }
 
     override fun generateDefaultLayoutParams(): RecyclerView.LayoutParams = RecyclerView.LayoutParams(
         ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -347,32 +357,52 @@ class WheelLayoutManager(
             (verticalOrientationHelper.getDecoratedEnd(centerYView) - contentCenterY)
     }
 
+    /**
+     * 将目标 Adapter position 平滑滚动到内容中心.
+     *
+     * 空 Adapter 不启动滚动, 超过当前 Adapter 上界的目标收敛到最后一个真实 position.
+     *
+     * @throws IllegalArgumentException position 小于 0.
+     */
     override fun smoothScrollToPosition(
         recyclerView: RecyclerView,
         state: RecyclerView.State,
         position: Int,
     ) {
+        require(position >= 0) { "position must be non-negative" }
+        val adapterItemCount: Int = recyclerView.adapter?.itemCount ?: return
+        if (adapterItemCount <= 0) {
+            return
+        }
+        val targetAdapterPosition: Int = minOf(position, adapterItemCount - 1)
         startSmoothScroll(
             WheelSmoothScroller(recyclerView.context).apply {
-                targetPosition = position
+                targetPosition = targetAdapterPosition
             },
         )
     }
 
     override fun computeScrollVectorForPosition(targetPosition: Int): PointF? {
-        if (childCount == 0) {
+        if (childCount == 0 || !isValidAdapterPosition(targetPosition)) {
             return null
         }
         val centerView: View = findCenterChild() ?: return null
         val centerChildPosition: Int = getPosition(centerView)
-        if (centerChildPosition == RecyclerView.NO_POSITION || centerChildPosition == targetPosition) {
+        if (!isValidAdapterPosition(centerChildPosition) || centerChildPosition == targetPosition) {
             return null
         }
         val direction: Int = when {
             !isLoopingActive -> if (targetPosition > centerChildPosition) 1 else -1
             else -> {
-                val up: Int = (centerChildPosition - targetPosition + itemCount) % itemCount
-                val down: Int = (targetPosition - centerChildPosition + itemCount) % itemCount
+                val itemCountLong: Long = itemCount.toLong()
+                val up: Int = (
+                    (centerChildPosition.toLong() - targetPosition.toLong() + itemCountLong) %
+                        itemCountLong
+                    ).toInt()
+                val down: Int = (
+                    (targetPosition.toLong() - centerChildPosition.toLong() + itemCountLong) %
+                        itemCountLong
+                    ).toInt()
                 when {
                     up < down -> -1
                     up > down -> 1
