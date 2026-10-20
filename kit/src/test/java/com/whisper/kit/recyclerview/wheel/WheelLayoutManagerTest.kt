@@ -678,6 +678,38 @@ class WheelLayoutManagerTest {
     }
 
     @Test
+    fun centerListener_whenDataBecomesEmpty_reportsNoPositionAndRestoredCenter() {
+        listOf(
+            WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            WheelLayoutManager.SCROLL_FEATURE_UNLIMITED,
+        ).forEach { scrollFeature: Int ->
+            val fixture: Fixture = createFixture(
+                itemCount = 20,
+                scrollFeature = scrollFeature,
+            )
+            val centerChanges: MutableList<Int> = mutableListOf()
+            fixture.layoutManager.setOnCenterYPositionChangeListener(centerChanges::add)
+
+            fixture.adapter.keepFirst(0)
+            layout(fixture)
+
+            assertEquals(RecyclerView.NO_POSITION, fixture.layoutManager.findCenterChildPosition())
+            assertFalse(fixture.layoutManager.isLoopingActive)
+            assertEquals(listOf(RecyclerView.NO_POSITION), centerChanges)
+
+            layout(fixture)
+
+            assertEquals(listOf(RecyclerView.NO_POSITION), centerChanges)
+
+            fixture.adapter.appendItems(count = 20, height = ITEM_HEIGHT)
+            layout(fixture)
+
+            assertEquals(0, fixture.layoutManager.findCenterChildPosition())
+            assertEquals(listOf(RecyclerView.NO_POSITION, 0), centerChanges)
+        }
+    }
+
+    @Test
     fun scrollToPosition_withEmptyAdapter_doesNotWrapOutOfBoundsTargetWhenDataArrives() {
         listOf(
             WheelLayoutManager.SCROLL_FEATURE_LIMITED,

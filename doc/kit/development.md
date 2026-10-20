@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-20      | whisper | 补充滚轮空数据中心状态约束        |
 | 2026-10-19      | whisper | 统一滚轮滚动指标及方向边界约束    |
 | 2026-10-19      | whisper | 补充滚轮模式及平滑滚动目标校验约束 |
 | 2026-10-19      | whisper | 增加滚轮状态恢复及中心锚点位置、可见性校验约束 |
@@ -646,7 +647,9 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
    pre-layout 不得覆盖有效锚点, 空布局应清除已经失去 child 参照的基准. 平滑滚动目标已经附着且中心距离为 0 时仍须确认
    其 position, 并复用中心变化去重逻辑.
 6. `scrollToPosition()` 和 `smoothScrollToPosition()` 的目标语义均为将对应 Adapter position 移动到 RecyclerView 中心.
-7. 中心变化监听器只提供 Adapter position, 数据解释继续由 Adapter 或调用方负责.
+7. 中心变化监听器只提供 Adapter position, 数据解释继续由 Adapter 或调用方负责. 非空数据变为空时必须通过相同的中心变化
+   去重入口通知 `RecyclerView.NO_POSITION`, 使监听状态与 `findCenterChildPosition()` 一致; 重复空布局不得重复通知.
+   空布局不得因此消费待数据恢复的显式滚动目标或恢复锚点. 调用方必须把 `RecyclerView.NO_POSITION` 作为合法空状态处理.
 8. `WheelSnapHelper` 是停止后居中的配套类型; `WheelSmoothScroller` 只服务 LayoutManager, 不扩大为独立公开 API.
 9. item 创建、绑定、稳定 ID 和数据更新仍由标准 RecyclerView Adapter 负责. Adapter 提供稳定 ID 时, 每个真实 position
    对应的 ID 仍须唯一且随数据项保持稳定; 选中线、渐变和文字颜色不进入滚动实现.

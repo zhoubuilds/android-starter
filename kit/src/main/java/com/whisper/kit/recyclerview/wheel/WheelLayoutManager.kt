@@ -119,6 +119,7 @@ class WheelLayoutManager(
             isLoopingFallbackLayoutPending = false
             loopingFallbackLayoutHandler.removeCallbacks(loopingFallbackLayoutAction)
             lastLayoutPassContentCenterY = null
+            checkIfCenterYPositionChanged(RecyclerView.NO_POSITION)
             verticalOrientationHelper.onLayoutComplete()
             return
         }
@@ -433,7 +434,8 @@ class WheelLayoutManager(
         findCenterChild()?.let(::getPosition) ?: RecyclerView.NO_POSITION
 
     /**
-     * 设置中心条目 position 变化监听器, null 表示移除.
+     * 设置中心条目 position 变化监听器, null 表示移除;
+     * 没有中心条目时通知 [RecyclerView.NO_POSITION].
      */
     fun setOnCenterYPositionChangeListener(listener: OnCenterYPositionChangeListener?) {
         onCenterYPositionChangeListener = listener
@@ -894,7 +896,8 @@ class WheelLayoutManager(
     }
 
     /**
-     * 中心位置的 Adapter position 发生变化后的通知.
+     * 中心位置的 Adapter position 发生变化后的通知,
+     * 没有中心条目时 position 为 [RecyclerView.NO_POSITION].
      */
     fun interface OnCenterYPositionChangeListener {
         fun onCenterYPositionChanged(position: Int)

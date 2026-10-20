@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                   |
 |-----------------|---------|----------------------------|
+| 2026-10-20      | whisper | 明确滚轮空数据中心失效语义 |
 | 2026-10-19      | whisper | 统一滚轮滚动指标及循环相对语义 |
 | 2026-10-19      | whisper | 明确滚轮模式及程序滚动目标边界 |
 | 2026-10-19      | whisper | 增加滚轮中心锚点状态恢复、目标及可见性校验 |
@@ -154,6 +155,8 @@ item 的纵向占用尺寸可以为 0; 布局循环始终推进真实 Adapter po
 SmoothScroller 不再各自维护中心公式. 容器尺寸或 padding 变化时, 每次非预测布局相对上一个布局 pass 的内容中心保留
 逻辑中心及其偏移, 同一次 AutoMeasure 中的非精确测量和最终尺寸布局使用相同规则.
 多个 item 中心同距时优先保留当前中心 position, 否则按当前视觉布局顺序选择; 平滑滚动到零距离目标时仍确认目标 position.
+非空数据变为空时, 已提交的中心 position 失效为 `RecyclerView.NO_POSITION` 并按中心变化通知调用方; 重复空布局不重复通知.
+空数据只清理已失去 child 依据的中心状态, 不消费仍待数据恢复的显式滚动目标或 LayoutManager 恢复锚点.
 滚轮明确不参与 RecyclerView predictive item animations, 避免对未实现的 pre-layout、appearing 和 disappearing child
 几何作出错误承诺. 默认 ItemAnimator 及标准粒度更新仍可执行普通的 add、remove、move 和 change 动画; 缺少更新前后
 双端布局位置的条目使用普通出现或消失动画, 不提供从推断出的屏幕外位置进入或离开的轨迹.

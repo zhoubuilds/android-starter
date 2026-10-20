@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-20      | whisper | 说明滚轮空数据的中心回调语义      |
 | 2026-10-19      | whisper | 说明滚轮滚动指标及循环滚动条语义  |
 | 2026-10-19      | whisper | 说明滚轮模式及程序滚动目标边界    |
 | 2026-10-19      | whisper | 说明滚轮状态恢复、锚点校验和异步数据配置 |
@@ -1027,6 +1028,10 @@ wheelLayoutManager.setOnCenterYPositionChangeListener { position ->
     // 将 selectedItem 交给页面状态.
 }
 ```
+
+数据从非空变为空时, 中心变化监听器会收到 `RecyclerView.NO_POSITION`; 重复空布局不会重复通知. 数据重新出现后,
+即使中心仍是清空前相同的数字 position, 也会再次通知该 position. 调用方应像示例一样安全解析 position,
+不要直接用未校验的回调值索引数据. 空数据不会消费等待数据恢复的 `scrollToPosition()` 目标或状态恢复锚点.
 
 需要 Adapter 首尾相接时显式请求循环模式:
 
