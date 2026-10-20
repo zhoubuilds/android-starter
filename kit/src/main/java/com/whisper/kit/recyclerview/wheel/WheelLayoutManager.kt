@@ -411,18 +411,48 @@ class WheelLayoutManager(
     fun findCenterChild(): View? = findCenterChild(contentCenterY, centerYPosition)
 
     private fun findCenterChild(centerY: Int, preferredPosition: Int): View? {
+        if (childCount == 0) {
+            return null
+        }
+
+        val middleIndex: Int = childCount / 2
         var closestView: View? = null
         var closestDistance: Int = Int.MAX_VALUE
-        for (index: Int in 0 until childCount) {
-            val child: View = getChildAt(index) ?: continue
+        var closestIndex: Int = Int.MAX_VALUE
+        fun inspectChild(index: Int): Boolean {
+            val child: View = getChildAt(index) ?: return false
             val distance: Int = abs(decoratedCenterY(child) - centerY)
-            val shouldKeepCurrentCenter: Boolean = distance == closestDistance &&
-                getPosition(child) == preferredPosition &&
-                closestView?.let(::getPosition) != preferredPosition
-            if (distance < closestDistance || shouldKeepCurrentCenter) {
+            val candidateIsPreferred: Boolean = preferredPosition != RecyclerView.NO_POSITION &&
+                getPosition(child) == preferredPosition
+            val closestIsPreferred: Boolean = preferredPosition != RecyclerView.NO_POSITION &&
+                closestView?.let(::getPosition) == preferredPosition
+            val shouldReplaceClosest: Boolean = distance < closestDistance ||
+                distance == closestDistance && when {
+                    candidateIsPreferred != closestIsPreferred -> candidateIsPreferred
+                    else -> index < closestIndex
+                }
+            if (shouldReplaceClosest) {
                 closestView = child
                 closestDistance = distance
+                closestIndex = index
             }
+            return distance == 0 && candidateIsPreferred
+        }
+
+        if (inspectChild(middleIndex)) {
+            return closestView
+        }
+        var distanceFromMiddle: Int = 1
+        while (middleIndex - distanceFromMiddle >= 0 || middleIndex + distanceFromMiddle < childCount) {
+            val beforeIndex: Int = middleIndex - distanceFromMiddle
+            if (beforeIndex >= 0 && inspectChild(beforeIndex)) {
+                return closestView
+            }
+            val afterIndex: Int = middleIndex + distanceFromMiddle
+            if (afterIndex < childCount && inspectChild(afterIndex)) {
+                return closestView
+            }
+            distanceFromMiddle += 1
         }
         return closestView
     }
