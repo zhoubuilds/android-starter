@@ -434,8 +434,10 @@ class WheelLayoutManager(
         findCenterChild()?.let(::getPosition) ?: RecyclerView.NO_POSITION
 
     /**
-     * 设置中心条目 position 变化监听器, null 表示移除;
-     * 没有中心条目时通知 [RecyclerView.NO_POSITION].
+     * 设置实时中心条目 position 变化监听器, null 表示移除.
+     *
+     * 滚动、fling、布局或吸附期间, 最近中心 position 变化后立即通知, 不等待 RecyclerView idle 或吸附完成;
+     * position 不变时不重复通知, 没有中心条目时通知 [RecyclerView.NO_POSITION].
      */
     fun setOnCenterYPositionChangeListener(listener: OnCenterYPositionChangeListener?) {
         onCenterYPositionChangeListener = listener
@@ -896,8 +898,9 @@ class WheelLayoutManager(
     }
 
     /**
-     * 中心位置的 Adapter position 发生变化后的通知,
-     * 没有中心条目时 position 为 [RecyclerView.NO_POSITION].
+     * 最近中心位置的 Adapter position 实时发生变化后的通知.
+     *
+     * 通知不等待 RecyclerView idle 或吸附完成; 没有中心条目时 position 为 [RecyclerView.NO_POSITION].
      */
     fun interface OnCenterYPositionChangeListener {
         fun onCenterYPositionChanged(position: Int)

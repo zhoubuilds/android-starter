@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-20      | whisper | 补齐滚轮实时中心和无障碍动作回归  |
+| 2026-10-20      | whisper | 明确滚轮实时中心通知维护约束      |
 | 2026-10-20      | whisper | 补充滚轮空数据中心状态约束        |
 | 2026-10-19      | whisper | 统一滚轮滚动指标及方向边界约束    |
 | 2026-10-19      | whisper | 补充滚轮模式及平滑滚动目标校验约束 |
@@ -647,7 +649,9 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
    pre-layout 不得覆盖有效锚点, 空布局应清除已经失去 child 参照的基准. 平滑滚动目标已经附着且中心距离为 0 时仍须确认
    其 position, 并复用中心变化去重逻辑.
 6. `scrollToPosition()` 和 `smoothScrollToPosition()` 的目标语义均为将对应 Adapter position 移动到 RecyclerView 中心.
-7. 中心变化监听器只提供 Adapter position, 数据解释继续由 Adapter 或调用方负责. 非空数据变为空时必须通过相同的中心变化
+7. 中心变化监听器表示实时最近中心 Adapter position. 拖动、fling、程序滚动、布局或吸附过程中, position 变化后必须
+   同步通知, position 不变时不得重复通知; 不得改成只在 RecyclerView idle 或吸附完成后通知. LayoutManager 不提供独立的
+   最终选择语义, 数据解释、实时联动及滚动停止后的业务提交策略由调用方负责. 非空数据变为空时必须通过相同的中心变化
    去重入口通知 `RecyclerView.NO_POSITION`, 使监听状态与 `findCenterChildPosition()` 一致; 重复空布局不得重复通知.
    空布局不得因此消费待数据恢复的显式滚动目标或恢复锚点. 调用方必须把 `RecyclerView.NO_POSITION` 作为合法空状态处理.
 8. `WheelSnapHelper` 是停止后居中的配套类型; `WheelSmoothScroller` 只服务 LayoutManager, 不扩大为独立公开 API.
@@ -826,6 +830,9 @@ item 尺寸变化后的循环能力重算, 以及对称/非对称 padding、奇�
 同时覆盖 `EXACTLY` 和会触发多次布局 pass 的 `AT_MOST` 测量; 全零高度 item 应覆盖平滑目标确认及相同目标不重复通知.
 测试还应断言 LayoutManager 不声明预测动画能力, 并在默认 ItemAnimator 非空时覆盖结构更新后的最终中心、循环状态和
 已挂载 position 唯一性; 不把屏幕外 appearing/disappearing 条目的预测移动轨迹作为当前组件契约.
+中心监听器测试应覆盖跨多个条目滚动时按实时中心 position 依次通知, 以及中心 position 不变时不重复通知.
+无障碍滚动测试应通过 RecyclerView 的 `ACTION_SCROLL_FORWARD` 和 `ACTION_SCROLL_BACKWARD` 真实动作入口,
+覆盖有界模式首尾动作可用性和循环模式双向动作, 不得只根据滚动指标推断动作结果.
 状态恢复测试应覆盖精确居中、非零中心 offset 的 Parcel 往返、容器尺寸和 padding 变化、空 Adapter 延迟数据、显式滚动
 覆盖恢复状态、数据缩短后的越界锚点及 item 尺寸变化后的 offset 可见性退化, 包括零高度锚点; 显式和恢复目标越界时都不得
 通过循环取模落到其它 position. 测试还应断言 `SavedState` 编译为 JVM public 类, 避免 Robolectric Parcel 跳过平台反射

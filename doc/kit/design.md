@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                   |
 |-----------------|---------|----------------------------|
+| 2026-10-20      | whisper | 明确滚轮实时中心通知语义   |
 | 2026-10-20      | whisper | 明确滚轮空数据中心失效语义 |
 | 2026-10-19      | whisper | 统一滚轮滚动指标及循环相对语义 |
 | 2026-10-19      | whisper | 明确滚轮模式及程序滚动目标边界 |
@@ -157,6 +158,10 @@ SmoothScroller 不再各自维护中心公式. 容器尺寸或 padding 变化时
 多个 item 中心同距时优先保留当前中心 position, 否则按当前视觉布局顺序选择; 平滑滚动到零距离目标时仍确认目标 position.
 非空数据变为空时, 已提交的中心 position 失效为 `RecyclerView.NO_POSITION` 并按中心变化通知调用方; 重复空布局不重复通知.
 空数据只清理已失去 child 依据的中心状态, 不消费仍待数据恢复的显式滚动目标或 LayoutManager 恢复锚点.
+中心 position 通知表示当前时刻距离内容中心最近的真实 Adapter position. 拖动、fling、程序滚动、布局和吸附过程中,
+只要最近中心 position 变化就同步通知, 不等待 RecyclerView idle 或吸附完成; position 不变时不重复通知.
+这是供实时高亮、实时级联等调用方组合的通用能力. 是否在滚动停止后另行确认或提交最终业务值由调用方决定,
+不属于 LayoutManager 的选择语义.
 滚轮明确不参与 RecyclerView predictive item animations, 避免对未实现的 pre-layout、appearing 和 disappearing child
 几何作出错误承诺. 默认 ItemAnimator 及标准粒度更新仍可执行普通的 add、remove、move 和 change 动画; 缺少更新前后
 双端布局位置的条目使用普通出现或消失动画, 不提供从推断出的屏幕外位置进入或离开的轨迹.

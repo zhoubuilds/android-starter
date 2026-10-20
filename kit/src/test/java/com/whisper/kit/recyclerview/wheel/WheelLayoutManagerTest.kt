@@ -7,11 +7,13 @@ import android.os.Parcel
 import android.os.Parcelable
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.recyclerview.widget.RecyclerView
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
@@ -88,6 +90,118 @@ class WheelLayoutManagerTest {
         layoutManager.setOnCenterYPositionChangeListener(null)
 
         assertNotNull(listener)
+    }
+
+    @Test
+    fun centerListener_whenScrollingAcrossItems_notifiesChangedCentersWithoutDuplicates() {
+        val fixture: Fixture = createFixture(itemCount = 20)
+        val centerChanges: MutableList<Int> = mutableListOf()
+        fixture.layoutManager.setOnCenterYPositionChangeListener(centerChanges::add)
+
+        repeat(3) {
+            fixture.recyclerView.scrollBy(0, ITEM_HEIGHT)
+        }
+        fixture.recyclerView.scrollBy(0, ITEM_HEIGHT / 2)
+
+        assertEquals(listOf(1, 2, 3), centerChanges)
+
+        fixture.recyclerView.scrollBy(0, ITEM_HEIGHT / 2)
+
+        assertEquals(listOf(1, 2, 3, 4), centerChanges)
+    }
+
+    @Test
+    fun accessibilityScrollActions_atBoundedEdges_followScrollableRange() {
+        val fixture: Fixture = createFixture(
+            itemCount = 20,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+        val activityController = Robolectric.buildActivity(Activity::class.java).setup()
+        try {
+            activityController.get().setContentView(fixture.recyclerView)
+            layout(fixture)
+
+            assertFalse(fixture.recyclerView.canScrollVertically(-1))
+            assertFalse(
+                fixture.recyclerView.performAccessibilityAction(
+                    AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD,
+                    null,
+                ),
+            )
+            assertTrue(fixture.recyclerView.canScrollVertically(1))
+            assertTrue(
+                fixture.recyclerView.performAccessibilityAction(
+                    AccessibilityNodeInfo.ACTION_SCROLL_FORWARD,
+                    null,
+                ),
+            )
+            shadowOf(Looper.getMainLooper()).idleFor(5L, TimeUnit.SECONDS)
+            assertTrue(fixture.layoutManager.findCenterChildPosition() > 0)
+
+            fixture.recyclerView.scrollBy(0, 10_000)
+            assertFalse(fixture.recyclerView.canScrollVertically(1))
+            assertFalse(
+                fixture.recyclerView.performAccessibilityAction(
+                    AccessibilityNodeInfo.ACTION_SCROLL_FORWARD,
+                    null,
+                ),
+            )
+            assertTrue(fixture.recyclerView.canScrollVertically(-1))
+            assertTrue(
+                fixture.recyclerView.performAccessibilityAction(
+                    AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD,
+                    null,
+                ),
+            )
+            shadowOf(Looper.getMainLooper()).idleFor(5L, TimeUnit.SECONDS)
+            assertTrue(fixture.layoutManager.findCenterChildPosition() < fixture.adapter.itemCount - 1)
+        } finally {
+            activityController.close()
+        }
+    }
+
+    @Test
+    fun accessibilityScrollActions_inLoopingMode_keepBothDirectionsAvailable() {
+        val fixture: Fixture = createFixture(
+            itemCount = 20,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_UNLIMITED,
+        )
+        val activityController = Robolectric.buildActivity(Activity::class.java).setup()
+        try {
+            activityController.get().setContentView(fixture.recyclerView)
+            layout(fixture)
+            val initialCenterPosition: Int = fixture.layoutManager.findCenterChildPosition()
+
+            assertTrue(fixture.layoutManager.isLoopingActive)
+            assertTrue(fixture.recyclerView.canScrollVertically(-1))
+            assertTrue(fixture.recyclerView.canScrollVertically(1))
+            assertTrue(
+                fixture.recyclerView.performAccessibilityAction(
+                    AccessibilityNodeInfo.ACTION_SCROLL_FORWARD,
+                    null,
+                ),
+            )
+            shadowOf(Looper.getMainLooper()).idleFor(5L, TimeUnit.SECONDS)
+
+            val forwardCenterPosition: Int = fixture.layoutManager.findCenterChildPosition()
+            assertNotEquals(initialCenterPosition, forwardCenterPosition)
+            assertTrue(fixture.recyclerView.canScrollVertically(-1))
+            assertTrue(fixture.recyclerView.canScrollVertically(1))
+            assertUniqueAttachedPositions(fixture)
+            assertTrue(
+                fixture.recyclerView.performAccessibilityAction(
+                    AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD,
+                    null,
+                ),
+            )
+            shadowOf(Looper.getMainLooper()).idleFor(5L, TimeUnit.SECONDS)
+
+            assertNotEquals(forwardCenterPosition, fixture.layoutManager.findCenterChildPosition())
+            assertTrue(fixture.layoutManager.isLoopingActive)
+            assertUniqueAttachedPositions(fixture)
+        } finally {
+            activityController.close()
+        }
     }
 
     @Test
