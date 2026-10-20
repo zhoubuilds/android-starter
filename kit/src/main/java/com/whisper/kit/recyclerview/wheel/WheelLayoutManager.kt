@@ -1,6 +1,8 @@
 package com.whisper.kit.recyclerview.wheel
 
 import android.graphics.PointF
+import android.os.Handler
+import android.os.Looper
 import android.os.Parcel
 import android.os.Parcelable
 import android.view.View
@@ -56,6 +58,25 @@ class WheelLayoutManager(
         private set
 
     /**
+     * 循环填充退化后, 当前循环 child 顺序是否仍在等待有界重布局替换.
+     */
+    private var isLoopingFallbackLayoutPending: Boolean = false
+
+    /**
+     * 将滚动期间被 RecyclerView 拦截的循环退化重布局投递到当前滚动之后.
+     */
+    private val loopingFallbackLayoutHandler: Handler = Handler(Looper.getMainLooper())
+
+    /**
+     * 仅在循环退化仍等待有界重布局时重新发起布局请求.
+     */
+    private val loopingFallbackLayoutAction: Runnable = Runnable {
+        if (isLoopingFallbackLayoutPending) {
+            requestLayout()
+        }
+    }
+
+    /**
      * RecyclerView 扣除纵向 padding 后的内容中心坐标.
      */
     private val contentCenterY: Int
@@ -95,6 +116,8 @@ class WheelLayoutManager(
         if (itemCount <= 0) {
             detachAndScrapAttachedViews(recycler)
             isLoopingActive = false
+            isLoopingFallbackLayoutPending = false
+            loopingFallbackLayoutHandler.removeCallbacks(loopingFallbackLayoutAction)
             lastLayoutPassContentCenterY = null
             verticalOrientationHelper.onLayoutComplete()
             return
@@ -153,6 +176,8 @@ class WheelLayoutManager(
                 isRestoringSavedState = isRestoringSavedState,
             )
         }
+        isLoopingFallbackLayoutPending = false
+        loopingFallbackLayoutHandler.removeCallbacks(loopingFallbackLayoutAction)
         checkIfCenterYPositionChanged(
             findCenterChild(contentCenterY, centerAdapterPosition)?.let(::getPosition)
                 ?: RecyclerView.NO_POSITION,
@@ -230,7 +255,7 @@ class WheelLayoutManager(
         recycler: RecyclerView.Recycler,
         state: RecyclerView.State,
     ): Int {
-        if (dy == 0 || childCount == 0) {
+        if (dy == 0 || childCount == 0 || isLoopingFallbackLayoutPending) {
             return 0
         }
         val maximumLoopingStep: Int = maxOf(1, verticalOrientationHelper.totalSpace / 2)
@@ -312,50 +337,14 @@ class WheelLayoutManager(
      */
     override fun supportsPredictiveItemAnimations(): Boolean = false
 
-    override fun computeVerticalScrollExtent(state: RecyclerView.State): Int {
-        if (childCount == 0) {
-            return 0
-        }
-        val firstView: View = getChildAt(0) ?: return 0
-        val lastView: View = getChildAt(childCount - 1) ?: return 0
-        val top: Int = maxOf(
-            verticalOrientationHelper.startAfterPadding,
-            verticalOrientationHelper.getDecoratedStart(firstView),
-        )
-        val bottom: Int = minOf(
-            verticalOrientationHelper.endAfterPadding,
-            verticalOrientationHelper.getDecoratedEnd(lastView),
-        )
-        return bottom - top
-    }
+    override fun computeVerticalScrollExtent(state: RecyclerView.State): Int =
+        computeVerticalScrollMetric(state, VerticalScrollMetric.EXTENT)
 
-    override fun computeVerticalScrollRange(state: RecyclerView.State): Int {
-        if (childCount == 0) {
-            return 0
-        }
-        val firstView: View = getChildAt(0) ?: return 0
-        val lastView: View = getChildAt(childCount - 1) ?: return 0
-        val laidOutRange: Int =
-            verticalOrientationHelper.getDecoratedEnd(lastView) -
-                verticalOrientationHelper.getDecoratedStart(firstView)
-        return laidOutRange / childCount * itemCount
-    }
+    override fun computeVerticalScrollRange(state: RecyclerView.State): Int =
+        computeVerticalScrollMetric(state, VerticalScrollMetric.RANGE)
 
-    override fun computeVerticalScrollOffset(state: RecyclerView.State): Int {
-        if (childCount == 0) {
-            return 0
-        }
-        val centerYView: View = findCenterChild() ?: return 0
-        val centerYPosition: Int = getPosition(centerYView)
-        val firstView: View = getChildAt(0) ?: return 0
-        val lastView: View = getChildAt(childCount - 1) ?: return 0
-        val laidOutRange: Int =
-            verticalOrientationHelper.getDecoratedEnd(lastView) -
-                verticalOrientationHelper.getDecoratedStart(firstView)
-        val averageHeight: Int = laidOutRange / childCount
-        return centerYPosition * averageHeight -
-            (verticalOrientationHelper.getDecoratedEnd(centerYView) - contentCenterY)
-    }
+    override fun computeVerticalScrollOffset(state: RecyclerView.State): Int =
+        computeVerticalScrollMetric(state, VerticalScrollMetric.OFFSET)
 
     /**
      * 将目标 Adapter position 平滑滚动到内容中心.
@@ -470,6 +459,142 @@ class WheelLayoutManager(
         verticalOrientationHelper.getDecoratedStart(view) +
             verticalOrientationHelper.getDecoratedMeasurement(view) / 2
 
+    private fun computeVerticalScrollMetric(
+        state: RecyclerView.State,
+        metric: VerticalScrollMetric,
+    ): Int {
+        val viewportExtent: Int = verticalOrientationHelper.totalSpace.coerceAtLeast(0)
+        if (childCount == 0 || state.itemCount <= 0 || viewportExtent == 0) {
+            return 0
+        }
+        if (isLoopingActive || isLoopingFallbackLayoutPending) {
+            return computeLoopingVerticalScrollMetric(viewportExtent, metric)
+        }
+        var startView: View? = null
+        var startPosition: Int = Int.MAX_VALUE
+        var endView: View? = null
+        var endPosition: Int = RecyclerView.NO_POSITION
+        for (index: Int in 0 until childCount) {
+            val child: View = getChildAt(index) ?: continue
+            val position: Int = getPosition(child)
+            if (position !in 0 until state.itemCount) {
+                continue
+            }
+            if (position < startPosition) {
+                startView = child
+                startPosition = position
+            }
+            if (position > endPosition) {
+                endView = child
+                endPosition = position
+            }
+        }
+        val validStartView: View = startView ?: return metric.resolve(
+            offset = 0,
+            extent = viewportExtent,
+            range = viewportExtent,
+        )
+        val validEndView: View = endView ?: return metric.resolve(
+            offset = 0,
+            extent = viewportExtent,
+            range = viewportExtent,
+        )
+        val startCenterY: Int = decoratedCenterY(validStartView)
+        val endCenterY: Int = decoratedCenterY(validEndView)
+        val canScrollBackward: Boolean = startPosition > 0 ||
+            startCenterY < contentCenterY
+        val canScrollForward: Boolean = endPosition < state.itemCount - 1 ||
+            endCenterY > contentCenterY
+        if (!canScrollBackward && !canScrollForward) {
+            return metric.resolve(
+                offset = 0,
+                extent = viewportExtent,
+                range = viewportExtent,
+            )
+        }
+
+        val averageCenterDistance: Double = estimateAverageCenterDistance(
+            startView = validStartView,
+            startPosition = startPosition,
+            endPosition = endPosition,
+            startCenterY = startCenterY,
+            endCenterY = endCenterY,
+        )
+        val extent: Int = minOf(
+            viewportExtent,
+            Int.MAX_VALUE - MIN_BIDIRECTIONAL_METRIC_SPAN,
+        )
+        val maximumTerminalOffset: Int = Int.MAX_VALUE - extent
+        val estimatedMaximumOffset: Long = (
+            averageCenterDistance * (state.itemCount - 1).toDouble()
+            ).toLongInRange(0L, maximumTerminalOffset.toLong() - 1L)
+        val minimumTerminalOffset: Int = if (canScrollBackward && canScrollForward) {
+            MIN_BIDIRECTIONAL_METRIC_SPAN
+        } else {
+            MIN_SCROLLABLE_METRIC_SPAN
+        }
+        val terminalOffset: Int = maxOf(
+            estimatedMaximumOffset + 1L,
+            minimumTerminalOffset.toLong(),
+        ).coerceAtMost(maximumTerminalOffset.toLong()).toInt()
+        val estimatedOffset: Long = (
+            startPosition.toDouble() * averageCenterDistance +
+                contentCenterY.toDouble() - startCenterY.toDouble()
+            ).toLongInRange(0L, terminalOffset.toLong())
+        val offset: Int = when {
+            !canScrollBackward -> 0
+            !canScrollForward -> terminalOffset
+            else -> estimatedOffset.coerceIn(
+                1L,
+                terminalOffset.toLong() - 2L,
+            ).toInt()
+        }
+        return metric.resolve(
+            offset = offset,
+            extent = extent,
+            range = extent + terminalOffset,
+        )
+    }
+
+    private fun computeLoopingVerticalScrollMetric(
+        viewportExtent: Int,
+        metric: VerticalScrollMetric,
+    ): Int {
+        val extent: Int = minOf(
+            viewportExtent,
+            Int.MAX_VALUE - MIN_BIDIRECTIONAL_METRIC_SPAN,
+        )
+        val maximumMetricSpan: Long = Int.MAX_VALUE.toLong() - extent.toLong()
+        val metricSpan: Int = maxOf(
+            MIN_BIDIRECTIONAL_METRIC_SPAN.toLong(),
+            extent.toLong() * LOOPING_METRIC_EXTENT_MULTIPLIER,
+        ).coerceAtMost(maximumMetricSpan).toInt()
+        return metric.resolve(
+            offset = metricSpan / 2,
+            extent = extent,
+            range = extent + metricSpan,
+        )
+    }
+
+    private fun estimateAverageCenterDistance(
+        startView: View,
+        startPosition: Int,
+        endPosition: Int,
+        startCenterY: Int,
+        endCenterY: Int,
+    ): Double {
+        val positionSpan: Int = endPosition - startPosition
+        if (positionSpan <= 0) {
+            return verticalOrientationHelper.getDecoratedMeasurement(
+                startView,
+            ).coerceAtLeast(0).toDouble()
+        }
+        val laidOutCenterDistance: Long = abs(
+            endCenterY.toLong() - startCenterY.toLong(),
+        )
+        return laidOutCenterDistance.toDouble() / positionSpan.toDouble()
+    }
+
     private fun fill(dy: Int, recycler: RecyclerView.Recycler): Int = when {
         dy > 0 -> fillEnd(dy, recycler)
         dy < 0 -> fillStart(dy, recycler)
@@ -581,7 +706,8 @@ class WheelLayoutManager(
             return
         }
         isLoopingActive = false
-        requestLayout()
+        isLoopingFallbackLayoutPending = true
+        loopingFallbackLayoutHandler.post(loopingFallbackLayoutAction)
     }
 
     private fun recycleStartBeforeScroll(dy: Int, recycler: RecyclerView.Recycler) {
@@ -814,3 +940,33 @@ class WheelLayoutManager(
 
 private const val LAYOUT_START: Int = -1
 private const val LAYOUT_END: Int = 1
+private const val MIN_SCROLLABLE_METRIC_SPAN: Int = 2
+private const val MIN_BIDIRECTIONAL_METRIC_SPAN: Int = 3
+private const val LOOPING_METRIC_EXTENT_MULTIPLIER: Long = 2L
+
+/**
+ * RecyclerView 请求的纵向滚动指标类型.
+ */
+private enum class VerticalScrollMetric {
+    OFFSET,
+    EXTENT,
+    RANGE,
+}
+
+/**
+ * 从一次同源计算中返回指定的 RecyclerView 纵向滚动指标.
+ */
+private fun VerticalScrollMetric.resolve(offset: Int, extent: Int, range: Int): Int = when (this) {
+    VerticalScrollMetric.OFFSET -> offset
+    VerticalScrollMetric.EXTENT -> extent
+    VerticalScrollMetric.RANGE -> range
+}
+
+/**
+ * 将浮点估算结果四舍五入并限制在可表示的指标范围内.
+ */
+private fun Double.toLongInRange(minimum: Long, maximum: Long): Long = when {
+    isNaN() || this <= minimum.toDouble() -> minimum
+    this >= maximum.toDouble() -> maximum
+    else -> kotlin.math.round(this).toLong()
+}

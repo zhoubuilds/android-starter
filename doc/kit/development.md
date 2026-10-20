@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-19      | whisper | 统一滚轮滚动指标及方向边界约束    |
 | 2026-10-19      | whisper | 补充滚轮模式及平滑滚动目标校验约束 |
 | 2026-10-19      | whisper | 增加滚轮状态恢复及中心锚点位置、可见性校验约束 |
 | 2026-10-19      | whisper | 关闭滚轮预测布局并明确普通动画契约 |
@@ -663,6 +664,14 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
     程序滚动目标始终是 `0 until Adapter.itemCount` 内的真实 position, 循环模式不得把越界目标作为虚拟 position 或取模.
     平滑滚动的负目标立即失败; 空 Adapter 不启动平滑滚动; 超过上界的目标先收敛到当前 Adapter 末项, 再按实际
     `isLoopingActive` 选择方向. `computeScrollVectorForPosition()` 不得对非法目标计算方向.
+13. `computeVerticalScrollOffset()`、`computeVerticalScrollExtent()` 和 `computeVerticalScrollRange()` 必须读取同一指标结果.
+    有界模式以扣除 padding 后的完整内容高度作为 extent, 以首项中心到末项中心的估算距离作为可滚动区间;
+    非等高条目允许像 AndroidX 平滑滚动条一样根据当前有效 child 估算总距离, 但首项和末项方向边界必须按真实 position
+    及 decorated-with-margins 中心精确收敛. 指标必须非负、同单位且使用宽类型中间值避免溢出.
+    `isLoopingActive` 为 true 时使用跨 Adapter 接缝不变的相对中间态, 保证两个方向持续可滚, 不将 position 映射为不存在的
+    绝对循环进度. 运行中退化后到下一次非 pre-layout 完成前, attached child 仍可能保持循环顺序, 该窗口继续使用循环
+    相对指标; 退化重布局必须投递到当前 RecyclerView 滚动调用结束后, 避免请求被滚动期的 layout interception 丢弃,
+    并且不得继续消费滚动或使用该循环顺序执行有界填充. 有界重布局完成后再切换为有界指标并恢复滚动.
 
 ## 8. RecyclerView ViewHolder
 

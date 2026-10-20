@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-19      | whisper | 说明滚轮滚动指标及循环滚动条语义  |
 | 2026-10-19      | whisper | 说明滚轮模式及程序滚动目标边界    |
 | 2026-10-19      | whisper | 说明滚轮状态恢复、锚点校验和异步数据配置 |
 | 2026-10-19      | whisper | 说明滚轮普通动画与预测动画边界    |
@@ -1052,6 +1053,13 @@ position 最多挂载一次即可覆盖布局窗口时启用首尾循环; 数据
 运行时修改容器尺寸或 padding 后, 当前逻辑中心会随新的内容中心移动, 尚未吸附完成的相对偏移也会保留.
 item 的 LayoutParams margin 与 ItemDecoration offset 会作为完整外边界参与测量、布局和吸附, 不会压缩 item 自身尺寸.
 多个零高度 item 同时位于中心时, `smoothScrollToPosition()` 仍会把指定目标确认为逻辑中心.
+有界模式的系统滚动指标按首项居中到末项居中的区间计算, 因而 `canScrollVertically(direction)` 会在真实首尾边界收敛;
+非等高条目的滚动条长度和位置与 `LinearLayoutManager` 的平滑滚动条一样, 根据当前已布局条目估算, 滚动过程中可能随
+样本变化. 实际循环模式没有绝对圈数, 系统滚动指标固定在可双向滚动的相对中间态, 跨首尾时不会跳到起点;
+此时滚动条不表示全局进度, 不需要视觉滚动条的滚轮应由界面配置关闭. 请求循环但自动退化时仍显示有界进度和边界.
+如果退化发生在一次滚动填充中, 当前 child 在下一次布局前仍保持循环顺序, 该短暂窗口会延续循环相对指标;
+该窗口不再消费新的滚动位移, 有界重布局完成后再恢复滚动并切换为真实有界进度和方向,
+避免过渡期间错误报告两个方向都不可滚或重复挂载同一 position.
 
 `WheelLayoutManager` 不支持 RecyclerView predictive item animations, 但不会关闭 RecyclerView 的 ItemAnimator.
 使用 `notifyItemInserted()`、`notifyItemRemoved()`、`notifyItemMoved()`、`notifyItemChanged()` 或对应 range API 时,

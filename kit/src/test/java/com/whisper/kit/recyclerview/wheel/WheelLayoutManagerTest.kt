@@ -345,6 +345,175 @@ class WheelLayoutManagerTest {
     }
 
     @Test
+    fun boundedScrollMetrics_atFirstPosition_reportOnlyForwardScrolling() {
+        val fixture: Fixture = createFixture(
+            itemCount = 20,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+
+        assertEquals(0, fixture.recyclerView.computeVerticalScrollOffset())
+        assertEquals(400, fixture.recyclerView.computeVerticalScrollExtent())
+        assertScrollMetricsValid(fixture)
+        assertFalse(fixture.recyclerView.canScrollVertically(-1))
+        assertTrue(fixture.recyclerView.canScrollVertically(1))
+
+        fixture.recyclerView.scrollBy(0, 1)
+
+        assertTrue(fixture.recyclerView.canScrollVertically(-1))
+        assertTrue(fixture.recyclerView.canScrollVertically(1))
+    }
+
+    @Test
+    fun boundedScrollMetrics_beforeLastPosition_keepBothDirectionsScrollable() {
+        val fixture: Fixture = createFixture(
+            itemCount = 20,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+
+        fixture.layoutManager.scrollToPosition(18)
+        layout(fixture)
+
+        assertScrollMetricsValid(fixture)
+        assertTrue(fixture.recyclerView.canScrollVertically(-1))
+        assertTrue(fixture.recyclerView.canScrollVertically(1))
+    }
+
+    @Test
+    fun boundedScrollMetrics_atLastPosition_reportOnlyBackwardScrolling() {
+        val fixture: Fixture = createFixture(
+            itemCount = 20,
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+        )
+
+        fixture.layoutManager.scrollToPosition(19)
+        layout(fixture)
+
+        assertScrollMetricsValid(fixture)
+        assertTrue(fixture.recyclerView.canScrollVertically(-1))
+        assertFalse(fixture.recyclerView.canScrollVertically(1))
+
+        fixture.recyclerView.scrollBy(0, -1)
+
+        assertTrue(fixture.recyclerView.canScrollVertically(-1))
+        assertTrue(fixture.recyclerView.canScrollVertically(1))
+    }
+
+    @Test
+    fun loopingScrollMetrics_acrossAdapterSeam_remainStableAndScrollable() {
+        val fixture: Fixture = createFixture(itemCount = 20)
+        fixture.layoutManager.scrollToPosition(19)
+        layout(fixture)
+        assertTrue(fixture.layoutManager.isLoopingActive)
+        val metricsBeforeSeam: IntArray = verticalScrollMetrics(fixture)
+
+        fixture.recyclerView.scrollBy(0, ITEM_HEIGHT)
+
+        assertEquals(0, fixture.layoutManager.findCenterChildPosition())
+        assertArrayEquals(metricsBeforeSeam, verticalScrollMetrics(fixture))
+        assertScrollMetricsValid(fixture)
+        assertTrue(fixture.recyclerView.canScrollVertically(-1))
+        assertTrue(fixture.recyclerView.canScrollVertically(1))
+    }
+
+    @Test
+    fun requestedLoopingScrollMetrics_afterFallback_useBoundedEdges() {
+        val fixture: Fixture = createFixture(itemCount = 3)
+        assertFalse(fixture.layoutManager.isLoopingActive)
+
+        assertEquals(0, fixture.recyclerView.computeVerticalScrollOffset())
+        assertScrollMetricsValid(fixture)
+        assertFalse(fixture.recyclerView.canScrollVertically(-1))
+        assertTrue(fixture.recyclerView.canScrollVertically(1))
+
+        fixture.layoutManager.scrollToPosition(2)
+        layout(fixture)
+
+        assertScrollMetricsValid(fixture)
+        assertTrue(fixture.recyclerView.canScrollVertically(-1))
+        assertFalse(fixture.recyclerView.canScrollVertically(1))
+    }
+
+    @Test
+    fun loopingScrollMetrics_duringRuntimeFallback_remainStableUntilBoundedRelayout() {
+        val fixture: Fixture = createFixture(
+            itemHeights = listOf(111, 22),
+            layoutHeight = 87,
+        )
+        assertTrue(fixture.layoutManager.isLoopingActive)
+        val loopingMetrics: IntArray = verticalScrollMetrics(fixture)
+
+        fixture.recyclerView.scrollBy(0, -34)
+        assertTrue(fixture.layoutManager.isLoopingActive)
+        fixture.recyclerView.scrollBy(0, -43)
+
+        assertFalse(fixture.layoutManager.isLoopingActive)
+        assertEquals(1, fixture.layoutManager.findCenterChildPosition())
+        assertArrayEquals(loopingMetrics, verticalScrollMetrics(fixture))
+        assertTrue(fixture.recyclerView.canScrollVertically(-1))
+        assertTrue(fixture.recyclerView.canScrollVertically(1))
+        val pendingLayoutPositions: List<Int> = attachedPositions(fixture)
+
+        fixture.recyclerView.scrollBy(0, -1)
+
+        assertEquals(pendingLayoutPositions, attachedPositions(fixture))
+        assertUniqueAttachedPositions(fixture)
+        assertEquals(1, fixture.layoutManager.findCenterChildPosition())
+        assertArrayEquals(loopingMetrics, verticalScrollMetrics(fixture))
+
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(fixture.recyclerView.isLayoutRequested)
+        layout(fixture)
+
+        assertFalse(fixture.layoutManager.isLoopingActive)
+        assertEquals(1, fixture.layoutManager.findCenterChildPosition())
+        assertScrollMetricsValid(fixture)
+        assertTrue(fixture.recyclerView.canScrollVertically(-1))
+        assertFalse(fixture.recyclerView.canScrollVertically(1))
+    }
+
+    @Test
+    fun boundedScrollMetrics_withMixedItemGeometry_preserveEdgesAndNonNegativeValues() {
+        val fixture: Fixture = createFixture(
+            itemHeights = listOf(0, 20, 0, 60, 40, 0, 80, 0),
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            padding = Rect(0, 20, 0, 40),
+            itemMargins = Rect(0, 3, 0, 7),
+            decorationOffsets = Rect(0, 5, 0, 11),
+        )
+
+        assertEquals(340, fixture.recyclerView.computeVerticalScrollExtent())
+        assertEquals(0, fixture.recyclerView.computeVerticalScrollOffset())
+        assertScrollMetricsValid(fixture)
+        assertFalse(fixture.recyclerView.canScrollVertically(-1))
+        assertTrue(fixture.recyclerView.canScrollVertically(1))
+
+        fixture.layoutManager.scrollToPosition(7)
+        layout(fixture)
+
+        assertScrollMetricsValid(fixture)
+        assertTrue(fixture.recyclerView.canScrollVertically(-1))
+        assertFalse(fixture.recyclerView.canScrollVertically(1))
+    }
+
+    @Test
+    fun boundedScrollMetrics_withNoScrollableDistance_reportNoDirection() {
+        listOf(
+            emptyList(),
+            listOf(ITEM_HEIGHT),
+            List(8) { 0 },
+        ).forEach { itemHeights: List<Int> ->
+            val fixture: Fixture = createFixture(
+                itemHeights = itemHeights,
+                scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            )
+
+            assertScrollMetricsValid(fixture)
+            assertFalse(fixture.recyclerView.canScrollVertically(-1))
+            assertFalse(fixture.recyclerView.canScrollVertically(1))
+        }
+    }
+
+    @Test
     fun stateRestore_preservesCenteredPosition() {
         val original: Fixture = createFixture(
             itemCount = 20,
@@ -1038,6 +1207,21 @@ class WheelLayoutManagerTest {
         (0 until fixture.layoutManager.childCount).map { index: Int ->
             fixture.layoutManager.getPosition(checkNotNull(fixture.layoutManager.getChildAt(index)))
         }
+
+    private fun verticalScrollMetrics(fixture: Fixture): IntArray = intArrayOf(
+        fixture.recyclerView.computeVerticalScrollOffset(),
+        fixture.recyclerView.computeVerticalScrollExtent(),
+        fixture.recyclerView.computeVerticalScrollRange(),
+    )
+
+    private fun assertScrollMetricsValid(fixture: Fixture) {
+        val (offset: Int, extent: Int, range: Int) = verticalScrollMetrics(fixture)
+
+        assertTrue(offset >= 0)
+        assertTrue(extent >= 0)
+        assertTrue(range >= extent)
+        assertTrue(offset <= range - extent)
+    }
 
     private fun assertUniqueAttachedPositions(fixture: Fixture) {
         val positions: List<Int> = attachedPositions(fixture)
