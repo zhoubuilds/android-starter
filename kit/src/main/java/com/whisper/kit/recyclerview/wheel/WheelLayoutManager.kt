@@ -260,27 +260,69 @@ class WheelLayoutManager(
             return 0
         }
         val maximumLoopingStep: Int = maxOf(1, verticalOrientationHelper.totalSpace / 2)
-        var remaining: Int = dy
-        var totalConsumed: Int = 0
-        while (remaining != 0) {
-            val requestedStep: Int = if (isLoopingActive) {
-                remaining.coerceIn(-maximumLoopingStep, maximumLoopingStep)
-            } else {
-                remaining
+        val cycleTracker: LoopCycleTracker? = if (
+            isLoopingActive &&
+            !state.hasTargetScrollPosition() &&
+            abs(dy.toLong()) > maximumLoopingStep.toLong()
+        ) {
+            getChildAt(childCount / 2)?.let { referenceView: View ->
+                val referencePosition: Int = getPosition(referenceView)
+                if (isValidAdapterPosition(referencePosition)) {
+                    LoopCycleTracker(
+                        referencePosition = referencePosition,
+                        referenceWorldCenter = decoratedCenterY(referenceView).toLong(),
+                    )
+                } else {
+                    null
+                }
             }
-            val consumedStep: Int = fill(requestedStep, recycler)
+        } else {
+            null
+        }
+        var remaining: Long = dy.toLong()
+        var totalConsumed: Long = 0L
+        while (remaining != 0L) {
+            val requestedStep: Int = if (isLoopingActive) {
+                remaining.coerceIn(
+                    -maximumLoopingStep.toLong(),
+                    maximumLoopingStep.toLong(),
+                ).toInt()
+            } else {
+                // Int.MIN_VALUE 无法安全取反传给 offsetChildren, 至多保留 1px 未消费.
+                remaining.coerceAtLeast(-Int.MAX_VALUE.toLong()).toInt()
+            }
+            val consumedStep: Int = fill(
+                dy = requestedStep,
+                recycler = recycler,
+                cycleTracker = cycleTracker,
+                totalConsumedBeforeStep = totalConsumed,
+            )
             if (consumedStep == 0) {
                 break
             }
             verticalOrientationHelper.offsetChildren(-consumedStep)
-            totalConsumed += consumedStep
-            remaining -= consumedStep
+            totalConsumed += consumedStep.toLong()
+            remaining -= consumedStep.toLong()
             if (consumedStep != requestedStep || !isLoopingActive) {
                 break
             }
+            val cycleSpan: Long = cycleTracker?.cycleSpan ?: 0L
+            if (cycleSpan > 0L) {
+                val completeCycleCount: Long = abs(remaining) / cycleSpan
+                if (completeCycleCount > 0L) {
+                    val absoluteSkippedDistance: Long = completeCycleCount * cycleSpan
+                    val skippedDistance: Long = if (remaining > 0L) {
+                        absoluteSkippedDistance
+                    } else {
+                        -absoluteSkippedDistance
+                    }
+                    totalConsumed += skippedDistance
+                    remaining -= skippedDistance
+                }
+            }
         }
         checkIfCenterYPositionChanged(findCenterChildPosition())
-        return totalConsumed
+        return totalConsumed.toInt()
     }
 
     override fun scrollToPosition(position: Int) {
@@ -629,13 +671,23 @@ class WheelLayoutManager(
         return laidOutCenterDistance.toDouble() / positionSpan.toDouble()
     }
 
-    private fun fill(dy: Int, recycler: RecyclerView.Recycler): Int = when {
-        dy > 0 -> fillEnd(dy, recycler)
-        dy < 0 -> fillStart(dy, recycler)
+    private fun fill(
+        dy: Int,
+        recycler: RecyclerView.Recycler,
+        cycleTracker: LoopCycleTracker?,
+        totalConsumedBeforeStep: Long,
+    ): Int = when {
+        dy > 0 -> fillEnd(dy, recycler, cycleTracker, totalConsumedBeforeStep)
+        dy < 0 -> fillStart(dy, recycler, cycleTracker, totalConsumedBeforeStep)
         else -> 0
     }
 
-    private fun fillEnd(dy: Int, recycler: RecyclerView.Recycler): Int {
+    private fun fillEnd(
+        dy: Int,
+        recycler: RecyclerView.Recycler,
+        cycleTracker: LoopCycleTracker?,
+        totalConsumedBeforeStep: Long,
+    ): Int {
         if (isLoopingActive) {
             recycleStartBeforeScroll(dy, recycler)
         }
@@ -646,9 +698,10 @@ class WheelLayoutManager(
         var position: Int = anchorPosition + 1
         var attemptedPositionCount: Int = 0
         var loopingFillBlocked: Boolean = false
+        val fillLimit: Long = verticalOrientationHelper.endAfterPadding.toLong() + dy.toLong()
         while (
             (isLoopingActive || position < itemCount) &&
-            offset < verticalOrientationHelper.endAfterPadding + dy
+            offset.toLong() < fillLimit
         ) {
             if (isLoopingActive && attemptedPositionCount >= itemCount) {
                 loopingFillBlocked = true
@@ -672,6 +725,11 @@ class WheelLayoutManager(
             layoutDecoratedWithMargins(view, left, top, right, bottom)
             offset = verticalOrientationHelper.getDecoratedEnd(view)
             lastCenterY = decoratedCenterY(view)
+            cycleTracker?.recordLaidOutChild(
+                position = adapterPosition,
+                centerY = lastCenterY,
+                totalConsumedBeforeStep = totalConsumedBeforeStep,
+            )
             recycleStart(offset, anchor, dy, recycler)
             position += 1
         }
@@ -681,11 +739,19 @@ class WheelLayoutManager(
         return if (isLoopingActive) {
             dy
         } else {
-            minOf(dy, lastCenterY - contentCenterY)
+            minOf(
+                dy.toLong(),
+                lastCenterY.toLong() - contentCenterY.toLong(),
+            ).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
         }
     }
 
-    private fun fillStart(dy: Int, recycler: RecyclerView.Recycler): Int {
+    private fun fillStart(
+        dy: Int,
+        recycler: RecyclerView.Recycler,
+        cycleTracker: LoopCycleTracker?,
+        totalConsumedBeforeStep: Long,
+    ): Int {
         if (isLoopingActive) {
             recycleEndBeforeScroll(dy, recycler)
         }
@@ -696,9 +762,10 @@ class WheelLayoutManager(
         var position: Int = anchorPosition - 1
         var attemptedPositionCount: Int = 0
         var loopingFillBlocked: Boolean = false
+        val fillLimit: Long = verticalOrientationHelper.startAfterPadding.toLong() + dy.toLong()
         while (
             (isLoopingActive || position >= 0) &&
-            offset > verticalOrientationHelper.startAfterPadding + dy
+            offset.toLong() > fillLimit
         ) {
             if (isLoopingActive && attemptedPositionCount >= itemCount) {
                 loopingFillBlocked = true
@@ -722,6 +789,11 @@ class WheelLayoutManager(
             layoutDecoratedWithMargins(view, left, top, right, bottom)
             offset = verticalOrientationHelper.getDecoratedStart(view)
             firstCenterY = decoratedCenterY(view)
+            cycleTracker?.recordLaidOutChild(
+                position = adapterPosition,
+                centerY = firstCenterY,
+                totalConsumedBeforeStep = totalConsumedBeforeStep,
+            )
             recycleEnd(offset, anchor, dy, recycler)
             position -= 1
         }
@@ -731,7 +803,10 @@ class WheelLayoutManager(
         return if (isLoopingActive) {
             dy
         } else {
-            maxOf(dy, firstCenterY - contentCenterY)
+            maxOf(
+                dy.toLong(),
+                firstCenterY.toLong() - contentCenterY.toLong(),
+            ).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
         }
     }
 
@@ -748,8 +823,8 @@ class WheelLayoutManager(
         while (childCount > 1) {
             val first: View = getChildAt(0) ?: return
             if (
-                verticalOrientationHelper.getDecoratedEnd(first) - dy <=
-                verticalOrientationHelper.startAfterPadding
+                verticalOrientationHelper.getDecoratedEnd(first).toLong() - dy.toLong() <=
+                verticalOrientationHelper.startAfterPadding.toLong()
             ) {
                 removeAndRecycleView(first, recycler)
             } else {
@@ -762,8 +837,8 @@ class WheelLayoutManager(
         while (childCount > 1) {
             val last: View = getChildAt(childCount - 1) ?: return
             if (
-                verticalOrientationHelper.getDecoratedStart(last) - dy >=
-                verticalOrientationHelper.endAfterPadding
+                verticalOrientationHelper.getDecoratedStart(last).toLong() - dy.toLong() >=
+                verticalOrientationHelper.endAfterPadding.toLong()
             ) {
                 removeAndRecycleView(last, recycler)
             } else {
@@ -778,12 +853,13 @@ class WheelLayoutManager(
         dy: Int,
         recycler: RecyclerView.Recycler,
     ) {
+        val anchorEnd: Long = verticalOrientationHelper.getDecoratedEnd(anchor).toLong()
+        val recycleDistance: Long = minOf(offset.toLong() - anchorEnd, dy.toLong())
+        val recycleLimit: Long = verticalOrientationHelper.startAfterPadding.toLong() + recycleDistance
         while (childCount > 0) {
             val first: View = getChildAt(0) ?: break
             if (
-                verticalOrientationHelper.getDecoratedEnd(first) <
-                verticalOrientationHelper.startAfterPadding +
-                minOf(offset - verticalOrientationHelper.getDecoratedEnd(anchor), dy)
+                verticalOrientationHelper.getDecoratedEnd(first).toLong() < recycleLimit
             ) {
                 removeAndRecycleView(first, recycler)
             } else {
@@ -798,12 +874,13 @@ class WheelLayoutManager(
         dy: Int,
         recycler: RecyclerView.Recycler,
     ) {
+        val anchorStart: Long = verticalOrientationHelper.getDecoratedStart(anchor).toLong()
+        val recycleDistance: Long = maxOf(offset.toLong() - anchorStart, dy.toLong())
+        val recycleLimit: Long = verticalOrientationHelper.endAfterPadding.toLong() + recycleDistance
         while (childCount > 0) {
             val last: View = getChildAt(childCount - 1) ?: break
             if (
-                verticalOrientationHelper.getDecoratedStart(last) >
-                verticalOrientationHelper.endAfterPadding +
-                maxOf(offset - verticalOrientationHelper.getDecoratedStart(anchor), dy)
+                verticalOrientationHelper.getDecoratedStart(last).toLong() > recycleLimit
             ) {
                 removeAndRecycleView(last, recycler)
             } else {
@@ -979,6 +1056,25 @@ private const val LAYOUT_END: Int = 1
 private const val MIN_SCROLLABLE_METRIC_SPAN: Int = 2
 private const val MIN_BIDIRECTIONAL_METRIC_SPAN: Int = 3
 private const val LOOPING_METRIC_EXTENT_MULTIPLIER: Long = 2L
+
+/**
+ * 在单次实际循环滚动中识别同一 Adapter position 相邻两次出现之间的像素跨度.
+ */
+private class LoopCycleTracker(
+    private val referencePosition: Int,
+    private val referenceWorldCenter: Long,
+) {
+    var cycleSpan: Long = 0L
+        private set
+
+    fun recordLaidOutChild(position: Int, centerY: Int, totalConsumedBeforeStep: Long) {
+        if (cycleSpan > 0L || position != referencePosition) {
+            return
+        }
+        val currentWorldCenter: Long = centerY.toLong() + totalConsumedBeforeStep
+        cycleSpan = abs(currentWorldCenter - referenceWorldCenter)
+    }
+}
 
 /**
  * RecyclerView 请求的纵向滚动指标类型.

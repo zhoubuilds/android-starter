@@ -1116,6 +1116,33 @@ class WheelLayoutManagerTest {
     }
 
     @Test
+    fun limitedLayout_withExtremeScrollDistances_reachesBothAdapterEdges() {
+        val fixture: Fixture = createFixture(
+            itemHeights = listOf(0, 20, 0, 60, 40, 0, 80, 0),
+            scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+            padding = Rect(0, 20, 0, 40),
+            itemMargins = Rect(0, 3, 0, 7),
+            decorationOffsets = Rect(0, 5, 0, 11),
+        )
+
+        fixture.recyclerView.scrollBy(0, Int.MAX_VALUE)
+
+        assertEquals(7, fixture.layoutManager.findCenterChildPosition())
+        assertEquals(
+            0,
+            fixture.layoutManager.distanceToCenter(checkNotNull(fixture.layoutManager.findCenterChild())),
+        )
+
+        fixture.recyclerView.scrollBy(0, Int.MIN_VALUE)
+
+        assertEquals(0, fixture.layoutManager.findCenterChildPosition())
+        assertEquals(
+            0,
+            fixture.layoutManager.distanceToCenter(checkNotNull(fixture.layoutManager.findCenterChild())),
+        )
+    }
+
+    @Test
     fun centerSelection_whenTwoChildrenAreEquidistant_keepsCurrentPosition() {
         val fixture: Fixture = createFixture(
             itemCount = 10,
@@ -1165,6 +1192,50 @@ class WheelLayoutManagerTest {
             fixture.recyclerView.scrollBy(0, -10_000)
             assertTrue(fixture.layoutManager.isLoopingActive)
             assertUniqueAttachedPositions(fixture)
+        }
+    }
+
+    @Test
+    fun unlimitedLayout_largeScroll_skipsRepeatedFullAdapterCycles() {
+        val itemHeights: List<Int> = listOf(0, 2, 3, 0, 4)
+        val margins = Rect(0, 1, 0, 1)
+        val decorationOffsets = Rect(0, 1, 0, 1)
+        val itemOuterInsets: Int = margins.top + margins.bottom +
+            decorationOffsets.top + decorationOffsets.bottom
+        val cycleSpan: Int = itemHeights.sumOf { itemHeight: Int -> itemHeight + itemOuterInsets }
+
+        listOf(10_000, -10_000, Int.MAX_VALUE, Int.MIN_VALUE).forEach { distance: Int ->
+            val largeScroll: Fixture = createFixture(
+                itemHeights = itemHeights,
+                itemMargins = margins,
+                decorationOffsets = decorationOffsets,
+                layoutHeight = 1,
+            )
+            val remainderScroll: Fixture = createFixture(
+                itemHeights = itemHeights,
+                itemMargins = margins,
+                decorationOffsets = decorationOffsets,
+                layoutHeight = 1,
+            )
+            largeScroll.adapter.clearBindCounts()
+
+            largeScroll.recyclerView.scrollBy(0, distance)
+            remainderScroll.recyclerView.scrollBy(0, distance % cycleSpan)
+
+            assertEquals(attachedPositions(remainderScroll), attachedPositions(largeScroll))
+            assertEquals(
+                decoratedCenterY(
+                    remainderScroll.layoutManager,
+                    checkNotNull(remainderScroll.layoutManager.findCenterChild()),
+                ),
+                decoratedCenterY(
+                    largeScroll.layoutManager,
+                    checkNotNull(largeScroll.layoutManager.findCenterChild()),
+                ),
+            )
+            assertTrue(largeScroll.adapter.totalBindCount() <= itemHeights.size * 3)
+            assertTrue(largeScroll.layoutManager.isLoopingActive)
+            assertUniqueAttachedPositions(largeScroll)
         }
     }
 
@@ -1418,6 +1489,8 @@ class WheelLayoutManagerTest {
         }
 
         fun bindCount(position: Int): Int = bindCounts[position] ?: 0
+
+        fun totalBindCount(): Int = bindCounts.values.sum()
 
         fun removeAt(position: Int) {
             require(position in items.indices)
