@@ -52,6 +52,9 @@ class WheelLayoutManager(
 
     /**
      * 滚动特征取值范围.
+     *
+     * @author whisper
+     * @since 2026/10/14
      */
     @IntDef(SCROLL_FEATURE_LIMITED, SCROLL_FEATURE_UNLIMITED)
     @Retention(AnnotationRetention.SOURCE)
@@ -1032,6 +1035,9 @@ class WheelLayoutManager(
      * 最近中心位置的 Adapter position 实时发生变化后的通知.
      *
      * 通知不等待 RecyclerView idle 或吸附完成; 没有中心条目时 position 为 [RecyclerView.NO_POSITION].
+     *
+     * @author whisper
+     * @since 2026/10/14
      */
     fun interface OnCenterYPositionChangeListener {
         fun onCenterYPositionChanged(position: Int)
