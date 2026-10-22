@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-22      | whisper | 移除滚轮中心查找热路径分配        |
 | 2026-10-22      | whisper | 约束滚轮极端距离及循环跨圈处理    |
 | 2026-10-20      | whisper | 补齐滚轮实时中心和无障碍动作回归  |
 | 2026-10-20      | whisper | 明确滚轮实时中心通知维护约束      |
@@ -645,6 +646,7 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
    margin, 不得再次叠加 decoration inset. 填充、边界限制和回收使用同一坐标系.
 5. `WheelLayoutManager` 是中心距离和最近中心条目选择的唯一实现来源. `WheelSnapHelper` 和 `WheelSmoothScroller` 必须复用
    LayoutManager 的结果. 多个条目中心同距时优先保留当前中心 position, 否则选择视觉布局顺序中的第一个条目.
+   最近中心查找从 child 中点向两侧扩散, 不得在滚动热路径使用捕获可变局部状态的函数或 lambda 产生引用包装对象.
    容器尺寸或 padding 变化时, 使用上一次非 pre-layout pass 的内容中心保存逻辑中心及相对 offset; 每个非 pre-layout
    `onLayoutChildren()` 结束时同步提交内容中心与 `OrientationHelper` 基准, 适配 AutoMeasure 在一次完整计算中执行多次布局.
    pre-layout 不得覆盖有效锚点, 空布局应清除已经失去 child 参照的基准. 平滑滚动目标已经附着且中心距离为 0 时仍须确认
@@ -833,7 +835,7 @@ git diff --check
 结果的循环启用与退化、跨首尾及大距离滚动、极端正负距离和小视口跨圈上界、数据更新后已挂载 position 的唯一性、
 全零及混合零高度 item、数据量和
 item 尺寸变化后的循环能力重算, 以及对称/非对称 padding、奇数可用尺寸、margin、ItemDecoration、程序滚动、平滑滚动、
-停止吸附和中心同距规则的一致性. 运行时容器尺寸和 padding 变化应覆盖居中与非零相对 offset 的锚点保持,
+停止吸附、中间 child 精确命中和中心同距规则的一致性. 运行时容器尺寸和 padding 变化应覆盖居中与非零相对 offset 的锚点保持,
 同时覆盖 `EXACTLY` 和会触发多次布局 pass 的 `AT_MOST` 测量; 全零高度 item 应覆盖平滑目标确认及相同目标不重复通知.
 测试还应断言 LayoutManager 不声明预测动画能力, 并在默认 ItemAnimator 非空时覆盖结构更新后的最终中心、循环状态和
 已挂载 position 唯一性; 不把屏幕外 appearing/disappearing 条目的预测移动轨迹作为当前组件契约.

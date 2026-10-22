@@ -453,21 +453,46 @@ class WheelLayoutManager(
     fun findCenterChild(): View? = findCenterChild(contentCenterY, centerYPosition)
 
     private fun findCenterChild(centerY: Int, preferredPosition: Int): View? {
-        if (childCount == 0) {
+        val attachedChildCount: Int = childCount
+        if (attachedChildCount == 0) {
             return null
         }
 
-        val middleIndex: Int = childCount / 2
+        val middleIndex: Int = attachedChildCount / 2
         var closestView: View? = null
         var closestDistance: Int = Int.MAX_VALUE
         var closestIndex: Int = Int.MAX_VALUE
-        fun inspectChild(index: Int): Boolean {
-            val child: View = getChildAt(index) ?: return false
+        var distanceFromMiddle: Int = 0
+        var inspectAfterMiddle: Boolean = false
+        while (
+            distanceFromMiddle == 0 ||
+            middleIndex - distanceFromMiddle >= 0 ||
+            middleIndex + distanceFromMiddle < attachedChildCount
+        ) {
+            val index: Int = if (inspectAfterMiddle) {
+                middleIndex + distanceFromMiddle
+            } else {
+                middleIndex - distanceFromMiddle
+            }
+            when {
+                distanceFromMiddle == 0 -> distanceFromMiddle = 1
+                inspectAfterMiddle -> {
+                    distanceFromMiddle += 1
+                    inspectAfterMiddle = false
+                }
+                else -> inspectAfterMiddle = true
+            }
+            if (index !in 0 until attachedChildCount) {
+                continue
+            }
+            val child: View = getChildAt(index) ?: continue
             val distance: Int = abs(decoratedCenterY(child) - centerY)
             val candidateIsPreferred: Boolean = preferredPosition != RecyclerView.NO_POSITION &&
                 getPosition(child) == preferredPosition
+            val currentClosestView: View? = closestView
             val closestIsPreferred: Boolean = preferredPosition != RecyclerView.NO_POSITION &&
-                closestView?.let(::getPosition) == preferredPosition
+                currentClosestView != null &&
+                getPosition(currentClosestView) == preferredPosition
             val shouldReplaceClosest: Boolean = distance < closestDistance ||
                 distance == closestDistance && when {
                     candidateIsPreferred != closestIsPreferred -> candidateIsPreferred
@@ -478,23 +503,9 @@ class WheelLayoutManager(
                 closestDistance = distance
                 closestIndex = index
             }
-            return distance == 0 && candidateIsPreferred
-        }
-
-        if (inspectChild(middleIndex)) {
-            return closestView
-        }
-        var distanceFromMiddle: Int = 1
-        while (middleIndex - distanceFromMiddle >= 0 || middleIndex + distanceFromMiddle < childCount) {
-            val beforeIndex: Int = middleIndex - distanceFromMiddle
-            if (beforeIndex >= 0 && inspectChild(beforeIndex)) {
+            if (distance == 0 && candidateIsPreferred) {
                 return closestView
             }
-            val afterIndex: Int = middleIndex + distanceFromMiddle
-            if (afterIndex < childCount && inspectChild(afterIndex)) {
-                return closestView
-            }
-            distanceFromMiddle += 1
         }
         return closestView
     }

@@ -1168,6 +1168,17 @@ class WheelLayoutManagerTest {
     }
 
     @Test
+    fun centerSelection_whenMiddleChildIsCentered_returnsSameChild() {
+        val fixture: Fixture = createFixture(itemCount = 20)
+        val middleChild: View = checkNotNull(
+            fixture.layoutManager.getChildAt(fixture.layoutManager.childCount / 2),
+        )
+
+        assertEquals(0, fixture.layoutManager.distanceToCenter(middleChild))
+        assertSame(middleChild, fixture.layoutManager.findCenterChild())
+    }
+
+    @Test
     fun unlimitedLayout_withEnoughUniqueItems_scrollsAcrossAdapterBoundary() {
         val fixture: Fixture = createFixture(itemCount = 20)
 
