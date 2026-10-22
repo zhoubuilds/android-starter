@@ -26,6 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.concurrent.TimeUnit
 
@@ -389,6 +390,23 @@ class WheelLayoutManagerTest {
         } finally {
             activityController.close()
         }
+    }
+
+    @Test
+    fun smoothScroller_withMinimumIntegerDistance_keepsPositiveScrollingTime() {
+        val calculateTimeForScrolling: Method = WheelSmoothScroller::class.java.getDeclaredMethod(
+            "calculateTimeForScrolling",
+            Integer.TYPE,
+        ).apply {
+            isAccessible = true
+        }
+
+        val scrollingTime: Int = calculateTimeForScrolling.invoke(
+            WheelSmoothScroller(RuntimeEnvironment.getApplication()),
+            Int.MIN_VALUE,
+        ) as Int
+
+        assertTrue(scrollingTime > 0)
     }
 
     @Test

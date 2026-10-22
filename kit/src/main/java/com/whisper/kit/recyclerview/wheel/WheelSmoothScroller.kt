@@ -117,6 +117,9 @@ internal class WheelSmoothScroller(context: Context) : RecyclerView.SmoothScroll
     private fun calculateTimeForDeceleration(distance: Int): Int =
         ceil(calculateTimeForScrolling(distance) / DECELERATION_FACTOR).toInt()
 
+    /**
+     * 先将距离提升为 Long 再取绝对值, 避免 [Int.MIN_VALUE] 保持负数.
+     */
     private fun calculateTimeForScrolling(distance: Int): Int =
-        ceil(abs(distance) * speedPerPixel).toInt()
+        ceil(abs(distance.toLong()).toFloat() * speedPerPixel).toInt()
 }
