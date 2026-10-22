@@ -17,9 +17,11 @@ import kotlin.math.abs
  *
  * 应同时安装 [WheelSnapHelper], 使滚动停止后的中心条目与 RecyclerView 中心对齐.
  * [scrollToPosition] 和 [smoothScrollToPosition] 均表示将目标条目移动到中心位置.
- * 循环模式只在每个 Adapter position 最多布局一次即可覆盖布局窗口时生效, 否则自动退化为有界模式.
- * item 的纵向占用尺寸可以为 0; 布局终止依赖 Adapter position 推进, 不依赖每个 item 产生像素位移.
- * 不支持 RecyclerView predictive item animations; 默认 ItemAnimator 仍可执行普通的增删、移动和内容变化动画.
+ * 循环模式只在每个 Adapter position 最多布局一次即可覆盖布局窗口时生效,
+ * 否则自动退化为有界模式. item 的纵向占用尺寸可以为 0; 布局终止依赖 Adapter position 推进,
+ * 不依赖每个 item 产生像素位移. 交叉轴按逻辑 start 对齐完整的 decorated-with-margins 外边界.
+ * 不支持 RecyclerView predictive item animations;
+ * 默认 ItemAnimator 仍可执行普通的增删、移动和内容变化动画.
  * RecyclerView 重建时保存并恢复中心 Adapter position 及其相对内容中心的像素偏移.
  * [scrollFeature] 只接受 [SCROLL_FEATURE_LIMITED] 和 [SCROLL_FEATURE_UNLIMITED].
  *
@@ -45,8 +47,20 @@ class WheelLayoutManager(
 
         private const val LAYOUT_START: Int = -1
         private const val LAYOUT_END: Int = 1
+
+        /**
+         * 单向可滚指标为起点和终点保留不同值所需的最小跨度.
+         */
         private const val MIN_SCROLLABLE_METRIC_SPAN: Int = 2
+
+        /**
+         * 双向可滚指标为起点、中间态和终点保留不同值所需的最小跨度.
+         */
         private const val MIN_BIDIRECTIONAL_METRIC_SPAN: Int = 3
+
+        /**
+         * 循环滚动指标在 viewport 之外额外保留的相对跨度倍数.
+         */
         private const val LOOPING_METRIC_EXTENT_MULTIPLIER: Long = 2L
     }
 
@@ -201,6 +215,11 @@ class WheelLayoutManager(
         verticalOrientationHelper.onLayoutComplete()
     }
 
+    /**
+     * 从指定锚点向两侧布局一轮唯一 Adapter position.
+     *
+     * @return 两侧是否都覆盖到内容边界; false 表示当前数据不足以维持条件循环.
+     */
     private fun layoutFromCenter(
         recycler: RecyclerView.Recycler,
         centerPosition: Int,
@@ -212,18 +231,18 @@ class WheelLayoutManager(
         val centerView: View = recycler.getViewForPosition(centerPosition)
         addView(centerView)
         measureChildWithMargins(centerView, 0, 0)
-        val firstHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(centerView)
+        val centerMeasurement: Int = verticalOrientationHelper.getDecoratedMeasurement(centerView)
         val resolvedCenterOffsetY: Int = if (
             isRestoringSavedState &&
-            !isAnchorVisibleAtOffset(centerOffsetY, firstHeight)
+            !isAnchorVisibleAtOffset(centerOffsetY, centerMeasurement)
         ) {
             0
         } else {
             centerOffsetY
         }
-        val firstTop: Int = contentCenterY - firstHeight / 2 + resolvedCenterOffsetY
-        val firstBottom: Int = firstTop + firstHeight
-        layoutMeasuredChild(centerView, firstTop, firstBottom)
+        val centerTop: Int = contentCenterY - centerMeasurement / 2 + resolvedCenterOffsetY
+        val centerBottom: Int = centerTop + centerMeasurement
+        layoutMeasuredChild(centerView, centerTop, centerBottom)
 
         val startCovered: Boolean = layoutChild(
             verticalOrientationHelper.getDecoratedStart(centerView),
@@ -244,6 +263,10 @@ class WheelLayoutManager(
         return startCovered && endCovered
     }
 
+    /**
+     * 判断恢复后的锚点是否仍与当前内容区域相交;
+     * 零尺寸锚点按中心坐标是否位于边界内判断.
+     */
     private fun isAnchorVisibleAtOffset(centerOffsetY: Int, decoratedMeasurement: Int): Boolean {
         val anchorStart: Long = contentCenterY.toLong() -
             decoratedMeasurement.toLong() / 2L +
@@ -271,6 +294,7 @@ class WheelLayoutManager(
             return 0
         }
         val maximumLoopingStep: Int = maxOf(1, verticalOrientationHelper.totalSpace / 2)
+        // 只有可能跨越一圈的大距离同步滚动才跟踪圈长, SmoothScroller 仍逐项发现目标.
         val activeCycleTracker: LoopCycleTracker? = if (
             isLoopingActive &&
             !state.hasTargetScrollPosition() &&
@@ -321,6 +345,7 @@ class WheelLayoutManager(
             }
             val cycleSpan: Long = activeCycleTracker?.cycleSpan ?: 0L
             if (cycleSpan > 0L) {
+                // 已按真实布局走完一圈后, 跳过不改变最终 Adapter position 的完整圈.
                 val completeCycleCount: Long = abs(remaining) / cycleSpan
                 if (completeCycleCount > 0L) {
                     val absoluteSkippedDistance: Long = completeCycleCount * cycleSpan
@@ -387,7 +412,8 @@ class WheelLayoutManager(
     }
 
     /**
-     * 当前布局在 pre-layout 阶段不会布局旧结构, 也不维护 appearing 和 disappearing child 的预测位置,
+     * 当前布局在 pre-layout 阶段不会布局旧结构,
+     * 也不维护 appearing 和 disappearing child 的预测位置,
      * 因此不能声明支持 predictive item animations. 返回 false 仅关闭预测布局, 不影响 ItemAnimator
      * 根据普通布局前后快照执行增删、移动和内容变化动画.
      */
@@ -477,6 +503,8 @@ class WheelLayoutManager(
         var closestIndex: Int = Int.MAX_VALUE
         var distanceFromMiddle: Int = 0
         var inspectAfterMiddle: Boolean = false
+        // 从 child 中点交替检查前后两侧, 常见居中布局可快速命中,
+        // 最坏仍完整访问全部 child.
         while (
             distanceFromMiddle == 0 ||
             middleIndex - distanceFromMiddle >= 0 ||
@@ -524,7 +552,8 @@ class WheelLayoutManager(
     }
 
     /**
-     * 返回中心最接近 RecyclerView 内容中心的 Adapter position.
+     * 返回中心最接近 RecyclerView 内容中心的 Adapter position;
+     * 没有已布局条目时返回 [RecyclerView.NO_POSITION].
      */
     fun findCenterChildPosition(): Int =
         findCenterChild()?.let(::getPosition) ?: RecyclerView.NO_POSITION
@@ -532,18 +561,21 @@ class WheelLayoutManager(
     /**
      * 设置实时中心条目 position 变化监听器, null 表示移除.
      *
-     * 滚动、fling、布局或吸附期间, 最近中心 position 变化后立即通知, 不等待 RecyclerView idle 或吸附完成;
+     * 滚动、fling、布局或吸附期间, 最近中心 position 变化后立即通知,
+     * 不等待 RecyclerView idle 或吸附完成;
      * position 不变时不重复通知, 没有中心条目时通知 [RecyclerView.NO_POSITION].
      * 回调在承载当前 LayoutManager 的 RecyclerView 布局或滚动调用栈内同步执行.
-     * 监听器不得直接通知当前 RecyclerView 的 Adapter 更新数据, 也不得调用其它会改变当前列表数据或结构的 API;
-     * 需要执行此类操作时, 应通过 `RecyclerView.post()` 或 `ViewCompat.postOnAnimation()` 推迟到下一帧.
+     * 监听器不得直接通知当前 RecyclerView 的 Adapter 更新数据,
+     * 也不得调用其它会改变当前列表数据或结构的 API; 需要执行此类操作时,
+     * 应通过 `RecyclerView.post()` 或 `ViewCompat.postOnAnimation()` 推迟到下一帧.
      */
     fun setOnCenterYPositionChangeListener(listener: OnCenterYPositionChangeListener?) {
         onCenterYPositionChangeListener = listener
     }
 
     /**
-     * 返回条目中心相对 RecyclerView 内容中心的有符号距离.
+     * 返回条目中心相对 RecyclerView 内容中心的有符号距离;
+     * 正值位于中心下方, 负值位于中心上方.
      */
     internal fun distanceToCenter(view: View): Int = decoratedCenterY(view) - contentCenterY
 
@@ -562,6 +594,9 @@ class WheelLayoutManager(
         verticalOrientationHelper.getDecoratedStart(view) +
             verticalOrientationHelper.getDecoratedMeasurement(view) / 2
 
+    /**
+     * 从同一组 child 几何计算 offset、extent 或 range, 保证三个滚动指标使用一致坐标模型.
+     */
     private fun computeVerticalScrollMetric(
         state: RecyclerView.State,
         metric: VerticalScrollMetric,
@@ -659,6 +694,9 @@ class WheelLayoutManager(
         )
     }
 
+    /**
+     * 返回跨 Adapter 首尾保持稳定的相对中间态指标, 不把真实 position 解释为绝对循环进度.
+     */
     private fun computeLoopingVerticalScrollMetric(
         viewportExtent: Int,
         metric: VerticalScrollMetric,
@@ -679,6 +717,9 @@ class WheelLayoutManager(
         )
     }
 
+    /**
+     * 使用当前已布局首尾条目估算相邻 Adapter position 的平均中心距离.
+     */
     private fun estimateAverageCenterDistance(
         startView: View,
         startPosition: Int,
@@ -698,6 +739,9 @@ class WheelLayoutManager(
         return laidOutCenterDistance.toDouble() / positionSpan.toDouble()
     }
 
+    /**
+     * 向滚动方向填充 child, 返回当前步骤可安全消费的纵向距离.
+     */
     private fun fill(
         dy: Int,
         recycler: RecyclerView.Recycler,
@@ -831,6 +875,9 @@ class WheelLayoutManager(
         }
     }
 
+    /**
+     * 停止循环填充并在当前 RecyclerView 滚动调用结束后请求有界重布局.
+     */
     private fun deactivateLooping() {
         if (!isLoopingActive) {
             return
@@ -910,14 +957,19 @@ class WheelLayoutManager(
         }
     }
 
+    /**
+     * 从基线沿指定方向布局唯一 Adapter position.
+     *
+     * @return 是否覆盖到该方向的内容边界; false 表示下一项无效或已经挂载.
+     */
     private fun layoutChild(
         baseline: Int,
         position: Int,
-        layoutDirection: Int,
+        fillDirection: Int,
         recycler: RecyclerView.Recycler,
         allowLooping: Boolean,
         laidOutPositions: MutableSet<Int>,
-    ): Boolean = when (layoutDirection) {
+    ): Boolean = when (fillDirection) {
         LAYOUT_START -> layoutChildToStart(
             baseline,
             position,
@@ -1044,7 +1096,8 @@ class WheelLayoutManager(
      *
      * 通知不等待 RecyclerView idle 或吸附完成; 没有中心条目时 position 为 [RecyclerView.NO_POSITION].
      * 回调可能发生在当前 RecyclerView 计算布局或滚动期间.
-     * 不得在回调中直接通知其 Adapter 更新数据或改变列表结构; 此类操作应推迟到下一帧执行.
+     * 不得在回调中直接通知其 Adapter 更新数据或改变列表结构;
+     * 此类操作应推迟到下一帧执行.
      *
      * @author whisper
      * @since 2026/10/14
@@ -1056,6 +1109,7 @@ class WheelLayoutManager(
     /**
      * 保存滚轮中心锚点, offset 使用相对 RecyclerView 内容中心的 decorated-with-margins 坐标.
      *
+     * `anchorPosition` 是真实 Adapter position, `anchorOffsetY` 是相对内容中心的有符号像素距离.
      * internal 保证 JVM 类为 public, 供 Android Parcel 在冷启动恢复时反射读取 [CREATOR].
      */
     internal class SavedState : Parcelable {
@@ -1103,12 +1157,18 @@ private class LoopCycleTracker {
     var cycleSpan: Long = 0L
         private set
 
+    /**
+     * 开始一次新的滚动跟踪, 丢弃上一轮识别出的圈长.
+     */
     fun reset(referencePosition: Int, referenceWorldCenter: Long) {
         this.referencePosition = referencePosition
         this.referenceWorldCenter = referenceWorldCenter
         cycleSpan = 0L
     }
 
+    /**
+     * 在参考 position 再次出现时, 以布局中心和累计消费距离还原世界坐标并记录真实圈长.
+     */
     fun recordLaidOutChild(position: Int, centerY: Int, totalConsumedBeforeStep: Long) {
         if (cycleSpan > 0L || position != referencePosition) {
             return
@@ -1137,7 +1197,7 @@ private fun VerticalScrollMetric.resolve(offset: Int, extent: Int, range: Int): 
 }
 
 /**
- * 将浮点估算结果四舍五入并限制在可表示的指标范围内.
+ * 将浮点估算结果四舍五入并限制在可表示的指标范围内, NaN 退化为下界.
  */
 private fun Double.toLongInRange(minimum: Long, maximum: Long): Long = when {
     isNaN() || this <= minimum.toDouble() -> minimum

@@ -7,7 +7,10 @@ import androidx.recyclerview.widget.RecyclerView
 /**
  * 将滚轮停止后的目标条目调整到 RecyclerView 中心.
  *
- * 循环模式不使用 [LinearSnapHelper] 基于 Adapter 末端向量计算的 fling 目标, 滚动空闲后仍会完成中心吸附.
+ * 配合 [WheelLayoutManager] 时复用其中心坐标和最近条目选择;
+ * 连接其它 LayoutManager 时保留 [LinearSnapHelper] 的默认行为.
+ * 实际循环模式不使用基于 Adapter 末端向量计算的 fling 目标,
+ * RecyclerView 滚动空闲后仍会完成中心吸附.
  *
  * @author whisper
  * @since 2026/10/14

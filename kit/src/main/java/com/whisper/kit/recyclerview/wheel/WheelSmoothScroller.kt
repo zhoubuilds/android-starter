@@ -12,8 +12,17 @@ import kotlin.math.ceil
 
 /**
  * [WheelLayoutManager] 使用的纵向中心平滑滚动实现.
+ *
+ * 搜索阶段沿 LayoutManager 提供的方向分段前进, 发现目标后使用同一中心距离减速对齐.
  */
 internal class WheelSmoothScroller(context: Context) : RecyclerView.SmoothScroller() {
+
+    companion object {
+        private const val MILLISECONDS_PER_INCH: Float = 25f
+        private const val TARGET_SEEK_SCROLL_DISTANCE_PX: Int = 10_000
+        private const val TARGET_SEEK_EXTRA_SCROLL_RATIO: Float = 1.2f
+        private const val DECELERATION_FACTOR: Double = 0.3356
+    }
 
     private val displayMetrics: DisplayMetrics = context.resources.displayMetrics
     private val linearInterpolator: LinearInterpolator = LinearInterpolator()
@@ -21,6 +30,18 @@ internal class WheelSmoothScroller(context: Context) : RecyclerView.SmoothScroll
     private var hasCalculatedMillisPerPixel: Boolean = false
     private var millisPerPixel: Float = 0f
     private var interimTargetDy: Int = 0
+
+    /**
+     * 按设备密度延迟计算并缓存每像素滚动时间.
+     */
+    private val speedPerPixel: Float
+        get() {
+            if (!hasCalculatedMillisPerPixel) {
+                millisPerPixel = MILLISECONDS_PER_INCH / displayMetrics.densityDpi
+                hasCalculatedMillisPerPixel = true
+            }
+            return millisPerPixel
+        }
 
     override fun onStart() = Unit
 
@@ -59,12 +80,18 @@ internal class WheelSmoothScroller(context: Context) : RecyclerView.SmoothScroll
         }
     }
 
-    private fun clampApplyScroll(temporaryDistance: Int, distance: Int): Int {
-        val before: Int = temporaryDistance
-        val after: Int = temporaryDistance - distance
+    /**
+     * 从临时目标距离中扣除本步消费量, 穿过目标方向时收敛为 0.
+     */
+    private fun clampApplyScroll(remainingDistance: Int, consumedDistance: Int): Int {
+        val before: Int = remainingDistance
+        val after: Int = remainingDistance - consumedDistance
         return if (before * after <= 0) 0 else after
     }
 
+    /**
+     * 为尚未附着的目标生成下一段线性搜索动作.
+     */
     private fun updateActionForInterimTarget(action: Action) {
         val scrollVector: PointF = computeScrollVectorForPosition(targetPosition) ?: run {
             action.jumpTo(targetPosition)
@@ -92,20 +119,4 @@ internal class WheelSmoothScroller(context: Context) : RecyclerView.SmoothScroll
 
     private fun calculateTimeForScrolling(distance: Int): Int =
         ceil(abs(distance) * speedPerPixel).toInt()
-
-    private val speedPerPixel: Float
-        get() {
-            if (!hasCalculatedMillisPerPixel) {
-                millisPerPixel = MILLISECONDS_PER_INCH / displayMetrics.densityDpi
-                hasCalculatedMillisPerPixel = true
-            }
-            return millisPerPixel
-        }
-
-    companion object {
-        private const val MILLISECONDS_PER_INCH: Float = 25f
-        private const val TARGET_SEEK_SCROLL_DISTANCE_PX: Int = 10_000
-        private const val TARGET_SEEK_EXTRA_SCROLL_RATIO: Float = 1.2f
-        private const val DECELERATION_FACTOR: Double = 0.3356
-    }
 }
