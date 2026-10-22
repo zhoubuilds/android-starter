@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-22      | whisper | 复用滚轮跨圈跟踪存储              |
 | 2026-10-22      | whisper | 移除滚轮中心查找热路径分配        |
 | 2026-10-22      | whisper | 约束滚轮极端距离及循环跨圈处理    |
 | 2026-10-20      | whisper | 补齐滚轮实时中心和无障碍动作回归  |
@@ -686,7 +687,9 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
     单次 child offset 不得消费无法安全取反的 `Int.MIN_VALUE`, 允许按 RecyclerView 返回未消费距离的契约保留 1px.
     实际循环模式的大距离同步滚动仍须先通过现有小步填充维持 position 唯一; 在当前调用中实际布局到同一参考 position 的
     下一次出现后, 可以按真实 decorated-with-margins 圈长跳过剩余完整圈, 再处理不足一圈的余数. 圈长不得通过预测量全部
-    Adapter item 获取, 也不得跨调用缓存. RecyclerView 存在平滑滚动目标时不得跳圈, 避免目标 View 未参与逐步布局.
+    Adapter item 获取, 也不得跨调用缓存. 跨圈跟踪对象可以由同一个 LayoutManager 复用, 但每次启用前必须完整重置参考
+    position、世界坐标和圈长, 且不得持有 View 或 RecyclerView. RecyclerView 存在平滑滚动目标时不得跳圈, 避免目标 View
+    未参与逐步布局.
 
 ## 8. RecyclerView ViewHolder
 
@@ -833,8 +836,8 @@ git diff --check
 
 滚轮布局测试至少覆盖默认与显式滚动特征、纵向滚动能力、空数据、中心 position 监听器的 lambda 调用形态、基于实际测量
 结果的循环启用与退化、跨首尾及大距离滚动、极端正负距离和小视口跨圈上界、数据更新后已挂载 position 的唯一性、
-全零及混合零高度 item、数据量和
-item 尺寸变化后的循环能力重算, 以及对称/非对称 padding、奇数可用尺寸、margin、ItemDecoration、程序滚动、平滑滚动、
+全零及混合零高度 item、数据量和 item 尺寸变化后的循环能力重算及跨圈跟踪重置, 以及对称/非对称 padding、
+奇数可用尺寸、margin、ItemDecoration、程序滚动、平滑滚动、
 停止吸附、中间 child 精确命中和中心同距规则的一致性. 运行时容器尺寸和 padding 变化应覆盖居中与非零相对 offset 的锚点保持,
 同时覆盖 `EXACTLY` 和会触发多次布局 pass 的 `AT_MOST` 测量; 全零高度 item 应覆盖平滑目标确认及相同目标不重复通知.
 测试还应断言 LayoutManager 不声明预测动画能力, 并在默认 ItemAnimator 非空时覆盖结构更新后的最终中心、循环状态和

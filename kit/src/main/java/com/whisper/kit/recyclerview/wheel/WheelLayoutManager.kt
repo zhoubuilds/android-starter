@@ -77,6 +77,11 @@ class WheelLayoutManager(
     }
 
     /**
+     * 每次符合条件的大距离循环滚动前重置, 只复用存储而不跨调用缓存 item 几何.
+     */
+    private val loopCycleTracker: LoopCycleTracker = LoopCycleTracker()
+
+    /**
      * RecyclerView 扣除纵向 padding 后的内容中心坐标.
      */
     private val contentCenterY: Int
@@ -260,7 +265,7 @@ class WheelLayoutManager(
             return 0
         }
         val maximumLoopingStep: Int = maxOf(1, verticalOrientationHelper.totalSpace / 2)
-        val cycleTracker: LoopCycleTracker? = if (
+        val activeCycleTracker: LoopCycleTracker? = if (
             isLoopingActive &&
             !state.hasTargetScrollPosition() &&
             abs(dy.toLong()) > maximumLoopingStep.toLong()
@@ -268,10 +273,12 @@ class WheelLayoutManager(
             getChildAt(childCount / 2)?.let { referenceView: View ->
                 val referencePosition: Int = getPosition(referenceView)
                 if (isValidAdapterPosition(referencePosition)) {
-                    LoopCycleTracker(
-                        referencePosition = referencePosition,
-                        referenceWorldCenter = decoratedCenterY(referenceView).toLong(),
-                    )
+                    loopCycleTracker.apply {
+                        reset(
+                            referencePosition = referencePosition,
+                            referenceWorldCenter = decoratedCenterY(referenceView).toLong(),
+                        )
+                    }
                 } else {
                     null
                 }
@@ -294,7 +301,7 @@ class WheelLayoutManager(
             val consumedStep: Int = fill(
                 dy = requestedStep,
                 recycler = recycler,
-                cycleTracker = cycleTracker,
+                cycleTracker = activeCycleTracker,
                 totalConsumedBeforeStep = totalConsumed,
             )
             if (consumedStep == 0) {
@@ -306,7 +313,7 @@ class WheelLayoutManager(
             if (consumedStep != requestedStep || !isLoopingActive) {
                 break
             }
-            val cycleSpan: Long = cycleTracker?.cycleSpan ?: 0L
+            val cycleSpan: Long = activeCycleTracker?.cycleSpan ?: 0L
             if (cycleSpan > 0L) {
                 val completeCycleCount: Long = abs(remaining) / cycleSpan
                 if (completeCycleCount > 0L) {
@@ -1070,13 +1077,21 @@ private const val LOOPING_METRIC_EXTENT_MULTIPLIER: Long = 2L
 
 /**
  * 在单次实际循环滚动中识别同一 Adapter position 相邻两次出现之间的像素跨度.
+ *
+ * 同一个 LayoutManager 复用当前实例, 每次启用前必须通过 [reset] 清除上一次调用的几何状态.
  */
-private class LoopCycleTracker(
-    private val referencePosition: Int,
-    private val referenceWorldCenter: Long,
-) {
+private class LoopCycleTracker {
+    private var referencePosition: Int = RecyclerView.NO_POSITION
+    private var referenceWorldCenter: Long = 0L
+
     var cycleSpan: Long = 0L
         private set
+
+    fun reset(referencePosition: Int, referenceWorldCenter: Long) {
+        this.referencePosition = referencePosition
+        this.referenceWorldCenter = referenceWorldCenter
+        cycleSpan = 0L
+    }
 
     fun recordLaidOutChild(position: Int, centerY: Int, totalConsumedBeforeStep: Long) {
         if (cycleSpan > 0L || position != referencePosition) {

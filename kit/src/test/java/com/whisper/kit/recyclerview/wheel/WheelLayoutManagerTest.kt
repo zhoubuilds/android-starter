@@ -1251,6 +1251,46 @@ class WheelLayoutManagerTest {
     }
 
     @Test
+    fun unlimitedLayout_largeScrollAfterItemGeometryChange_usesCurrentCycleSpan() {
+        val initialItemHeights: List<Int> = listOf(2, 3, 4, 5, 6)
+        val updatedItemHeights: List<Int> = listOf(7, 3, 5, 4, 7)
+        val largeScroll: Fixture = createFixture(
+            itemHeights = initialItemHeights,
+            layoutHeight = 1,
+        )
+
+        largeScroll.recyclerView.scrollBy(0, 10_000)
+        largeScroll.adapter.updateHeights(updatedItemHeights)
+        largeScroll.layoutManager.scrollToPosition(0)
+        layout(largeScroll)
+
+        val remainderScroll: Fixture = createFixture(
+            itemHeights = updatedItemHeights,
+            layoutHeight = 1,
+        )
+        val distance: Int = 10_000
+        largeScroll.adapter.clearBindCounts()
+
+        largeScroll.recyclerView.scrollBy(0, distance)
+        remainderScroll.recyclerView.scrollBy(0, distance % updatedItemHeights.sum())
+
+        assertEquals(attachedPositions(remainderScroll), attachedPositions(largeScroll))
+        assertEquals(
+            decoratedCenterY(
+                remainderScroll.layoutManager,
+                checkNotNull(remainderScroll.layoutManager.findCenterChild()),
+            ),
+            decoratedCenterY(
+                largeScroll.layoutManager,
+                checkNotNull(largeScroll.layoutManager.findCenterChild()),
+            ),
+        )
+        assertTrue(largeScroll.adapter.totalBindCount() <= updatedItemHeights.size * 3)
+        assertTrue(largeScroll.layoutManager.isLoopingActive)
+        assertUniqueAttachedPositions(largeScroll)
+    }
+
+    @Test
     fun unlimitedLayout_notifyItemChanged_rebindsOneUniqueVisiblePosition() {
         val fixture: Fixture = createFixture(itemCount = 20)
         fixture.adapter.clearBindCounts()
