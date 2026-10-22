@@ -42,6 +42,12 @@ class WheelLayoutManager(
          * Adapter 首尾在能够保持 Adapter position 唯一时相接, 否则使用有界滚动.
          */
         const val SCROLL_FEATURE_UNLIMITED: Int = 2
+
+        private const val LAYOUT_START: Int = -1
+        private const val LAYOUT_END: Int = 1
+        private const val MIN_SCROLLABLE_METRIC_SPAN: Int = 2
+        private const val MIN_BIDIRECTIONAL_METRIC_SPAN: Int = 3
+        private const val LOOPING_METRIC_EXTENT_MULTIPLIER: Long = 2L
     }
 
     /**
@@ -1068,12 +1074,6 @@ class WheelLayoutManager(
         }
     }
 }
-
-private const val LAYOUT_START: Int = -1
-private const val LAYOUT_END: Int = 1
-private const val MIN_SCROLLABLE_METRIC_SPAN: Int = 2
-private const val MIN_BIDIRECTIONAL_METRIC_SPAN: Int = 3
-private const val LOOPING_METRIC_EXTENT_MULTIPLIER: Long = 2L
 
 /**
  * 在单次实际循环滚动中识别同一 Adapter position 相邻两次出现之间的像素跨度.
