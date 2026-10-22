@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                   |
 |-----------------|---------|----------------------------|
+| 2026-10-22      | whisper | 明确滚轮交叉轴逻辑起点对齐 |
 | 2026-10-22      | whisper | 收敛滚轮极端距离算术与循环跨圈开销 |
 | 2026-10-20      | whisper | 明确滚轮实时中心通知语义   |
 | 2026-10-20      | whisper | 明确滚轮空数据中心失效语义 |
@@ -156,6 +157,8 @@ item 的纵向占用尺寸可以为 0; 布局循环始终推进真实 Adapter po
 滚动边界和回收统一使用包含 margin 与 ItemDecoration 的外边界. LayoutManager 提供唯一的中心距离结果, SnapHelper 与
 SmoothScroller 不再各自维护中心公式. 容器尺寸或 padding 变化时, 每次非预测布局相对上一个布局 pass 的内容中心保留
 逻辑中心及其偏移, 同一次 AutoMeasure 中的非精确测量和最终尺寸布局使用相同规则.
+纵向滚轮的交叉轴按逻辑 start 对齐完整 item 外边界: LTR 使用左 padding 边界, RTL 使用扣除右 padding 后的右边界;
+`MATCH_PARENT` item 在两种布局方向下都填满内容宽度, margin 与 ItemDecoration 仍计入外边界而不压缩 item 内容尺寸.
 填充和回收阈值使用 `Long` 中间值, 极端正负程序滚动不会因 `Int` 坐标加减回绕而提前停止. 实际循环模式遇到大距离同步
 滚动时先按真实 decorated-with-margins 几何经过一圈; 同一 position 再次出现后取得本次调用内的真实圈长, 跳过后续完整圈
 并只布局余数. 圈长不跨调用缓存, 不预测量屏幕外 item; 带 SmoothScroller 目标的滚动保持逐步布局, 确保目标 View 可以被发现.

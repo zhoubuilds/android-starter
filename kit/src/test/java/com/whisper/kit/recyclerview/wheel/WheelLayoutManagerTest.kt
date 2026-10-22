@@ -1,6 +1,7 @@
 package com.whisper.kit.recyclerview.wheel
 
 import android.app.Activity
+import android.content.Context
 import android.graphics.Rect
 import android.os.Looper
 import android.os.Parcel
@@ -1116,6 +1117,47 @@ class WheelLayoutManagerTest {
     }
 
     @Test
+    fun layout_crossAxisStartAlignment_followsLayoutDirectionAcrossAllFillPaths() {
+        val padding = Rect(13, 20, 17, 40)
+        val margins = Rect(5, 3, 9, 7)
+        val decorationOffsets = Rect(3, 5, 4, 11)
+
+        listOf(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).forEach { itemWidth: Int ->
+            listOf(View.LAYOUT_DIRECTION_LTR, View.LAYOUT_DIRECTION_RTL).forEach { layoutDirection: Int ->
+                val fixture: Fixture = createFixture(
+                    itemCount = 30,
+                    itemWidth = itemWidth,
+                    scrollFeature = WheelLayoutManager.SCROLL_FEATURE_LIMITED,
+                    padding = padding,
+                    itemMargins = margins,
+                    decorationOffsets = decorationOffsets,
+                    layoutDirection = layoutDirection,
+                    performInitialLayout = false,
+                )
+                fixture.layoutManager.scrollToPosition(10)
+                layout(fixture)
+                val initialPositions: List<Int> = attachedPositions(fixture)
+
+                assertChildrenAlignedToCrossAxisStart(fixture, itemWidth, layoutDirection)
+
+                fixture.recyclerView.scrollBy(0, 4 * ITEM_HEIGHT)
+                val positionsAfterEndFill: List<Int> = attachedPositions(fixture)
+
+                assertNotEquals(initialPositions, positionsAfterEndFill)
+                assertChildrenAlignedToCrossAxisStart(fixture, itemWidth, layoutDirection)
+
+                fixture.recyclerView.scrollBy(0, -4 * ITEM_HEIGHT)
+
+                assertNotEquals(positionsAfterEndFill, attachedPositions(fixture))
+                assertChildrenAlignedToCrossAxisStart(fixture, itemWidth, layoutDirection)
+            }
+        }
+    }
+
+    @Test
     fun limitedLayout_withExtremeScrollDistances_reachesBothAdapterEdges() {
         val fixture: Fixture = createFixture(
             itemHeights = listOf(0, 20, 0, 60, 40, 0, 80, 0),
@@ -1369,10 +1411,12 @@ class WheelLayoutManagerTest {
         itemCount: Int,
         hasStableIds: Boolean = false,
         itemHeight: Int = ITEM_HEIGHT,
+        itemWidth: Int = ViewGroup.LayoutParams.MATCH_PARENT,
         scrollFeature: Int = WheelLayoutManager.SCROLL_FEATURE_UNLIMITED,
         padding: Rect = Rect(),
         itemMargins: Rect = Rect(),
         decorationOffsets: Rect? = null,
+        layoutDirection: Int = View.LAYOUT_DIRECTION_LTR,
         layoutWidth: Int = 200,
         layoutHeight: Int = 400,
         layoutHeightMode: Int = View.MeasureSpec.EXACTLY,
@@ -1380,10 +1424,12 @@ class WheelLayoutManagerTest {
     ): Fixture = createFixture(
         itemHeights = List(itemCount) { itemHeight },
         hasStableIds = hasStableIds,
+        itemWidth = itemWidth,
         scrollFeature = scrollFeature,
         padding = padding,
         itemMargins = itemMargins,
         decorationOffsets = decorationOffsets,
+        layoutDirection = layoutDirection,
         layoutWidth = layoutWidth,
         layoutHeight = layoutHeight,
         layoutHeightMode = layoutHeightMode,
@@ -1393,18 +1439,23 @@ class WheelLayoutManagerTest {
     private fun createFixture(
         itemHeights: List<Int>,
         hasStableIds: Boolean = false,
+        itemWidth: Int = ViewGroup.LayoutParams.MATCH_PARENT,
         scrollFeature: Int = WheelLayoutManager.SCROLL_FEATURE_UNLIMITED,
         padding: Rect = Rect(),
         itemMargins: Rect = Rect(),
         decorationOffsets: Rect? = null,
+        layoutDirection: Int = View.LAYOUT_DIRECTION_LTR,
         layoutWidth: Int = 200,
         layoutHeight: Int = 400,
         layoutHeightMode: Int = View.MeasureSpec.EXACTLY,
         performInitialLayout: Boolean = true,
     ): Fixture {
         val layoutManager = WheelLayoutManager(scrollFeature)
-        val adapter = CountingAdapter(itemHeights, hasStableIds, itemMargins)
-        val recyclerView = RecyclerView(RuntimeEnvironment.getApplication()).apply {
+        val adapter = CountingAdapter(itemHeights, hasStableIds, itemWidth, itemMargins)
+        val recyclerView = DirectionRecyclerView(
+            RuntimeEnvironment.getApplication(),
+            layoutDirection,
+        ).apply {
             this.layoutManager = layoutManager
             this.adapter = adapter
             setPadding(padding.left, padding.top, padding.right, padding.bottom)
@@ -1496,6 +1547,36 @@ class WheelLayoutManagerTest {
         assertEquals(positions.toSet().size, positions.size)
     }
 
+    private fun assertChildrenAlignedToCrossAxisStart(
+        fixture: Fixture,
+        itemWidth: Int,
+        layoutDirection: Int,
+    ) {
+        val expectedOuterLeft: Int = fixture.recyclerView.paddingLeft
+        val expectedOuterRight: Int = fixture.recyclerView.width - fixture.recyclerView.paddingRight
+        for (index: Int in 0 until fixture.layoutManager.childCount) {
+            val child: View = checkNotNull(fixture.layoutManager.getChildAt(index))
+            val layoutParams: RecyclerView.LayoutParams =
+                child.layoutParams as RecyclerView.LayoutParams
+            val outerLeft: Int =
+                fixture.layoutManager.getDecoratedLeft(child) - layoutParams.leftMargin
+            val outerRight: Int =
+                fixture.layoutManager.getDecoratedRight(child) + layoutParams.rightMargin
+
+            if (layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+                assertEquals(expectedOuterRight, outerRight)
+            } else {
+                assertEquals(expectedOuterLeft, outerLeft)
+            }
+            if (itemWidth == ViewGroup.LayoutParams.MATCH_PARENT) {
+                assertEquals(expectedOuterLeft, outerLeft)
+                assertEquals(expectedOuterRight, outerRight)
+            } else {
+                assertEquals(WRAP_CONTENT_ITEM_WIDTH, child.width)
+            }
+        }
+    }
+
     private fun decoratedStart(layoutManager: WheelLayoutManager, view: View): Int {
         val layoutParams: RecyclerView.LayoutParams = view.layoutParams as RecyclerView.LayoutParams
         return layoutManager.getDecoratedTop(view) - layoutParams.topMargin
@@ -1522,6 +1603,7 @@ class WheelLayoutManagerTest {
     private class CountingAdapter(
         itemHeights: List<Int>,
         hasStableIds: Boolean,
+        private val itemWidth: Int,
         private val itemMargins: Rect,
     ) : RecyclerView.Adapter<Holder>() {
 
@@ -1581,9 +1663,9 @@ class WheelLayoutManagerTest {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder = Holder(
-            View(parent.context).apply {
+            TestItemView(parent.context).apply {
                 layoutParams = RecyclerView.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    itemWidth,
                     0,
                 ).apply {
                     setMargins(
@@ -1615,7 +1697,26 @@ class WheelLayoutManagerTest {
 
     private class Holder(itemView: View) : RecyclerView.ViewHolder(itemView)
 
+    private class TestItemView(context: Context) : View(context) {
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            setMeasuredDimension(
+                resolveSize(WRAP_CONTENT_ITEM_WIDTH, widthMeasureSpec),
+                resolveSize(suggestedMinimumHeight, heightMeasureSpec),
+            )
+        }
+    }
+
+    private class DirectionRecyclerView(
+        context: Context,
+        private val layoutDirectionValue: Int,
+    ) : RecyclerView(context) {
+
+        override fun getLayoutDirection(): Int = layoutDirectionValue
+    }
+
     private companion object {
         const val ITEM_HEIGHT: Int = 40
+        const val WRAP_CONTENT_ITEM_WIDTH: Int = 60
     }
 }

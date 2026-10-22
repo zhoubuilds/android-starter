@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-22      | whisper | 统一滚轮交叉轴逻辑起点边界        |
 | 2026-10-22      | whisper | 复用滚轮跨圈跟踪存储              |
 | 2026-10-22      | whisper | 移除滚轮中心查找热路径分配        |
 | 2026-10-22      | whisper | 约束滚轮极端距离及循环跨圈处理    |
@@ -644,7 +645,9 @@ API 28 不支持把同一刘海的不同边分给多个嵌套 View, 应由同一
    不得通过抛出异常、跳过 position 或强制使用 1px 改变标准 RecyclerView 输入语义.
 4. 内容中心必须使用 `startAfterPadding + totalSpace / 2`; item 的主轴测量、start、end 和中心必须统一使用纵向
    `OrientationHelper` 的 decorated-with-margins 坐标. 传给 `layoutDecoratedWithMargins()` 的边界已经包含 decoration 和
-   margin, 不得再次叠加 decoration inset. 填充、边界限制和回收使用同一坐标系.
+   margin, 不得再次叠加 decoration inset. 填充、边界限制和回收使用同一坐标系. 交叉轴布局必须共用逻辑 start 边界计算:
+   LTR 的完整外边界从左 padding 开始, RTL 的完整外边界结束于扣除右 padding 后的右边界; `MATCH_PARENT` 在两种方向下
+   均须填满内容宽度, 不得在不同填充路径分别维护交叉轴公式.
 5. `WheelLayoutManager` 是中心距离和最近中心条目选择的唯一实现来源. `WheelSnapHelper` 和 `WheelSmoothScroller` 必须复用
    LayoutManager 的结果. 多个条目中心同距时优先保留当前中心 position, 否则选择视觉布局顺序中的第一个条目.
    最近中心查找从 child 中点向两侧扩散, 不得在滚动热路径使用捕获可变局部状态的函数或 lambda 产生引用包装对象.

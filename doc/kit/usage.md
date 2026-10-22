@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                          |
 |-----------------|---------|-----------------------------------|
+| 2026-10-22      | whisper | 说明滚轮交叉轴 RTL 对齐语义       |
 | 2026-10-22      | whisper | 说明滚轮极端距离与循环跨圈语义    |
 | 2026-10-20      | whisper | 明确滚轮实时中心回调语义          |
 | 2026-10-20      | whisper | 说明滚轮空数据的中心回调语义      |
@@ -1070,6 +1071,8 @@ SmoothScroller 仍逐步发现和对齐目标条目, 不使用完整圈跳过.
 颜色渐变及日期联动由调用方负责. RecyclerView 使用非零或非对称 padding 时, 条目会对齐到扣除 padding 后的内容中心;
 运行时修改容器尺寸或 padding 后, 当前逻辑中心会随新的内容中心移动, 尚未吸附完成的相对偏移也会保留.
 item 的 LayoutParams margin 与 ItemDecoration offset 会作为完整外边界参与测量、布局和吸附, 不会压缩 item 自身尺寸.
+交叉轴上, 窄于内容区域的 item 按逻辑 start 对齐: LTR 对齐左 padding 边界, RTL 对齐扣除右 padding 后的右边界;
+`MATCH_PARENT` item 在两种布局方向下都填满内容宽度. margin 与 ItemDecoration 仍位于该完整外边界以内.
 多个零高度 item 同时位于中心时, `smoothScrollToPosition()` 仍会把指定目标确认为逻辑中心.
 有界模式的系统滚动指标按首项居中到末项居中的区间计算, 因而 `canScrollVertically(direction)` 会在真实首尾边界收敛;
 非等高条目的滚动条长度和位置与 `LinearLayoutManager` 的平滑滚动条一样, 根据当前已布局条目估算, 滚动过程中可能随

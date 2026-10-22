@@ -212,9 +212,7 @@ class WheelLayoutManager(
         val centerView: View = recycler.getViewForPosition(centerPosition)
         addView(centerView)
         measureChildWithMargins(centerView, 0, 0)
-        val firstWidth: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(centerView)
         val firstHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(centerView)
-        val firstLeft: Int = paddingLeft
         val resolvedCenterOffsetY: Int = if (
             isRestoringSavedState &&
             !isAnchorVisibleAtOffset(centerOffsetY, firstHeight)
@@ -224,9 +222,8 @@ class WheelLayoutManager(
             centerOffsetY
         }
         val firstTop: Int = contentCenterY - firstHeight / 2 + resolvedCenterOffsetY
-        val firstRight: Int = firstLeft + firstWidth
         val firstBottom: Int = firstTop + firstHeight
-        layoutDecoratedWithMargins(centerView, firstLeft, firstTop, firstRight, firstBottom)
+        layoutMeasuredChild(centerView, firstTop, firstBottom)
 
         val startCovered: Boolean = layoutChild(
             verticalOrientationHelper.getDecoratedStart(centerView),
@@ -537,6 +534,9 @@ class WheelLayoutManager(
      *
      * 滚动、fling、布局或吸附期间, 最近中心 position 变化后立即通知, 不等待 RecyclerView idle 或吸附完成;
      * position 不变时不重复通知, 没有中心条目时通知 [RecyclerView.NO_POSITION].
+     * 回调在承载当前 LayoutManager 的 RecyclerView 布局或滚动调用栈内同步执行.
+     * 监听器不得直接通知当前 RecyclerView 的 Adapter 更新数据, 也不得调用其它会改变当前列表数据或结构的 API;
+     * 需要执行此类操作时, 应通过 `RecyclerView.post()` 或 `ViewCompat.postOnAnimation()` 推迟到下一帧.
      */
     fun setOnCenterYPositionChangeListener(listener: OnCenterYPositionChangeListener?) {
         onCenterYPositionChangeListener = listener
@@ -743,13 +743,10 @@ class WheelLayoutManager(
             val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view)
             measureChildWithMargins(view, 0, 0)
-            val width: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(view)
             val viewHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(view)
-            val left: Int = paddingLeft
             val top: Int = offset
-            val right: Int = left + width
             val bottom: Int = top + viewHeight
-            layoutDecoratedWithMargins(view, left, top, right, bottom)
+            layoutMeasuredChild(view, top, bottom)
             offset = verticalOrientationHelper.getDecoratedEnd(view)
             lastCenterY = decoratedCenterY(view)
             cycleTracker?.recordLaidOutChild(
@@ -807,13 +804,10 @@ class WheelLayoutManager(
             val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view, 0)
             measureChildWithMargins(view, 0, 0)
-            val width: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(view)
             val viewHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(view)
-            val left: Int = paddingLeft
             val top: Int = offset - viewHeight
-            val right: Int = left + width
             val bottom: Int = top + viewHeight
-            layoutDecoratedWithMargins(view, left, top, right, bottom)
+            layoutMeasuredChild(view, top, bottom)
             offset = verticalOrientationHelper.getDecoratedStart(view)
             firstCenterY = decoratedCenterY(view)
             cycleTracker?.recordLaidOutChild(
@@ -967,13 +961,10 @@ class WheelLayoutManager(
             val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view, 0)
             measureChildWithMargins(view, 0, 0)
-            val width: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(view)
             val viewHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(view)
-            val left: Int = paddingLeft
             val top: Int = offset - viewHeight
-            val right: Int = left + width
             val bottom: Int = top + viewHeight
-            layoutDecoratedWithMargins(view, left, top, right, bottom)
+            layoutMeasuredChild(view, top, bottom)
             offset = verticalOrientationHelper.getDecoratedStart(view)
             targetPosition -= 1
         }
@@ -997,17 +988,34 @@ class WheelLayoutManager(
             val view: View = recycler.getViewForPosition(adapterPosition)
             addView(view)
             measureChildWithMargins(view, 0, 0)
-            val width: Int = verticalOrientationHelper.getDecoratedMeasurementInOther(view)
             val viewHeight: Int = verticalOrientationHelper.getDecoratedMeasurement(view)
-            val left: Int = paddingLeft
             val top: Int = offset
-            val right: Int = left + width
             val bottom: Int = top + viewHeight
-            layoutDecoratedWithMargins(view, left, top, right, bottom)
+            layoutMeasuredChild(view, top, bottom)
             offset = verticalOrientationHelper.getDecoratedEnd(view)
             targetPosition += 1
         }
         return true
+    }
+
+    /**
+     * 按逻辑 start 对齐已测量 child, 交叉轴边界包含 margin 与 ItemDecoration.
+     */
+    private fun layoutMeasuredChild(view: View, top: Int, bottom: Int) {
+        val crossAxisMeasurement: Int =
+            verticalOrientationHelper.getDecoratedMeasurementInOther(view)
+        val left: Int = if (layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+            width - paddingRight - crossAxisMeasurement
+        } else {
+            paddingLeft
+        }
+        layoutDecoratedWithMargins(
+            view,
+            left,
+            top,
+            left + crossAxisMeasurement,
+            bottom,
+        )
     }
 
     private fun normalizeAdapterPosition(position: Int): Int =
@@ -1035,6 +1043,8 @@ class WheelLayoutManager(
      * 最近中心位置的 Adapter position 实时发生变化后的通知.
      *
      * 通知不等待 RecyclerView idle 或吸附完成; 没有中心条目时 position 为 [RecyclerView.NO_POSITION].
+     * 回调可能发生在当前 RecyclerView 计算布局或滚动期间.
+     * 不得在回调中直接通知其 Adapter 更新数据或改变列表结构; 此类操作应推迟到下一帧执行.
      *
      * @author whisper
      * @since 2026/10/14
