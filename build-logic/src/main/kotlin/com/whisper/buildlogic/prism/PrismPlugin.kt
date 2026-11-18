@@ -15,7 +15,9 @@ import org.gradle.api.Project
  * TOML 解析与 Android DSL 适配分别由独立组件负责. 插件只能应用于 Android application 或 library 模块,
  * 不会自动开启 BuildConfig 或 resValues, 也不会设置 applicationId、版本、签名等发布元数据.
  *
- * @aegis 保护插件 ID 与入口, `prismAppConfig` 扩展名称, Android 模块支持边界和配置编排顺序.
+ * @aegis 保护插件 ID 与入口, `prism` 扩展名称, Android 模块支持边界和配置编排顺序.
+ * @aegis-audit 2026-11-18 | whisper | 按授权将构建脚本扩展名由 prismAppConfig 改为 prism.
+ * @aegis-audit 2026-11-18 | whisper | 按授权将已注册扩展类型同步重命名为 PrismExtension.
  *
  * @author whisper
  * @since 2026/07/25
@@ -28,9 +30,9 @@ class PrismPlugin : Plugin<Project> {
         val configLoader: PrismConfigLoader = PrismConfigLoader()
         val androidConfigurator: PrismAndroidConfigurator = PrismAndroidConfigurator()
         val buildConfigTaskRegistrar: PrismBuildConfigTaskRegistrar = PrismBuildConfigTaskRegistrar()
-        val appConfigExtension: PrismAppConfigExtension = target.extensions.create(
-            PRISM_APP_CONFIG_EXTENSION_NAME,
-            PrismAppConfigExtension::class.java
+        val prismExtension: PrismExtension = target.extensions.create(
+            PRISM_EXTENSION_NAME,
+            PrismExtension::class.java
         )
 
         buildConfigTaskRegistrar.register(target = target)
@@ -41,7 +43,7 @@ class PrismPlugin : Plugin<Project> {
             val config: AppConfig = configLoader.load(target = target)
             configured = true
             managedEnvironmentNames = config.environmentNames
-            appConfigExtension.configure(values = config.exportedValues)
+            prismExtension.configure(values = config.exportedValues)
             androidConfigurator.configure(android = android, config = config)
 
             val androidComponents: ApplicationAndroidComponentsExtension =
@@ -61,7 +63,7 @@ class PrismPlugin : Plugin<Project> {
             val config: AppConfig = configLoader.load(target = target)
             configured = true
             managedEnvironmentNames = config.environmentNames
-            appConfigExtension.configure(values = config.exportedValues)
+            prismExtension.configure(values = config.exportedValues)
             androidConfigurator.configure(android = android, config = config)
 
             val androidComponents: LibraryAndroidComponentsExtension =
@@ -96,7 +98,7 @@ class PrismPlugin : Plugin<Project> {
             .toSet()
 
     private companion object {
-        private const val PRISM_APP_CONFIG_EXTENSION_NAME: String = "prismAppConfig"
+        private const val PRISM_EXTENSION_NAME: String = "prism"
         private const val ANDROID_APPLICATION_PLUGIN_ID: String = "com.android.application"
         private const val ANDROID_LIBRARY_PLUGIN_ID: String = "com.android.library"
     }

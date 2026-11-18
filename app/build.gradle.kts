@@ -29,7 +29,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = prismAppConfig.get<String>("applicationId")
+        applicationId = prism.get<String>("applicationId")
         minSdk = 24
         targetSdk = 37
         versionCode = 3

@@ -7,7 +7,7 @@
 # [values]
 # sharedApiKey = "example-api-key"
 
-# Values exposed to module build scripts through prismAppConfig.get<T>("name").
+# Values exposed to module build scripts through prism.get<T>("name").
 # Each export can be a supported scalar literal or a reference to values.*.
 [exports]
 applicationId = "com.whisper.starter"

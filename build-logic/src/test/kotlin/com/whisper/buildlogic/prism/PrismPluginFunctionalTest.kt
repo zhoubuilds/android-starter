@@ -132,12 +132,13 @@ class PrismPluginFunctionalTest {
                         def longType = kotlin.jvm.JvmClassMappingKt.getKotlinClass(Long.class)
                         def doubleType = kotlin.jvm.JvmClassMappingKt.getKotlinClass(Double.class)
 
-                        assert prismAppConfig.get('literalString', stringType) == 'literal'
-                        assert prismAppConfig.get('literalBoolean', booleanType)
-                        assert prismAppConfig.get('literalInteger', intType) == 7
-                        assert prismAppConfig.get('literalLong', longType) == 2147483648L
-                        assert prismAppConfig.get('literalDouble', doubleType) == 1.5d
-                        assert prismAppConfig.get('referencedString', stringType) == 'from-values'
+                        assert project.extensions.findByName('prismAppConfig') == null
+                        assert prism.get('literalString', stringType) == 'literal'
+                        assert prism.get('literalBoolean', booleanType)
+                        assert prism.get('literalInteger', intType) == 7
+                        assert prism.get('literalLong', longType) == 2147483648L
+                        assert prism.get('literalDouble', doubleType) == 1.5d
+                        assert prism.get('referencedString', stringType) == 'from-values'
                     }
                 }
                 """.trimIndent()

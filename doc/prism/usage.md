@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                                        |
 |-----------------|---------|-------------------------------------------------|
+| 2026-11-18      | whisper | 将 exports 的构建脚本入口调整为 prism          |
 | 2026-08-31      | whisper | 调整 BuildConfig 辅助任务名称                   |
 | 2026-08-31      | whisper | 迁移至统一文档目录并补充 `env` 维度契约         |
 | 2026-08-31      | whisper | 将 Prism 文档统一为中文                         |
@@ -119,18 +120,19 @@ manifestPlaceholders.DEPLOYMENT_ENV = "prod"
 ### 4.2 导出值
 
 `[exports]` 的每个值可以直接使用受支持的标量字面量, 也可以引用 `values.*`. 模块构建脚本通过
-`prismAppConfig.get<T>(name)` 读取:
+`prism.get<T>(name)` 读取:
 
 ```kotlin
 android {
     defaultConfig {
-        applicationId = prismAppConfig.get<String>("applicationId")
+        applicationId = prism.get<String>("applicationId")
     }
 }
 ```
 
 支持的 `T` 为 `String`, `Boolean`, `Int`, `Long` 和 `Double`. TOML Integer 由解析器保存为 `Long`; 读取为 `Int` 时,
 Prism 会检查是否超出 `Int` 取值范围. 未导出, 类型不匹配或类型不受支持时, Gradle 配置会失败.
+旧入口 `prismAppConfig` 已移除, 升级插件时需将构建脚本中的调用改为 `prism.get<T>(name)`.
 
 ### 4.3 Android 配置字段
 
@@ -197,7 +199,7 @@ Prism 在应用它的模块中注册 `prism` 任务组下的 `generatePrismBuild
 
 不需要 Prism 时按以下顺序迁移:
 
-1. 将 `prismAppConfig` 导出值和 TOML 中的 Android 配置迁回标准 Android DSL 或其它配置来源.
+1. 将 `prism` 导出值和 TOML 中的 Android 配置迁回标准 Android DSL 或其它配置来源.
 2. 从所有模块移除 `id("com.whisper.prism")`.
 3. 从 `settings.gradle.kts` 移除 `includeBuild("build-logic")`.
 4. 删除不再使用的 `prism.appConfig.file` 属性和 TOML 配置文件.

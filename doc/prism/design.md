@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                                |
 |-----------------|---------|-----------------------------------------|
+| 2026-11-18      | whisper | 将构建脚本导出值入口调整为 prism        |
 | 2026-09-01      | whisper | 明确 build-logic 包归属和 Prism 实现分层 |
 | 2026-08-31      | whisper | 调整 BuildConfig 辅助任务名称           |
 | 2026-08-31      | whisper | 建立 Prism 设计目标, 边界和主要取舍     |
@@ -100,7 +101,7 @@ Prism 只写入 AGP 已有的 `defaultConfig` 和 product flavor 能力:
 * `resValue(...)`
 
 插件不封装 `applicationId` 等应用元数据, 因为这些值继续显式出现在 app 的 Android DSL 中更容易发现和审查. 如需复用 TOML 值,
-app 可以通过 `prismAppConfig` 读取明确导出的值后自行赋值.
+app 可以通过 `prism` 读取明确导出的值后自行赋值.
 
 application 和 library 使用相同的解析与配置契约. library 只有在确实需要生成同一套构建字段时才接入 Prism; architecture, foundation
 或业务模块不应为了判断当前环境而依赖该插件.

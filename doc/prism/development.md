@@ -4,6 +4,8 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                              |
 |-----------------|---------|---------------------------------------|
+| 2026-11-18      | whisper | 将构建脚本扩展类型重命名为 PrismExtension |
+| 2026-11-18      | whisper | 将构建脚本扩展名调整为 prism          |
 | 2026-09-01      | whisper | 标记 Prism 稳定契约的 Aegis 保护范围 |
 | 2026-09-01      | whisper | 拆分 Prism 职责并迁移至 buildlogic 包 |
 | 2026-08-31      | whisper | 调整 BuildConfig 辅助任务名称         |
@@ -25,7 +27,7 @@ build-logic/
    |  |- PrismConfigParser.kt
    |  |- PrismConfig.kt
    |  |- PrismAndroidConfigurator.kt
-   |  |- PrismAppConfigExtension.kt
+   |  |- PrismExtension.kt
    |  `- PrismBuildConfigTaskRegistrar.kt
    `- test/kotlin/com/whisper/buildlogic/prism/
       |- PrismConfigParserTest.kt
@@ -40,7 +42,7 @@ build-logic/
 | `PrismConfigParser.kt`              | 将 TOML 转换为配置模型并报告语法, 结构, 类型和引用错误       |
 | `PrismConfig.kt`                    | 保存解析完成的应用, 变体, 环境和 Android 字段配置模型        |
 | `PrismAndroidConfigurator.kt`       | 将配置模型写入 application 或 library 的公开 AGP DSL         |
-| `PrismAppConfigExtension.kt`        | 提供类型安全的 `prismAppConfig.get<T>(name)`                 |
+| `PrismExtension.kt`                 | 提供类型安全的 `prism.get<T>(name)`                          |
 | `PrismBuildConfigTaskRegistrar.kt`  | 按最终 Android 构建变体挂接 BuildConfig 聚合任务              |
 | `PrismConfigParserTest.kt`          | 不加载 AGP, 直接验证 TOML 解析, 模型映射和结构化诊断         |
 | `PrismPluginFunctionalTest.kt`      | 使用 Gradle TestKit 验证文件选择, 插件集成和任务依赖         |
@@ -54,7 +56,7 @@ build-logic/
 
 ```text
 PrismPlugin.apply
-  |- 创建 prismAppConfig 扩展
+  |- 创建 prism 扩展
   |- 注册 generatePrismBuildConfigSources 聚合任务
   |- 等待 com.android.application 或 com.android.library
   |    |- PrismConfigLoader 选择并读取 app config TOML
@@ -78,7 +80,7 @@ application 和 library 分支必须保持相同的配置语义. 两者使用不
 | 契约                         | 当前值或行为                                          |
 |------------------------------|-------------------------------------------------------|
 | 插件 ID                      | `com.whisper.prism`                                   |
-| 构建脚本扩展                 | `prismAppConfig`                                      |
+| 构建脚本扩展                 | `prism`                                               |
 | 显式配置属性                 | `prism.appConfig.file`                                |
 | 默认配置文件                 | 根工程 `app-config.toml`                              |
 | 环境维度                     | `env`                                                 |
@@ -89,6 +91,8 @@ application 和 library 分支必须保持相同的配置语义. 两者使用不
 
 `env` 维度只在 `environments` 非空时创建. 每个 environment 名称都成为该维度下的 product flavor. 手动声明但未出现在 TOML
 中的 `env` flavor 只产生警告, 不会自动并入 Prism 的已管理环境集合.
+旧扩展名 `prismAppConfig` 不再注册; 消费脚本必须迁移到 `prism.get<T>(name)`. 插件 ID `com.whisper.prism` 和
+`prism` 任务分组不占用构建脚本扩展名.
 
 ## 4. 解析和校验边界
 
@@ -115,7 +119,7 @@ application 和 library 分支必须保持相同的配置语义. 两者使用不
 * Prism 不自动应用 Android 插件. 接入顺序错误或没有 Android application/library 插件时应给出明确错误.
 * Prism 不自动开启 `buildFeatures.buildConfig` 或 `buildFeatures.resValues`.
 * Prism 不直接设置 `applicationId`, 版本, 签名或其它应用发布元数据.
-* `prismAppConfig` 在解析后冻结, 避免其它构建逻辑修改已导出值.
+* `prism` 在解析后冻结, 避免其它构建逻辑修改已导出值.
 * `generatePrismBuildConfigSources` 根据 Android Components 提供的完整 Variant 名称挂接任务, 不能自行拼装 flavor 组合.
 * 多个 flavor dimension 必须保留 AGP 原生笛卡尔积和命名顺序.
 * 未接入 Prism 的项目和模块必须继续使用标准 Android 构建配置, 不能依赖插件产生的隐式全局状态.
@@ -171,7 +175,7 @@ Prism 是公共模板的可选能力. 新增字段前应确认它属于通用 An
 
 当前受保护类型:
 
-* 插件入口与构建脚本 API: `PrismPlugin`, `PrismAppConfigExtension`.
+* 插件入口与构建脚本 API: `PrismPlugin`, `PrismExtension`.
 * 配置选择与解析协议: `PrismConfigLoader`, `PrismConfigParser`.
 * Android/Gradle 可观察行为: `PrismAndroidConfigurator`, `PrismBuildConfigTaskRegistrar`.
 

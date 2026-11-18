@@ -5,16 +5,18 @@ import org.gradle.api.provider.MapProperty
 import kotlin.reflect.KClass
 
 /**
- * Prism 应用配置导出
+ * Prism 构建脚本扩展.
  *
  * 向模块构建脚本暴露当前应用配置文件中的 exports.
  *
- * @aegis 保护 `prismAppConfig.get<T>(name)` API, 导出值冻结, 支持类型, Int 范围和失败诊断契约.
+ * @aegis 保护 `prism.get<T>(name)` API, 导出值冻结, 支持类型, Int 范围和失败诊断契约.
+ * @aegis-audit 2026-11-18 | whisper | 按授权同步构建脚本扩展名为 prism, 保持导出读取语义.
+ * @aegis-audit 2026-11-18 | whisper | 按授权将扩展类型重命名为 PrismExtension.
  *
  * @author whisper
  * @since 2026/08/22
  */
-abstract class PrismAppConfigExtension {
+abstract class PrismExtension {
 
     /**
      * 当前配置文件导出的值.

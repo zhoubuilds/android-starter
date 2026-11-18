@@ -4,6 +4,7 @@
 
 | 修订时间（CST） | 修订人  | 修订说明                    |
 |-----------------|---------|-----------------------------|
+| 2026-11-18      | whisper | 同步 Prism 导出值入口名称  |
 | 2026-10-13      | whisper | 使用 Project API 与 Aster 向 About 提供仓库入口 |
 | 2026-10-13      | whisper | 将应用设置迁移到独立 Settings feature |
 | 2026-09-16      | whisper | 将 GitHub Endpoint 配置入口迁入应用 TOML |
@@ -77,6 +78,7 @@ release tag.
 开始实际应用开发前至少完成以下调整:
 
 1. 修改 [`app-config.toml`](app-config.toml) 中的 `applicationId` 和应用所需的 Endpoint 配置.
+   `[exports]` 中的值由应用构建脚本通过 `prism.get<T>(name)` 读取.
    示例通过 `buildConfig.GITHUB_API_ENDPOINT` 配置 GitHub 地址, 由 Prism 生成 app 的 `BuildConfig` 后注入路由拦截器.
    默认 Retrofit 直接使用框架的 `ROUTING_PLACEHOLDER_BASE_URL`, 不需要重复配置 `API_HOST`.
    这些值在构建时确定, 修改后需要重新构建安装; 不作为运行时环境切换入口.
