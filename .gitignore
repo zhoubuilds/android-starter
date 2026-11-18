@@ -38,3 +38,4 @@ service-account*.json
 
 # Temporary work documents
 *.tmp.md
+/tmp/
