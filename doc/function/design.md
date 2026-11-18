@@ -4,6 +4,7 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-10-22 | whisper | 增加带文字渐变的 Bottom Sheet 年月日滚轮示例 |
 | 2026-09-17 | whisper | 复用 Foundation 连续分段按钮设计样式 |
 | 2026-09-15 | whisper | 增加 RecyclerView 分割线与布局切换演示 |
 | 2026-09-14 | whisper | 将组件详情迁移为模块内部独立 Activity |
@@ -14,15 +15,16 @@
 `feature:function` 是 Starter 的功能演示目录, 用于承载通用 View、交互组件和后续技术能力的可操作示例.
 它是应用业务层模块, 可以组合 Foundation 与 Kit 的公开能力, 但不把页面文案、样式或演示状态下沉到公共模块.
 
-当前页面演示 `KitRangeBar`、`KitCodeInputEditText`、`KitLineView` 以及 RecyclerView 分割线装饰器.
+当前页面演示 `KitRangeBar`、`KitCodeInputEditText`、`KitLineView`、年月日滚轮以及 RecyclerView 分割线装饰器.
 分割线演示组合 Linear、Grid 和 Staggered 三种 LayoutManager, 支持横向/纵向和分割线开关. 后续内容增加时优先按稳定类别在模块内部
 拆分页面和 package, 不把所有示例继续堆入首页, 也不因示例数量增加就机械拆分 Gradle 模块.
 
 ## 2. 组合边界
 
 `FunctionFragment` 由 app 组合根直接创建, 当前只作为应用内部顶层 Tab 的实现入口. `feature:function` 不依赖
-`feature:project`, 不引用 app 类型或资源, 也不声明跨模块路由和 Capability. 目录项通过显式 Intent 打开模块内部的
-`FunctionDemoActivity` 或 `RecyclerViewDemoActivity`, 详情不进入首页 Activity 的 Fragment 返回栈.
+`feature:project`, 不引用 app 类型或资源, 也不声明跨模块路由和 Capability. 普通详情通过显式 Intent 打开模块内部的
+`FunctionDemoActivity` 或 `RecyclerViewDemoActivity`; 日期入口直接显示模块内部 Dialog. 这些交互都不进入首页 Activity 的
+Fragment 返回栈.
 
 当其它 feature 需要导航到 Function 页面或调用 Function 能力时, 应先新增对应 `*-api` 模块, 在其中声明稳定路由、
 参数、Capability 接口和名称. 实现模块随后接入 Aster. 直接字符串可以完成跳转, 但不能代替对外契约.
@@ -44,3 +46,10 @@ Linear/Grid 使用 `RegularItemDividerDecoration`, Staggered 使用 `StaggeredIt
 列表项使用相同静态数据, 瀑布流仅改变主轴占用尺寸; 分割线使用主题 `colorOutlineVariant` 和 1dp 尺寸,
 不在 item 背景中伪造分割线. 模式按钮复用 Foundation 的共享分段样式, 保持连续轮廓, 选中态只改变颜色;
 Function 只补充适应演示选项文案的内边距和文本缩放配置.
+
+日期示例从目录直接打开模块内部 Bottom Sheet, 不增加只用于承载弹窗的 Activity. 三列 RecyclerView 组合 Kit
+`WheelLayoutManager` 与 `WheelSnapHelper`, 使用 Foundation `IntSequenceAdapter` 按需计算数值, 使用
+`WheelTextColorDecoration` 用 `SRC_IN` 将五段视口的中心行固定为主色, 并让外侧正文色向上下次要文本色渐变,
+字形跨越中心边界时按像素分色. `FoundationBottomSheetDialog` 统一弹窗表面、
+最大高度和关闭策略. 日期范围、闰年、大小月和确认状态属于 Function 示例, 不下沉到 Kit 的布局算法或 Foundation 的
+通用序列 Adapter.

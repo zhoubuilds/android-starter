@@ -9,4 +9,13 @@
     <style name="Foundation.Widget.SegmentedButtonGroup" parent="Widget.Material3.MaterialButtonToggleGroup">
         <item name="innerCornerSize">0dp</item>
     </style>
+
+    <style name="Foundation.ThemeOverlay.BottomSheetDialog" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Foundation.Widget.BottomSheet.Modal</item>
+    </style>
+
+    <style name="Foundation.Widget.BottomSheet.Modal" parent="Widget.Material3.BottomSheet.Modal">
+        <item name="backgroundTint">?attr/colorSurfaceContainer</item>
+        <item name="behavior_draggable">false</item>
+    </style>
 </resources>

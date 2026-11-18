@@ -8,6 +8,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
@@ -15,10 +16,12 @@ import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.whisper.aster.runtime.Aster
 import com.whisper.feature.function.R as FunctionR
+import com.whisper.feature.function.datepicker.FunctionDatePicker
 import com.whisper.feature.project.R as ProjectR
 import com.whisper.feature.project.api.ProjectRepositoryCapability
 import com.whisper.feature.settings.R as SettingsR
 import com.whisper.starter.ui.activity.MainActivity
+import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -133,6 +136,30 @@ class MainNavigationInstrumentedTest {
             onView(withId(SettingsR.id.settings_about_root)).check(matches(isDisplayed()))
             pressBack()
             onView(withId(SettingsR.id.settings_root)).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun selectDatePicker_whenCatalogItemIsClicked_showsBottomSheetAndReturnsSelection() {
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText(FunctionR.string.function_date_picker_title)).perform(click())
+            var selectedText: String? = null
+            onView(withId(FunctionR.id.function_date_picker)).check { view, noViewFoundException ->
+                if (noViewFoundException != null) {
+                    throw noViewFoundException
+                }
+                val picker = view as FunctionDatePicker
+                val date = picker.selectedDate
+                selectedText = picker.context.getString(
+                    FunctionR.string.function_date_picker_selected,
+                    date.get(Calendar.YEAR),
+                    date.get(Calendar.MONTH) + 1,
+                    date.get(Calendar.DAY_OF_MONTH),
+                )
+            }
+            onView(withId(FunctionR.id.function_date_picker_confirm)).perform(click())
+            onView(withId(FunctionR.id.function_date_picker)).check(doesNotExist())
+            onView(withText(checkNotNull(selectedText))).check(matches(isDisplayed()))
         }
     }
 

@@ -13,6 +13,13 @@
     <string name="function_line_solid">Solid</string>
     <string name="function_line_dashed">Dashed</string>
     <string name="function_line_dash_dot">Dash-dot</string>
+    <string name="function_date_picker_title">Date picker</string>
+    <string name="function_date_picker_year">Year</string>
+    <string name="function_date_picker_month">Month</string>
+    <string name="function_date_picker_day">Day</string>
+    <string name="function_date_picker_cancel">Cancel</string>
+    <string name="function_date_picker_confirm">Confirm</string>
+    <string name="function_date_picker_selected">Selected: %1$04d-%2$02d-%3$02d</string>
     <string name="function_recycler_title">List dividers</string>
     <string name="function_recycler_linear">List</string>
     <string name="function_recycler_grid">Grid</string>

@@ -28,9 +28,15 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
     implementation(project(":foundation"))
     implementation(libs.material)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
 }

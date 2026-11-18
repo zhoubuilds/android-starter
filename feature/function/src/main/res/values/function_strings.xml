@@ -16,6 +16,14 @@
     <string name="function_line_solid">实线</string>
     <string name="function_line_dashed">虚线</string>
     <string name="function_line_dash_dot">点划线</string>
+    <string name="function_date_picker_title">日期选择</string>
+    <string name="function_date_picker_component" translatable="false">WheelLayoutManager · BottomSheetDialog</string>
+    <string name="function_date_picker_year">年</string>
+    <string name="function_date_picker_month">月</string>
+    <string name="function_date_picker_day">日</string>
+    <string name="function_date_picker_cancel">取消</string>
+    <string name="function_date_picker_confirm">确定</string>
+    <string name="function_date_picker_selected">已选择: %1$04d-%2$02d-%3$02d</string>
     <string name="function_recycler_title">列表分割线</string>
     <string name="function_recycler_component" translatable="false">RecyclerView.ItemDecoration</string>
     <string name="function_recycler_linear">列表</string>

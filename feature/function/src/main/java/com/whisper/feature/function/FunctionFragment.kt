@@ -5,11 +5,15 @@ import android.view.View
 import androidx.annotation.MainThread
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.snackbar.Snackbar
 import com.whisper.feature.function.databinding.FunctionCatalogFragmentBinding
+import com.whisper.feature.function.datepicker.DatePickerBottomSheetDialog
+import com.whisper.feature.function.datepicker.DatePickerDemoRange
 import com.whisper.feature.function.recyclerview.RecyclerViewDemoActivity
 import com.whisper.kit.extension.dp
 import com.whisper.kit.extension.viewBinding
 import com.whisper.kit.recyclerview.decoration.RegularItemSpaceDecoration
+import java.util.Calendar
 import kotlin.math.roundToInt
 
 /**
@@ -25,6 +29,7 @@ class FunctionFragment : Fragment(R.layout.function_catalog_fragment) {
 
     @get:MainThread
     private val viewBinding by viewBinding(FunctionCatalogFragmentBinding::bind)
+    private var datePickerDialog: DatePickerBottomSheetDialog? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -38,11 +43,46 @@ class FunctionFragment : Fragment(R.layout.function_catalog_fragment) {
             )
         )
         viewBinding.functionCatalogList.adapter = FunctionCatalogAdapter { demo: FunctionDemo ->
-            val intent = when (demo) {
-                FunctionDemo.RECYCLER_DIVIDERS -> RecyclerViewDemoActivity.createIntent(requireContext())
-                else -> FunctionDemoActivity.createIntent(requireContext(), demo)
+            when (demo) {
+                FunctionDemo.DATE_PICKER -> showDatePicker()
+                FunctionDemo.RECYCLER_DIVIDERS -> startActivity(
+                    RecyclerViewDemoActivity.createIntent(requireContext()),
+                )
+                else -> startActivity(FunctionDemoActivity.createIntent(requireContext(), demo))
             }
-            startActivity(intent)
         }
     }
+
+    override fun onDestroyView() {
+        datePickerDialog?.dismiss()
+        datePickerDialog = null
+        super.onDestroyView()
+    }
+
+    private fun showDatePicker() {
+        val currentDate: Calendar = Calendar.getInstance()
+        val selectableRange: DatePickerDemoRange = DatePickerDemoRange.from(currentDate)
+        datePickerDialog?.dismiss()
+        datePickerDialog = DatePickerBottomSheetDialog.Builder(requireContext())
+            .setRange(
+                selectableRange.startDate.toCalendar(),
+                selectableRange.endDate.toCalendar(),
+            )
+            .setInitialDate(currentDate)
+            .setOnDateConfirmed { date: Calendar ->
+                Snackbar.make(
+                    viewBinding.root,
+                    getString(
+                        R.string.function_date_picker_selected,
+                        date.get(Calendar.YEAR),
+                        date.get(Calendar.MONTH) + 1,
+                        date.get(Calendar.DAY_OF_MONTH),
+                    ),
+                    Snackbar.LENGTH_SHORT,
+                ).show()
+            }
+            .build()
+            .also(DatePickerBottomSheetDialog::show)
+    }
+
 }

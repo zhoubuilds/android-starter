@@ -68,6 +68,7 @@ class FunctionDemoActivity : AppCompatActivity() {
             FunctionDemo.RANGE -> configureRangeDemo()
             FunctionDemo.CODE_INPUT -> configureCodeInputDemo()
             FunctionDemo.LINE -> Unit
+            FunctionDemo.DATE_PICKER -> error("Date picker demo opens as a BottomSheetDialog.")
             FunctionDemo.RECYCLER_DIVIDERS -> error("RecyclerView demo requires RecyclerViewDemoActivity.")
         }
     }
@@ -109,7 +110,7 @@ class FunctionDemoActivity : AppCompatActivity() {
         private const val EXTRA_DEMO: String = "com.whisper.feature.function.extra.DEMO"
 
         /**
-         * 创建普通控件详情的模块内部 Intent, RECYCLER_DIVIDERS 应使用独立列表详情的 Intent 工厂.
+         * 创建普通控件详情的模块内部 Intent; Bottom Sheet 和 RecyclerView 演示使用各自入口.
          */
         internal fun createIntent(context: Context, demo: FunctionDemo): Intent =
             Intent(context, FunctionDemoActivity::class.java)

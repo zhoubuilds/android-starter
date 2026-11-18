@@ -30,6 +30,11 @@ internal enum class FunctionDemo(
         componentNameRes = R.string.function_line_component,
         iconRes = R.drawable.function_ic_line,
     ),
+    DATE_PICKER(
+        titleRes = R.string.function_date_picker_title,
+        componentNameRes = R.string.function_date_picker_component,
+        iconRes = R.drawable.function_ic_calendar,
+    ),
     RECYCLER_DIVIDERS(
         titleRes = R.string.function_recycler_title,
         componentNameRes = R.string.function_recycler_component,

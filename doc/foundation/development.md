@@ -4,6 +4,8 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-11-18 | whisper | 启用 Foundation ViewBinding 并规范序列条目绑定 |
+| 2026-10-22 | whisper | 增加整数序列、滚轮渐变与 Bottom Sheet 基类维护约束 |
 | 2026-09-17 | whisper | 明确 Insets 工具归 Kit、页面配置归宿主 |
 | 2026-09-17 | whisper | 增加共享分段按钮资源及形状与颜色回归要求 |
 | 2026-09-15 | whisper | 增加 Starter Mono 原生 600 字重和顶层标题样式 |
@@ -26,6 +28,9 @@
 | 深色语义色 | `foundation/src/main/res/values-night/foundation_colors.xml` |
 | 共享主题 | `foundation/src/main/res/values/foundation_theme.xml` |
 | 共享组件样式 | `foundation/src/main/res/values/foundation_widgets.xml` |
+| 整数序列 Adapter | `foundation/src/main/java/com/whisper/foundation/recyclerview/adapter/` |
+| 滚轮文字渐变 | `foundation/src/main/java/com/whisper/foundation/recyclerview/decoration/` |
+| Bottom Sheet 基类 | `foundation/src/main/java/com/whisper/foundation/widget/` |
 | 字体文件与字体族 | `foundation/src/main/res/font/` |
 | Material 3 排版覆盖 | `foundation/src/main/res/values/foundation_typography.xml` |
 | 随 APK 分发的字体许可 | `foundation/src/main/res/raw/foundation_starter_mono_ofl.txt` |
@@ -46,7 +51,7 @@ foundation 不读取 app 的构建配置, 不持有网络 Endpoint 或 feature �
 * 修改品牌输入后重新生成完整的 49 个颜色角色. 浅色与深色的角色集合保持一致, fixed 角色在两种模式中
   取值相同. 不单独手调输出使其脱离生成规则.
 * 颜色资源是工程源码的一部分. 设计输入和工具一起保存, 不把依赖 AAR, JAR, APK 或本机临时产物纳入版本控制.
-  完整生成命令见 [Foundation 使用文档](usage.md#3-替换品牌).
+  完整生成命令见 [Foundation 使用文档](usage.md#4-替换品牌).
 * Views 只绑定依赖实际公开的主题属性. 没有对应属性的 tint, scrim, shadow 角色保留为资源, 不增加同名
   自定义 attr 来模拟 Material 实现.
 * 不在 Application, Activity 或主题中接入壁纸动态色. 深色模式使用 `values-night`, 不通过替换 seed 实现.
@@ -96,17 +101,47 @@ ArchitectureActivity 生命周期或通用 API 来注入品牌.
 `android:windowLightNavigationBar` 从 API 27 起可用, 覆盖放入 `values-v27`, 不能放在 `values-v26`.
 `values-v29` 配置 `android:forceDarkAllowed="false"`, 避免自动深色处理覆盖已提供的日夜主题.
 
-## 4. 保护范围
+## 4. 共享 UI 基础实现
+
+`IntSequenceAdapter` 只保存 `startValue`、`itemCount`、`step` 与格式化器. 位置和值的转换使用 `Long` 中间值,
+创建及更新时保证全部序列值能够由 `Int` 表示. `step` 不得为 0. 当起始值或步长变化时, 当前重叠 position 必须重新绑定;
+数量变化使用对应的插入或删除通知, 不为通知计算构造临时列表.
+
+Foundation 启用 ViewBinding; 序列 item 使用生成的 `FoundationItemIntSequenceBinding` 和 Kit `ViewBindingHolder`,
+保持 42dp 高度及主题文本样式. Adapter 不维护选中状态, 不感知 `WheelLayoutManager`, 也不实现日期规则;
+这些职责由消费页面负责. 调用方需要更复杂的 item 结构或非整数数据时应自行实现 Adapter, 不向该类型叠加通用列表框架.
+
+`WheelTextColorDecoration` 根据 `segmentCount` 将 RecyclerView 中心一个等高分段设置为选中色带. 色带外侧立即使用
+中心正文色, 再向上下边缘线性过渡到边缘色. 它通过离屏图层和 `SRC_IN` 按像素着色所有已绘制的非透明内容,
+因此字形跨越色带边界时可以同时显示两种颜色. 一个实例只绑定一个 RecyclerView; 分割线、背景或其它不应着色的内容
+放在 RecyclerView 外部.
+
+`FoundationBottomSheetDialog` 负责以下共同约束:
+
+* 使用 `Foundation.ThemeOverlay.BottomSheetDialog` 与 `Foundation.Widget.BottomSheet.Modal`.
+* `onStart()` 后读取当前窗口可用高度并设置 `BottomSheetBehavior.maxHeight`.
+* `getMaximumAllowedHeight(availableHeight)` 的返回值必须位于 `1..availableHeight`.
+* 返回键与外部点击关闭可以独立设置; 不允许返回时由 `OnBackPressedDispatcher` 消费返回事件.
+* `isSwipeDismissEnabled()` 默认返回 false; 只有子类明确覆写为 true 时才启用拖拽和隐藏状态.
+* `BottomSheetDialog.cancelable` 由返回键、外部点击和手势下拉三种策略的并集决定, 不得让其中一种策略意外关闭其它入口.
+* 基类不创建业务内容 View, 不持有 feature 回调, 不定义标题、按钮和确认语义.
+
+新增 Bottom Sheet 子类时在 `show()` 前完成关闭策略配置. 内容高度变化仍受 behavior 最大高度限制;
+需要滚动的长内容由子类提供合适的滚动容器, 基类不猜测内容结构.
+
+## 5. 保护范围
 
 当前 foundation 源码没有单独声明的 `@aegis` 保护标记. 下层 Architecture, Kit 和其它模块的保护范围仍然
 适用; 调用受保护 API 不代表可以修改它. 改动业务协议或公共能力前检查源码和对应模块文档.
 
-## 5. 验证
+## 6. 验证
 
-主题变更至少验证 foundation 资源合并以及 app 的 Debug / Release 资源链接:
+共享 UI 或主题变更至少验证 Foundation 测试、资源合并以及直接调用方编译; 主题变更继续验证 app 的 Debug / Release 资源链接:
 
 ```bash
-./gradlew :foundation:assembleDebug :app:assembleDebug :app:assembleRelease --no-configuration-cache
+./gradlew :foundation:testDebugUnitTest :foundation:assembleDebug \
+  :feature:function:assembleDebug :app:assembleDebug :app:assembleRelease \
+  --no-configuration-cache
 git diff --check
 ```
 

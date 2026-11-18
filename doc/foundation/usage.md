@@ -4,6 +4,8 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-11-18 | whisper | 说明 Foundation ViewBinding 条目实现 |
+| 2026-10-22 | whisper | 说明整数序列、滚轮渐变与 Bottom Sheet 基类接入方式 |
 | 2026-09-17 | whisper | 指向 Kit 的窗口 Insets 接入方式 |
 | 2026-09-17 | whisper | 说明连续分段按钮共享样式及页面扩展方式 |
 | 2026-09-15 | whisper | 说明顶层标题使用 Starter Mono SemiBold |
@@ -79,7 +81,58 @@ ColorStateList, 不用固定颜色覆盖所有状态. 常用背景包括 `colorS
 新 Activity 仍需按 AndroidX 方式启用 edge-to-edge 并处理窗口 Insets. 继承主题不等于布局已经避开系统栏.
 实时 padding 处理可复用 [Kit 窗口 Insets 扩展](../kit/usage.md#14-窗口-insets-padding), 页面显式选择处理边与 IME.
 
-## 3. 替换品牌
+## 3. 共享 UI 基础实现
+
+整数滚轮或其它连续值列表可以直接使用 `IntSequenceAdapter`, Adapter 不创建中间列表:
+
+```kotlin
+val adapter = IntSequenceAdapter(
+    startValue = 2000,
+    itemCount = 101,
+)
+recyclerView.adapter = adapter
+
+val year = adapter.getValue(position)
+adapter.updateSequence(startValue = 2020, itemCount = 21)
+```
+
+`step` 可以为正数或负数但不能为 0; 所有值必须位于 `Int` 范围. `getValue()` 和 `getPosition()` 对不属于当前序列的输入
+返回 null. 需要添加单位或本地化文本时传入 `IntSequenceAdapter.Formatter`, 不要为了显示格式复制一份字符串列表.
+Foundation 已启用 ViewBinding, Adapter 使用生成的条目 Binding 与 Kit `ViewBindingHolder`; 调用方无需配置条目 Binding.
+
+需要让滚轮中心文字突出时, 为每个 RecyclerView 添加独立的 `WheelTextColorDecoration`:
+
+```kotlin
+recyclerView.addItemDecoration(
+    WheelTextColorDecoration(
+        selectedColor = MaterialColors.getColor(recyclerView, R.attr.colorPrimary),
+        centerColor = MaterialColors.getColor(recyclerView, R.attr.colorOnSurface),
+        edgeColor = MaterialColors.getColor(recyclerView, R.attr.colorOnSurfaceVariant),
+        segmentCount = 5f,
+    ),
+)
+```
+
+中心一个分段保持选中色, 色带外侧使用正文色并向上下边缘色线性过渡. `segmentCount` 表示 RecyclerView 高度包含的
+等高分段数, 也允许使用非整数表示部分可见分段. 该 Decoration 通过 `SRC_IN` 按像素着色列表内所有非透明内容,
+因此滚动中的字形跨越色带边界时会同时呈现两种颜色. 不要把无需着色的背景、图标或分割线放入同一绘制层.
+
+应用内 Bottom Sheet 可以继承 `FoundationBottomSheetDialog`:
+
+```kotlin
+class ExampleBottomSheetDialog(context: Context) : FoundationBottomSheetDialog(context) {
+
+    override fun getMaximumAllowedHeight(availableHeight: Int): Int =
+        minOf(availableHeight, with(context) { 560.dp }.roundToInt())
+}
+```
+
+基类会应用 Foundation Material 3 样式, 并将 `availableHeight` 解释为当前窗口扣除可见系统栏、刘海和输入法后的高度.
+覆写方法必须返回正值且不得超过该参数. 在 `show()` 前可以分别调用 `setBackDismissEnabled()` 和
+`setOutsideDismissEnabled()`; 两者互不替代. 手势下拉关闭默认禁用, 只有子类覆写 `isSwipeDismissEnabled()` 并返回 true
+时才开放. 标题、操作按钮、内容布局和确认回调由子类实现.
+
+## 4. 替换品牌
 
 当前品牌源文件位于 [`design/brand/`](../../design/brand/), seed 为电青 `#006A86`.
 图标的石墨 `#1B2025` 和冰银 `#EAF1F5` 属于设计素材色, 不作为全部界面背景和文本的硬编码值.
@@ -109,12 +162,14 @@ java --class-path "$brand_theme_dir/classes.jar" scripts/GenerateTheme.java .
 图标设计输入, 预览和各平台资源按 [App 使用文档](../app/usage.md) 维护. 素材备份不打包进 APK,
 生成工具依赖和临时构建输出也不属于品牌备份.
 
-## 4. 验证方式
+## 5. 验证方式
 
 在仓库根目录执行:
 
 ```bash
-./gradlew :foundation:assembleDebug :app:assembleDebug :app:assembleRelease --no-configuration-cache
+./gradlew :foundation:testDebugUnitTest :foundation:assembleDebug \
+  :feature:function:assembleDebug :app:assembleDebug :app:assembleRelease \
+  --no-configuration-cache
 ```
 
 设备连接后可使用系统设置切换明暗模式; 也可以通过 adb 复现, 检查完成后恢复原设置:

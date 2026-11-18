@@ -4,6 +4,8 @@
 
 | 修订时间(CST) | 修订人 | 修订说明 |
 | --- | --- | --- |
+| 2026-11-18 | whisper | Foundation 启用 ViewBinding 并复用 Kit 的 ViewBindingHolder |
+| 2026-10-22 | whisper | 增加整数序列、滚轮渐变与 Bottom Sheet 共享基础实现 |
 | 2026-10-13 | whisper | 同步 Settings feature 的共享主题消费边界 |
 | 2026-09-17 | whisper | 明确共享视觉样式与 Kit 实时 Insets 工具的分层 |
 | 2026-09-17 | whisper | 统一设置与演示页面的连续分段按钮基础样式 |
@@ -18,7 +20,8 @@
 
 ## 1. 定位
 
-`foundation` 是当前应用的共享基座, 负责应用响应映射, Meta 建模, 领域转换, 业务状态处理和跨页面设计系统.
+`foundation` 是当前应用的共享基座, 负责应用响应映射, Meta 建模, 领域转换, 业务状态处理、跨页面设计系统和
+应用级共享 UI 基础实现.
 它实现 Architecture 提供的技术抽象, 可以包含应用约定, 但不读取 app 的 `BuildConfig`, flavor 或网络域名.
 
 当前业务响应和数据管线见 [Network 设计文档](../network/design.md), 通用状态与 UI 契约见
@@ -31,6 +34,7 @@
 | 应用共享配色, 主题和设计 token | foundation |
 | 应用名称, 启动图标, Manifest 和最终主题选择 | app |
 | 页面布局, 页面文案和专用资源 | app 或对应 feature |
+| 应用共享的轻量 Adapter 与弹窗基类 | foundation |
 | 通用技术能力, 状态和组件契约 | architecture, kit 等模块 |
 | 品牌设计输入, 种子配置和可复现工具 | 工程根目录的 `design/brand/` 和 `scripts/` |
 
@@ -92,7 +96,21 @@ JetBrains Mono 提供拉丁字符、数字、符号和编程连字; Noto 提供�
 平台资源在 `values-v27` 中配置 `windowLightNavigationBar`, 在 `values-v29` 中关闭平台 Force Dark,
 使应用自行提供的深色配色保持有效. API 24 至 26 的主题导航栏保留深色背景以匹配平台浅色图标.
 
-## 5. 来源与替换
+## 5. 共享 UI 基础实现
+
+`IntSequenceAdapter` 使用起始值、数量和步长按 position 即时计算整数, 不创建完整 `List`. 它提供应用内统一的
+42dp 文本条目、值与 position 互查、显示格式化和序列更新通知, 适合日期、时间及其它有限整数滚轮. Foundation 启用
+ViewBinding, Adapter 使用生成的条目 Binding 与 Kit `ViewBindingHolder` 完成绑定. Adapter 只负责序列值和条目绑定,
+滚动布局、吸附与业务级联继续由调用页面组合 Kit 能力.
+
+`WheelTextColorDecoration` 使用纵向 `LinearGradient` 和 `SRC_IN` 为纯文字滚轮着色. 中心条目区域保持调用方给定的
+选中色, 上下区域逐渐过渡到边缘文本色. Decoration 只定义着色, 不判断选中 position, 不改变滚动和吸附行为.
+
+`FoundationBottomSheetDialog` 统一使用 Material 3 Bottom Sheet 主题和 Foundation 表面颜色, 在窗口布局后根据
+系统栏、刘海与输入法计算当前可用高度. 子类可以按该值返回更小的最大允许高度. 返回键、外部点击和手势下拉关闭使用
+独立策略, 手势下拉默认禁用; 三者都关闭时 Dialog 不可通过隐藏状态退出. 具体标题、按钮、内容和确认语义仍归对应 feature.
+
+## 6. 来源与替换
 
 种子和算法参数保存在 [`design/brand/theme-seed.properties`](../../design/brand/theme-seed.properties),
 生成入口为 [`scripts/GenerateTheme.java`](../../scripts/GenerateTheme.java). 工具使用 Material `1.14.0`
